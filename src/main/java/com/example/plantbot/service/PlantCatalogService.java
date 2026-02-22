@@ -13,6 +13,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -342,14 +343,34 @@ public class PlantCatalogService {
   private List<String> buildQueryCandidates(String original) {
     Set<String> candidates = new LinkedHashSet<>();
     String normalized = normalizeQuery(original);
-    candidates.add(normalized);
+    addCandidate(candidates, normalized);
     if (CYRILLIC_PATTERN.matcher(normalized).matches()) {
-      dictionaryTranslate(normalized).ifPresent(candidates::add);
-      translateToEnglish(normalized).ifPresent(candidates::add);
-      candidates.add(transliterateRuToEn(normalized));
-      iNaturalistToQueries(normalized).forEach(candidates::add);
+      dictionaryTranslate(normalized).ifPresent(value -> addCandidate(candidates, value));
+      translateToEnglish(normalized).ifPresent(value -> addCandidate(candidates, value));
+      addCandidate(candidates, transliterateRuToEn(normalized));
+      iNaturalistToQueries(normalized).forEach(value -> addCandidate(candidates, value));
     }
     return new ArrayList<>(candidates);
+  }
+
+  private void addCandidate(Set<String> candidates, String raw) {
+    if (raw == null || raw.isBlank()) {
+      return;
+    }
+    String value = normalizeQuery(raw.replace('+', ' '));
+    if (value.contains("%")) {
+      try {
+        value = normalizeQuery(URLDecoder.decode(value, StandardCharsets.UTF_8));
+      } catch (Exception ignored) {
+      }
+    }
+    if (value.isBlank()) {
+      return;
+    }
+    if (value.contains("%d0") || value.contains("%d1")) {
+      return;
+    }
+    candidates.add(value);
   }
 
   private String normalizeQuery(String value) {
