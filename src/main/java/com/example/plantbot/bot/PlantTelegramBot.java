@@ -393,18 +393,19 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       sendText(chatId, "У тебя пока нет растений. Добавь с /add");
       return;
     }
-    StringBuilder sb = new StringBuilder("\uD83C\uDF31 Твои растения:\n");
+
+    StringBuilder sb = new StringBuilder("🌿 Твои растения:\n");
     for (Plant plant : plants) {
       WateringRecommendation rec = recommendationService.recommend(plant, user.getCity());
       LocalDate due = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
       Optional<PlantCareAdvice> careAdvice = openRouterPlantAdvisorService.suggestCareAdvice(plant, rec.intervalDays());
 
-      sb.append("• ").append(plant.getName())
-          .append(" — последн. полив: ").append(plant.getLastWateredDate())
-          .append(", след. полив: ").append(due).append("\n")
-          .append("  Рекоменд. объём: ").append(rec.waterLiters()).append(" л\n")
-          .append("  Цикл: ").append(formatCycle(careAdvice, rec.intervalDays())).append("\n")
-          .append("  Добавки: ").append(formatAdditives(plant, careAdvice)).append("\n");
+      sb.append("\n🪴 ").append(plant.getName()).append("\n")
+          .append("• Последний полив: ").append(plant.getLastWateredDate()).append("\n")
+          .append("• Следующий полив: ").append(due).append("\n")
+          .append("• Рекомендуемый объем: ").append(rec.waterLiters()).append(" л\n")
+          .append("• Цикл полива: ").append(formatCycle(careAdvice, rec.intervalDays())).append("\n")
+          .append("• Добавки: ").append(formatAdditives(plant, careAdvice)).append("\n");
     }
     SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
     msg.setReplyMarkup(listWaterButtons(plants));

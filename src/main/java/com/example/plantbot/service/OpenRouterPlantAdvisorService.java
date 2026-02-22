@@ -31,6 +31,8 @@ import java.util.regex.Pattern;
 @Slf4j
 public class OpenRouterPlantAdvisorService {
   private static final Pattern FENCED_JSON_PATTERN = Pattern.compile("(?s)^```(?:json)?\\s*(.*?)\\s*```$");
+  private static final Pattern LATIN_TEXT_PATTERN = Pattern.compile("[A-Za-z]");
+  private static final Pattern CYRILLIC_TEXT_PATTERN = Pattern.compile("[А-Яа-яЁё]");
 
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
@@ -152,7 +154,7 @@ public class OpenRouterPlantAdvisorService {
         }
       }
 
-      String note = advice.path("note").asText("").trim();
+      String note = normalizeAdviceNote(advice.path("note").asText("").trim());
       PlantCareAdvice result = new PlantCareAdvice(cycle, additives, note, "OpenRouter:" + model);
       putCareAdviceCache(cacheKey, Optional.of(result));
       log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, source='{}'",
@@ -257,17 +259,31 @@ public class OpenRouterPlantAdvisorService {
         - additives: 0..3 short items suitable for the next watering (e.g., seaweed extract, calcium-magnesium)
         - if additives are unsafe or not needed, return empty array
         - note should be short and practical (max 120 chars)
+        - IMPORTANT: additives and note must be in Russian
         """;
   }
 
   private String careAdviceUserPrompt(Plant plant, double recommendedIntervalDays) {
     return """
-        Plant name: %s
-        Plant type: %s
-        Pot volume liters: %.2f
-        Current recommended interval days: %.1f
-        Goal: suggest practical next-watering cycle and optional safe additives.
+        Название растения: %s
+        Тип растения: %s
+        Объем горшка (л): %.2f
+        Текущий рекомендуемый интервал (дни): %.1f
+        Цель: предложи практичный цикл следующего полива и необязательные безопасные добавки.
+        Ответ должен быть на русском языке.
         """.formatted(plant.getName(), plant.getType().name(), plant.getPotVolumeLiters(), recommendedIntervalDays);
+  }
+
+
+  private String normalizeAdviceNote(String note) {
+    if (note == null || note.isBlank()) {
+      return "";
+    }
+    // If model returned note only in Latin script, hide it to avoid mixed-language UX.
+    if (LATIN_TEXT_PATTERN.matcher(note).find() && !CYRILLIC_TEXT_PATTERN.matcher(note).find()) {
+      return "";
+    }
+    return note;
   }
 
   private PlantType parsePlantType(String value) {
