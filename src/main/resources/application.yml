@@ -23,6 +23,7 @@ openrouter:
   site-url: ${OPENROUTER_SITE_URL:}
   app-name: ${OPENROUTER_APP_NAME:plant-bot}
   care-cache-ttl-minutes: ${OPENROUTER_CARE_CACHE_TTL_MINUTES:10080}
+  watering-cache-ttl-minutes: ${OPENROUTER_WATERING_CACHE_TTL_MINUTES:720}
   backoff-minutes: 60
 
 openweather:

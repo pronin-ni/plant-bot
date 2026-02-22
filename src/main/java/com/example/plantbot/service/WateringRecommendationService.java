@@ -5,10 +5,12 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.SunExposure;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,9 +20,11 @@ import java.util.OptionalDouble;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WateringRecommendationService {
   private final WeatherService weatherService;
   private final LearningService learningService;
+  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
   public WateringRecommendation recommend(Plant plant, User user) {
     Optional<WeatherData> weather = weatherService.getCurrent(user.getCity(), user.getCityLat(), user.getCityLon());
@@ -43,7 +47,7 @@ public class WateringRecommendationService {
       double rain24 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 24);
       double rain72 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 72);
       if (rain24 >= 8.0 || rain72 >= 16.0) {
-        return new WateringRecommendation(Math.max(2.0, interval), 0.0);
+        return new WateringRecommendation(Math.max(2.0, interval), safeNonZeroLiters(0.0, true));
       }
       if (rain24 >= 4.0 || rain72 >= 10.0) {
         interval = clamp(interval * 1.2, 1.0, 60.0);
@@ -51,6 +55,14 @@ public class WateringRecommendationService {
     }
 
     double waterLiters = recommendWaterLiters(plant, weather.orElse(null));
+    Optional<AIWateringProfile> aiProfile = openRouterPlantAdvisorService
+        .suggestWateringProfile(plant, weather.orElse(null), isOutdoor(plant));
+    if (aiProfile.isPresent()) {
+      AIWateringProfile p = aiProfile.get();
+      interval = clamp(interval * p.intervalFactor(), 1.0, 60.0);
+      waterLiters = roundTwoDecimals(waterLiters * p.waterFactor());
+    }
+    waterLiters = safeNonZeroLiters(waterLiters, isOutdoor(plant));
     return new WateringRecommendation(interval, waterLiters);
   }
 
@@ -170,6 +182,7 @@ public class WateringRecommendationService {
         case SUCCULENT -> 2.0;
         case TROPICAL -> 6.0;
         case FERN -> 5.0;
+        case CONIFER -> 3.5;
         default -> 4.0;
       };
       double weatherBoost = 1.0;
@@ -205,5 +218,15 @@ public class WateringRecommendationService {
 
   private double roundTwoDecimals(double value) {
     return Math.round(value * 100.0) / 100.0;
+  }
+
+  private double safeNonZeroLiters(double liters, boolean outdoor) {
+    if (liters > 0) {
+      return liters;
+    }
+    // Avoid zero recommendations in user-facing flows; ask user to refine inputs.
+    double fallback = outdoor ? 0.5 : 0.2;
+    log.warn("Watering liters was <= 0, using fallback {} (outdoor={})", fallback, outdoor);
+    return fallback;
   }
 }

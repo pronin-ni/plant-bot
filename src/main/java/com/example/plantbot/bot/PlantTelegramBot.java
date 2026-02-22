@@ -1045,7 +1045,13 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   private String formatWaterAmount(Plant plant, WateringRecommendation rec) {
     if (plant.getPlacement() == PlantPlacement.OUTDOOR && plant.getOutdoorAreaM2() != null && plant.getOutdoorAreaM2() > 0) {
+      if (rec.waterLiters() <= 0.5) {
+        return "минимум 0.5 л на " + plant.getOutdoorAreaM2() + " м² (уточни город/условия участка)";
+      }
       return rec.waterLiters() + " л на " + plant.getOutdoorAreaM2() + " м²";
+    }
+    if (rec.waterLiters() <= 0.2) {
+      return "минимум 0.2 л (уточни тип растения и условия)";
     }
     return rec.waterLiters() + " л";
   }

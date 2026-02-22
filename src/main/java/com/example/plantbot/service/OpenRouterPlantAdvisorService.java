@@ -2,8 +2,10 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.PlantLookupResult;
+import com.example.plantbot.util.WeatherData;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class OpenRouterPlantAdvisorService {
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final ConcurrentMap<String, CachedCareAdvice> careAdviceCache = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, CachedWateringProfile> wateringProfileCache = new ConcurrentHashMap<>();
 
   @Value("${openrouter.api-key:}")
   private String apiKey;
@@ -55,6 +58,9 @@ public class OpenRouterPlantAdvisorService {
 
   @Value("${openrouter.care-cache-ttl-minutes:10080}")
   private int careCacheTtlMinutes;
+
+  @Value("${openrouter.watering-cache-ttl-minutes:720}")
+  private int wateringCacheTtlMinutes;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
@@ -182,6 +188,48 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
+  public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
+    if (plant == null || apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
+      return Optional.empty();
+    }
+    String cacheKey = buildWateringProfileCacheKey(plant, weather, outdoor);
+    Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+    try {
+      JsonNode body = postMessages(List.of(
+          Map.of("role", "system", "content", wateringProfileSystemPrompt()),
+          Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
+      ));
+      if (body == null) {
+        putWateringProfileCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      String content = extractContent(body);
+      if (content.isEmpty()) {
+        putWateringProfileCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      JsonNode profile = objectMapper.readTree(sanitizeJsonPayload(content));
+      double intervalFactor = profile.path("interval_factor").asDouble(1.0);
+      double waterFactor = profile.path("water_factor").asDouble(1.0);
+      if (intervalFactor <= 0 || waterFactor <= 0) {
+        putWateringProfileCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
+      waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
+      AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + model);
+      putWateringProfileCache(cacheKey, Optional.of(value));
+      return Optional.of(value);
+    } catch (Exception ex) {
+      putWateringProfileCache(cacheKey, Optional.empty());
+      log.warn("OpenRouter watering profile failed for '{}': {}", plant.getName(), ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
   private JsonNode postMessages(List<Map<String, Object>> messages) {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
@@ -246,7 +294,7 @@ public class OpenRouterPlantAdvisorService {
         {
           "normalized_name": "string",
           "interval_days": 1,
-          "type_hint": "SUCCULENT|TROPICAL|FERN|DEFAULT",
+          "type_hint": "SUCCULENT|TROPICAL|FERN|CONIFER|DEFAULT",
           "confidence": 0.0
         }
         Rules:
@@ -293,6 +341,40 @@ public class OpenRouterPlantAdvisorService {
         """.formatted(plant.getName(), plant.getType().name(), plant.getPotVolumeLiters(), recommendedIntervalDays);
   }
 
+  private String wateringProfileSystemPrompt() {
+    return """
+        You are a plant watering model tuner.
+        Return ONLY valid JSON (no markdown, no prose):
+        {
+          "interval_factor": 1.0,
+          "water_factor": 1.0
+        }
+        Rules:
+        - interval_factor in [0.6..1.6]
+        - water_factor in [0.5..2.0]
+        - never return 0
+        """;
+  }
+
+  private String wateringProfileUserPrompt(Plant plant, WeatherData weather, boolean outdoor) {
+    return """
+        Дай поправочные коэффициенты полива.
+        Растение: %s
+        Тип: %s
+        Размещение: %s
+        Температура: %.1f
+        Влажность: %.1f
+        Осадки за час: %.1f
+        """.formatted(
+        plant.getName(),
+        plant.getType().name(),
+        outdoor ? "улица" : "дом",
+        weather == null ? 20.0 : weather.temperatureC(),
+        weather == null ? 50.0 : weather.humidityPercent(),
+        weather == null ? 0.0 : weather.precipitationMm1h()
+    );
+  }
+
 
   private String normalizeAdviceNote(String note) {
     if (note == null || note.isBlank()) {
@@ -323,6 +405,16 @@ public class OpenRouterPlantAdvisorService {
         + Math.round(recommendedIntervalDays * 10.0) / 10.0);
   }
 
+  private String buildWateringProfileCacheKey(Plant plant, WeatherData weather, boolean outdoor) {
+    double t = weather == null ? 20.0 : Math.round(weather.temperatureC());
+    double h = weather == null ? 50.0 : Math.round(weather.humidityPercent() / 5.0) * 5.0;
+    double r = weather == null ? 0.0 : Math.round(weather.precipitationMm1h() * 2.0) / 2.0;
+    return plant.getName().trim().toLowerCase()
+        + "|" + plant.getType().name()
+        + "|" + (outdoor ? "out" : "in")
+        + "|t=" + t + "|h=" + h + "|r=" + r;
+  }
+
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {
     CachedCareAdvice row = careAdviceCache.get(key);
     if (row == null) {
@@ -340,6 +432,26 @@ public class OpenRouterPlantAdvisorService {
     careAdviceCache.put(key, new CachedCareAdvice(value, Instant.now().plusSeconds(ttlSeconds)));
   }
 
+  private Optional<AIWateringProfile> getWateringProfileCache(String key) {
+    CachedWateringProfile row = wateringProfileCache.get(key);
+    if (row == null) {
+      return null;
+    }
+    if (row.expiresAt().isBefore(Instant.now())) {
+      wateringProfileCache.remove(key);
+      return null;
+    }
+    return row.value();
+  }
+
+  private void putWateringProfileCache(String key, Optional<AIWateringProfile> value) {
+    long ttlSeconds = Math.max(1, wateringCacheTtlMinutes) * 60L;
+    wateringProfileCache.put(key, new CachedWateringProfile(value, Instant.now().plusSeconds(ttlSeconds)));
+  }
+
   private record CachedCareAdvice(Optional<PlantCareAdvice> value, Instant expiresAt) {
+  }
+
+  private record CachedWateringProfile(Optional<AIWateringProfile> value, Instant expiresAt) {
   }
 }

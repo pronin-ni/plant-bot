@@ -4,6 +4,7 @@ public enum PlantType {
   SUCCULENT("Суккулент", 0.10, 0.12),
   TROPICAL("Тропическое", 0.18, 0.20),
   FERN("Папоротник", 0.15, 0.18),
+  CONIFER("Хвойное", 0.12, 0.16),
   DEFAULT("Обычное", 0.12, 0.16);
 
   private final String title;

@@ -633,6 +633,22 @@ public class PlantCatalogService {
         || joined.contains("zamioculcas")) {
       return PlantType.TROPICAL;
     }
+    if (joined.contains("thuja")
+        || joined.contains("tuya")
+        || joined.contains("brabant")
+        || joined.contains("conifer")
+        || joined.contains("juniper")
+        || joined.contains("cypress")
+        || joined.contains("spruce")
+        || joined.contains("pine")
+        || joined.contains("туя")
+        || joined.contains("брабант")
+        || joined.contains("можжевель")
+        || joined.contains("кипарис")
+        || joined.contains("ель")
+        || joined.contains("сосн")) {
+      return PlantType.CONIFER;
+    }
     return PlantType.DEFAULT;
   }
 
@@ -641,6 +657,7 @@ public class PlantCatalogService {
       case SUCCULENT -> 14;
       case FERN -> 4;
       case TROPICAL -> 7;
+      case CONIFER -> 7;
       default -> 7;
     };
   }

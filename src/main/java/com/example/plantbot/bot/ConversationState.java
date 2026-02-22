@@ -22,7 +22,12 @@ public class ConversationState {
     ADD_TYPE_DECISION,
     ADD_TYPE,
     SET_CITY,
-    SET_CITY_CHOOSE
+    SET_CITY_CHOOSE,
+    RECALC_WAIT_CITY,
+    RECALC_WAIT_CITY_CHOOSE,
+    RECALC_OUTDOOR_SOIL,
+    RECALC_OUTDOOR_SUN,
+    RECALC_OUTDOOR_MULCH
   }
 
   private Step step = Step.NONE;
@@ -39,6 +44,7 @@ public class ConversationState {
   private Boolean winterDormancyEnabled;
   private PlantType suggestedType;
   private String lookupSource;
+  private Long recalcPlantId;
 
   public Step getStep() {
     return step;
@@ -152,6 +158,14 @@ public class ConversationState {
     this.lookupSource = lookupSource;
   }
 
+  public Long getRecalcPlantId() {
+    return recalcPlantId;
+  }
+
+  public void setRecalcPlantId(Long recalcPlantId) {
+    this.recalcPlantId = recalcPlantId;
+  }
+
   public void reset() {
     step = Step.NONE;
     name = null;
@@ -167,5 +181,6 @@ public class ConversationState {
     winterDormancyEnabled = null;
     suggestedType = null;
     lookupSource = null;
+    recalcPlantId = null;
   }
 }
