@@ -29,6 +29,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -41,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 @Slf4j
 public class PlantTelegramBot extends TelegramLongPollingBot {
+  private static final Locale RU_LOCALE = Locale.forLanguageTag("ru-RU");
   private final UserService userService;
   private final PlantService plantService;
   private final PlantCatalogService plantCatalogService;
@@ -401,7 +403,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     YearMonth current = YearMonth.now();
     YearMonth nextMonth = current.plusMonths(1);
     StringBuilder sb = new StringBuilder("\uD83D\uDCC5 Календарь поливов на ")
-        .append(current.getMonth()).append(" и ").append(nextMonth.getMonth()).append(" ").append(current.getYear()).append("\n");
+        .append(monthTitle(current)).append(" и ").append(monthTitle(nextMonth)).append("\n");
 
     appendMonthCalendar(sb, plants, user, current);
     appendMonthCalendar(sb, plants, user, nextMonth);
@@ -411,7 +413,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private void appendMonthCalendar(StringBuilder sb, List<Plant> plants, User user, YearMonth month) {
     LocalDate start = month.atDay(1);
     LocalDate end = month.atEndOfMonth();
-    sb.append("\n\n").append(month.getMonth()).append(" ").append(month.getYear()).append(":\n");
+    sb.append("\n\n").append(monthTitle(month)).append(":\n");
     for (Plant plant : plants) {
       WateringRecommendation rec = recommendationService.recommend(plant, user.getCity());
       List<LocalDate> dates = new ArrayList<>();
@@ -583,5 +585,13 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   private String formatDays(double days) {
     return String.format(Locale.ROOT, "%.1f дн.", days);
+  }
+
+  private String monthTitle(YearMonth month) {
+    String label = month.getMonth().getDisplayName(TextStyle.FULL_STANDALONE, RU_LOCALE);
+    if (label.isEmpty()) {
+      return month.getMonth().toString() + " " + month.getYear();
+    }
+    return Character.toUpperCase(label.charAt(0)) + label.substring(1) + " " + month.getYear();
   }
 }

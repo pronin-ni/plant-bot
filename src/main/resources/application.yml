@@ -19,6 +19,7 @@ openweather:
   api-key: ${OPENWEATHER_API_KEY:}
   base-url: https://api.openweathermap.org/data/2.5/weather
   units: metric
+  cache-ttl-minutes: 15
 
 perenual:
   api-key: ${PERENUAL_API_KEY:}
