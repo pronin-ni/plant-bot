@@ -33,9 +33,11 @@ public class NotificationScheduler {
       boolean due = !today.isBefore(dueDate);
       boolean alreadyRemindedToday = today.equals(plant.getLastReminderDate());
       if (due && !alreadyRemindedToday) {
-        bot.sendWateringReminder(plant, rec);
-        plant.setLastReminderDate(today);
-        plantRepository.save(plant);
+        boolean sent = bot.sendWateringReminder(plant, rec);
+        if (sent) {
+          plant.setLastReminderDate(today);
+          plantRepository.save(plant);
+        }
       }
     }
   }

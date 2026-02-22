@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
@@ -189,8 +190,13 @@ public class PlantCatalogService {
   @Value("${inaturalist.base-url:https://api.inaturalist.org/v1}")
   private String iNaturalistBaseUrl;
 
+  @Value("${gbif.base-url:https://api.gbif.org/v1}")
+  private String gbifBaseUrl;
+
   @Value("${perenual.cache-ttl-minutes:10080}")
   private long cacheTtlMinutes;
+
+  private volatile long perenualBackoffUntilMillis = 0L;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
@@ -207,6 +213,12 @@ public class PlantCatalogService {
 
     List<String> queries = buildQueryCandidates(normalizedInput);
     log.info("Plant lookup started. input='{}', candidates={}", plantName, queries);
+
+    if (isPerenualBackoffActive()) {
+      Optional<PlantLookupResult> fallback = fallbackLookup(queries, plantName);
+      putCached(normalizedInput, fallback);
+      return fallback;
+    }
 
     for (String query : queries) {
       Optional<JsonNode> first = searchFirstSpecies(query);
@@ -231,6 +243,12 @@ public class PlantCatalogService {
       return value;
     }
 
+    Optional<PlantLookupResult> fallback = fallbackLookup(queries, plantName);
+    if (fallback.isPresent()) {
+      putCached(normalizedInput, fallback);
+      return fallback;
+    }
+
     log.warn("Plant lookup failed for input='{}'", plantName);
     Optional<PlantLookupResult> empty = Optional.empty();
     putCached(normalizedInput, empty);
@@ -247,8 +265,51 @@ public class PlantCatalogService {
         return Optional.empty();
       }
       return Optional.of(response.get("data").get(0));
+    } catch (HttpStatusCodeException ex) {
+      if (ex.getStatusCode().value() == 429 || ex.getStatusCode().is5xxServerError()) {
+        activatePerenualBackoff();
+      }
+      log.warn("Plant lookup request failed for query='{}': {} {}", query, ex.getStatusCode(), ex.getMessage());
+      return Optional.empty();
     } catch (Exception ex) {
       log.warn("Plant lookup request failed for query='{}': {}", query, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private Optional<PlantLookupResult> fallbackLookup(List<String> queries, String originalInput) {
+    for (String query : queries) {
+      Optional<PlantLookupResult> gbif = gbifLookup(query, originalInput);
+      if (gbif.isPresent()) {
+        return gbif;
+      }
+    }
+    PlantType type = inferPlantType(originalInput, "", originalInput);
+    int interval = intervalFromType(type);
+    log.info("Fallback heuristic used for '{}': type={}, interval={}", originalInput, type, interval);
+    return Optional.of(new PlantLookupResult(originalInput, interval, "Heuristic", type));
+  }
+
+  private Optional<PlantLookupResult> gbifLookup(String query, String originalInput) {
+    String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8);
+    String url = String.format("%s/species/suggest?q=%s&limit=3", gbifBaseUrl, encoded);
+    try {
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      if (response == null || !response.isArray() || response.isEmpty()) {
+        return Optional.empty();
+      }
+      JsonNode first = response.get(0);
+      String canonical = first.path("canonicalName").asText("").trim();
+      String scientific = first.path("scientificName").asText("").trim();
+      String display = !canonical.isEmpty() ? canonical : (!scientific.isEmpty() ? scientific : originalInput);
+      String signal = (canonical + " " + scientific + " " + query).trim();
+      PlantType type = inferPlantType(signal, "", signal);
+      int interval = intervalFromType(type);
+      log.info("GBIF fallback success. query='{}', display='{}', type={}, interval={}",
+          query, display, type, interval);
+      return Optional.of(new PlantLookupResult(display, interval, "GBIF", type));
+    } catch (Exception ex) {
+      log.warn("GBIF fallback failed for query='{}': {}", query, ex.getMessage());
       return Optional.empty();
     }
   }
@@ -513,5 +574,24 @@ public class PlantCatalogService {
       return PlantType.TROPICAL;
     }
     return PlantType.DEFAULT;
+  }
+
+  private int intervalFromType(PlantType type) {
+    return switch (type) {
+      case SUCCULENT -> 14;
+      case FERN -> 4;
+      case TROPICAL -> 7;
+      default -> 7;
+    };
+  }
+
+  private boolean isPerenualBackoffActive() {
+    return perenualBackoffUntilMillis > System.currentTimeMillis();
+  }
+
+  private void activatePerenualBackoff() {
+    long backoffMillis = 60L * 60L * 1000L;
+    perenualBackoffUntilMillis = System.currentTimeMillis() + backoffMillis;
+    log.warn("Perenual backoff enabled for {} minutes", backoffMillis / 60000L);
   }
 }

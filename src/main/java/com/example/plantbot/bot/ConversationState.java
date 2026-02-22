@@ -20,6 +20,7 @@ public class ConversationState {
   private Integer baseInterval;
   private PlantType type;
   private PlantType suggestedType;
+  private String lookupSource;
 
   public Step getStep() {
     return step;
@@ -69,6 +70,14 @@ public class ConversationState {
     this.suggestedType = suggestedType;
   }
 
+  public String getLookupSource() {
+    return lookupSource;
+  }
+
+  public void setLookupSource(String lookupSource) {
+    this.lookupSource = lookupSource;
+  }
+
   public void reset() {
     step = Step.NONE;
     name = null;
@@ -76,5 +85,6 @@ public class ConversationState {
     baseInterval = null;
     type = null;
     suggestedType = null;
+    lookupSource = null;
   }
 }

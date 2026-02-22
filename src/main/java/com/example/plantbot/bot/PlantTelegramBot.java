@@ -26,6 +26,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -89,13 +90,19 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     return botToken;
   }
 
-  public void sendWateringReminder(Plant plant, WateringRecommendation rec) {
+  public boolean sendWateringReminder(Plant plant, WateringRecommendation rec) {
     String text = "\uD83D\uDCA7 Пора поливать \"" + plant.getName() + "\"!\n"
         + "Рекомендуемый интервал: " + formatDays(rec.intervalDays()) + "\n"
         + "Рекомендуемый объём воды: " + rec.waterLiters() + " л";
     SendMessage msg = new SendMessage(String.valueOf(plant.getUser().getTelegramId()), text);
     msg.setReplyMarkup(wateredButton(plant.getId()));
-    safeExecute(msg);
+    try {
+      execute(msg);
+      return true;
+    } catch (Exception ex) {
+      log.error("Failed to send watering reminder to chat {}: {}", msg.getChatId(), ex.getMessage(), ex);
+      return false;
+    }
   }
 
   private void handleCommand(User user, Message message, String text) {
@@ -105,9 +112,10 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     switch (command) {
       case "/start" -> sendText(message.getChatId(),
           "\uD83C\uDF3F Привет! Я бот для ухода за домашними растениями.\n"
-              + "Команды: /add, /list, /calendar, /stats, /learning, /setcity");
+              + "Команды: /add, /list, /delete, /calendar, /stats, /learning, /setcity");
       case "/add" -> startAddPlant(user, message.getChatId());
       case "/list" -> sendPlantList(user, message.getChatId());
+      case "/delete" -> sendDeleteList(user, message.getChatId());
       case "/calendar" -> sendCalendar(user, message.getChatId());
       case "/stats" -> sendStats(user, message.getChatId());
       case "/learning" -> sendLearning(user, message.getChatId());
@@ -210,6 +218,24 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return;
     }
 
+    if (data.startsWith("delete:")) {
+      Long plantId = Long.parseLong(data.substring("delete:".length()));
+      Plant plant = plantService.getById(plantId);
+      if (plant == null) {
+        sendText(chatId, "Растение не найдено");
+        return;
+      }
+      if (!plant.getUser().getTelegramId().equals(user.getTelegramId())) {
+        sendText(chatId, "Это растение принадлежит другому пользователю.");
+        return;
+      }
+      String name = plant.getName();
+      plantService.delete(plant);
+      sendText(chatId, "Удалил растение: \"" + name + "\"");
+      log.info("Plant deleted: user={} plantId={} name='{}'", user.getTelegramId(), plantId, name);
+      return;
+    }
+
     if ("cancel".equals(data)) {
       cancelFlow(user, chatId);
       return;
@@ -286,6 +312,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     PlantLookupResult result = suggestion.get();
     state.setBaseInterval(result.baseIntervalDays());
     state.setSuggestedType(result.suggestedType());
+    state.setLookupSource(result.source());
     SendMessage msg = new SendMessage(String.valueOf(chatId), String.format(Locale.ROOT,
         "Нашел \"%s\" (%s). Базовый интервал: %d дн. Оставить или изменить?",
         result.displayName(), result.source(), result.baseIntervalDays()));
@@ -336,6 +363,9 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private void finishAddPlant(User user, Long chatId, ConversationState state) {
     PlantType type = state.getType() == null ? PlantType.DEFAULT : state.getType();
     Plant plant = plantService.addPlant(user, state.getName(), state.getPotVolume(), state.getBaseInterval(), type);
+    plant.setLookupSource(state.getLookupSource());
+    plant.setLookupAt(Instant.now());
+    plant = plantService.save(plant);
     state.reset();
     sendText(chatId, "\uD83C\uDF3F Растение \"" + plant.getName() + "\" добавлено!");
     log.info("Plant created: user={} plantId={} name='{}' interval={} pot={} type={}",
@@ -368,12 +398,20 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       sendText(chatId, "Сначала добавь растения через /add");
       return;
     }
-    YearMonth month = YearMonth.now();
+    YearMonth current = YearMonth.now();
+    YearMonth nextMonth = current.plusMonths(1);
+    StringBuilder sb = new StringBuilder("\uD83D\uDCC5 Календарь поливов на ")
+        .append(current.getMonth()).append(" и ").append(nextMonth.getMonth()).append(" ").append(current.getYear()).append("\n");
+
+    appendMonthCalendar(sb, plants, user, current);
+    appendMonthCalendar(sb, plants, user, nextMonth);
+    sendText(chatId, sb.toString());
+  }
+
+  private void appendMonthCalendar(StringBuilder sb, List<Plant> plants, User user, YearMonth month) {
     LocalDate start = month.atDay(1);
     LocalDate end = month.atEndOfMonth();
-    StringBuilder sb = new StringBuilder("\uD83D\uDCC5 Календарь поливов на ")
-        .append(month.getMonth()).append(" ").append(month.getYear()).append("\n");
-
+    sb.append("\n\n").append(month.getMonth()).append(" ").append(month.getYear()).append(":\n");
     for (Plant plant : plants) {
       WateringRecommendation rec = recommendationService.recommend(plant, user.getCity());
       List<LocalDate> dates = new ArrayList<>();
@@ -396,7 +434,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         }
       }
     }
-    sendText(chatId, sb.toString());
   }
 
   private void sendStats(User user, Long chatId) {
@@ -417,6 +454,17 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     sendText(chatId, sb.toString());
   }
 
+  private void sendDeleteList(User user, Long chatId) {
+    List<Plant> plants = plantService.list(user);
+    if (plants.isEmpty()) {
+      sendText(chatId, "Удалять пока нечего. Сначала добавь растение через /add");
+      return;
+    }
+    SendMessage msg = new SendMessage(String.valueOf(chatId), "Выбери растение для удаления:");
+    msg.setReplyMarkup(deleteButtons(plants));
+    safeExecute(msg);
+  }
+
   private void sendLearning(User user, Long chatId) {
     List<Plant> plants = plantService.list(user);
     if (plants.isEmpty()) {
@@ -430,6 +478,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           .append("• базовый интервал: ").append(formatDays(info.baseIntervalDays())).append("\n")
           .append("• средний факт.: ").append(info.avgActualIntervalDays() == null ? "нет данных" : formatDays(info.avgActualIntervalDays())).append("\n")
           .append("• сглаженный: ").append(info.smoothedIntervalDays() == null ? "нет данных" : formatDays(info.smoothedIntervalDays())).append("\n")
+          .append("• источник автоподбора: ").append(plant.getLookupSource() == null ? "нет данных" : plant.getLookupSource()).append("\n")
           .append("• коэффициенты (сезон/погода/горшок): ")
           .append(String.format(Locale.ROOT, "%.2f/%.2f/%.2f", info.seasonFactor(), info.weatherFactor(), info.potFactor())).append("\n")
           .append("• итоговый интервал: ").append(formatDays(info.finalIntervalDays())).append("\n");
@@ -452,6 +501,19 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       button.setCallbackData("watered:" + plant.getId());
       rows.add(List.of(button));
     }
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  private InlineKeyboardMarkup deleteButtons(List<Plant> plants) {
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+    for (Plant plant : plants) {
+      InlineKeyboardButton button = new InlineKeyboardButton("Удалить: " + plant.getName());
+      button.setCallbackData("delete:" + plant.getId());
+      rows.add(List.of(button));
+    }
+    rows.add(List.of(cancelButton().getKeyboard().get(0).get(0)));
     InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
     markup.setKeyboard(rows);
     return markup;

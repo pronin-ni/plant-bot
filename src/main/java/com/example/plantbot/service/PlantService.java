@@ -37,4 +37,8 @@ public class PlantService {
   public Plant getById(Long id) {
     return plantRepository.findById(id).orElse(null);
   }
+
+  public void delete(Plant plant) {
+    plantRepository.delete(plant);
+  }
 }

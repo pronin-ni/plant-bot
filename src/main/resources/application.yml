@@ -31,6 +31,9 @@ translate:
 inaturalist:
   base-url: https://api.inaturalist.org/v1
 
+gbif:
+  base-url: https://api.gbif.org/v1
+
 scheduler:
   daily-cron: "0 0 9 * * *"
 

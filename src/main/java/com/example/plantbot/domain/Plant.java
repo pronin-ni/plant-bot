@@ -38,6 +38,10 @@ public class Plant {
   @Column(nullable = false)
   private PlantType type = PlantType.DEFAULT;
 
+  private String lookupSource;
+
+  private Instant lookupAt;
+
   private LocalDate lastReminderDate;
 
   private Instant createdAt = Instant.now();
