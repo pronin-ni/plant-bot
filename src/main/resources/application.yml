@@ -24,6 +24,9 @@ perenual:
   api-key: ${PERENUAL_API_KEY:}
   base-url: https://perenual.com/api
 
+translate:
+  base-url: https://api.mymemory.translated.net/get
+
 scheduler:
   daily-cron: "0 0 9 * * *"
 
@@ -37,3 +40,8 @@ management:
     web:
       exposure:
         include: health
+
+logging:
+  level:
+    com.example.plantbot: INFO
+    org.telegram.telegrambots: WARN

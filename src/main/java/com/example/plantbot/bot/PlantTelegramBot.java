@@ -59,6 +59,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   @Override
   public void onUpdateReceived(Update update) {
     if (update.hasCallbackQuery()) {
+      log.info("Callback received: {}", update.getCallbackQuery().getData());
       handleCallback(update.getCallbackQuery());
       return;
     }
@@ -68,6 +69,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     Message message = update.getMessage();
     User user = userService.getOrCreate(message);
     String text = message.getText().trim();
+    log.info("Message received from user={} chatId={} text='{}'", user.getTelegramId(), message.getChatId(), text);
 
     if (text.startsWith("/")) {
       handleCommand(user, message, text);
@@ -123,6 +125,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       }
       default -> sendText(message.getChatId(), "Не понимаю команду. Попробуй /add или /list");
     }
+    log.info("Command handled: user={} command='{}'", user.getTelegramId(), command);
   }
 
   private void handleConversation(User user, Message message, String text) {
@@ -134,6 +137,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         state.setStep(ConversationState.Step.ADD_POT);
         applyAutoInterval(state, message.getChatId());
         sendTextWithCancel(message.getChatId(), "Введите объём горшка в литрах (например: 2.5)");
+        log.info("Add flow: name accepted user={} name='{}'", user.getTelegramId(), state.getName());
       }
       case ADD_POT -> {
         Double volume = parseDouble(text);
@@ -151,6 +155,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           msg.setReplyMarkup(typeButtons());
           safeExecute(msg);
         }
+        log.info("Add flow: pot accepted user={} pot={} interval={}",
+            user.getTelegramId(), state.getPotVolume(), state.getBaseInterval());
       }
       case ADD_INTERVAL -> {
         Integer interval = parseInt(text);
@@ -163,6 +169,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         SendMessage msg = new SendMessage(String.valueOf(message.getChatId()), "Тип растения:");
         msg.setReplyMarkup(typeButtons());
         safeExecute(msg);
+        log.info("Add flow: manual interval set user={} interval={}", user.getTelegramId(), interval);
       }
       case SET_CITY -> {
         user.setCity(text);
@@ -215,6 +222,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         Plant plant = plantService.addPlant(user, state.getName(), state.getPotVolume(), state.getBaseInterval(), type);
         state.reset();
         sendText(chatId, "\uD83C\uDF3F Растение \"" + plant.getName() + "\" добавлено!");
+        log.info("Plant created: user={} plantId={} name='{}' interval={} pot={}",
+            user.getTelegramId(), plant.getId(), plant.getName(), plant.getBaseIntervalDays(), plant.getPotVolumeLiters());
       }
     }
   }
@@ -230,6 +239,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     Optional<PlantLookupResult> suggestion = plantCatalogService.suggestIntervalDays(state.getName());
     if (suggestion.isEmpty()) {
       sendText(chatId, "Автопоиск интервала не сработал. Попрошу ввести интервал вручную на следующем шаге.");
+      log.info("Auto interval not found for '{}'", state.getName());
       return;
     }
     PlantLookupResult result = suggestion.get();
@@ -237,6 +247,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     sendText(chatId, String.format(Locale.ROOT,
         "Нашел \"%s\" (%s). Базовый интервал: %d дн.",
         result.displayName(), result.source(), result.baseIntervalDays()));
+    log.info("Auto interval applied for '{}' -> {} days", state.getName(), result.baseIntervalDays());
   }
 
   private void sendPlantList(User user, Long chatId) {

@@ -24,7 +24,7 @@ export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 
 ## Команды
 
-- `/add` — добавить растение (с автопоиском базового интервала через Perenual)
+- `/add` — добавить растение (с автопоиском базового интервала через Perenual, поддерживает ввод названия на русском)
 - `/list` — список растений
 - `/calendar` — календарь поливов на месяц
 - `/stats` — статистика
@@ -50,3 +50,5 @@ docker compose up -d
 ## GHCR (образ из GitHub)
 
 После пуша в `main` GitHub Actions опубликует образ в GHCR: `ghcr.io/pronin-ni/plant-bot:latest`
+
+Примечание по автопоиску: при русском названии бот пробует перевод `ru->en` через MyMemory и fallback-транслитерацию.
