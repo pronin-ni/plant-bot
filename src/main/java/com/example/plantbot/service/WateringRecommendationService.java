@@ -47,7 +47,7 @@ public class WateringRecommendationService {
       double rain24 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 24);
       double rain72 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 72);
       if (rain24 >= 8.0 || rain72 >= 16.0) {
-        return new WateringRecommendation(Math.max(2.0, interval), safeNonZeroLiters(0.0, true));
+        return new WateringRecommendation(Math.max(2.0, interval), safeNonZeroLiters(0.0, plant));
       }
       if (rain24 >= 4.0 || rain72 >= 10.0) {
         interval = clamp(interval * 1.2, 1.0, 60.0);
@@ -62,7 +62,8 @@ public class WateringRecommendationService {
       interval = clamp(interval * p.intervalFactor(), 1.0, 60.0);
       waterLiters = roundTwoDecimals(waterLiters * p.waterFactor());
     }
-    waterLiters = safeNonZeroLiters(waterLiters, isOutdoor(plant));
+    waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
+    waterLiters = safeNonZeroLiters(waterLiters, plant);
     return new WateringRecommendation(interval, waterLiters);
   }
 
@@ -220,13 +221,55 @@ public class WateringRecommendationService {
     return Math.round(value * 100.0) / 100.0;
   }
 
-  private double safeNonZeroLiters(double liters, boolean outdoor) {
+  private double safeNonZeroLiters(double liters, Plant plant) {
     if (liters > 0) {
+      return roundTwoDecimals(liters);
+    }
+    if (isOutdoor(plant)) {
+      double area = plant.getOutdoorAreaM2() == null || plant.getOutdoorAreaM2() <= 0 ? 1.0 : plant.getOutdoorAreaM2();
+      double derived = Math.max(0.5, area * outdoorLitersPerM2(plant) * 0.35);
+      double fallback = roundTwoDecimals(clamp(derived, 0.5, 25.0));
+      log.warn("Watering liters was <= 0, using outdoor fallback {} (area={}, type={})",
+          fallback, plant.getOutdoorAreaM2(), plant.getType());
+      return fallback;
+    }
+
+    double pot = plant.getPotVolumeLiters() > 0 ? plant.getPotVolumeLiters() : 1.5;
+    double percent = (plant.getType().getMinWaterPercent() + plant.getType().getMaxWaterPercent()) / 2.0;
+    double derived = pot * percent;
+    double fallback = roundTwoDecimals(clamp(Math.max(0.12, derived), 0.12, 3.0));
+    log.warn("Watering liters was <= 0, using indoor fallback {} (pot={}, type={})",
+        fallback, plant.getPotVolumeLiters(), plant.getType());
+    return fallback;
+  }
+
+  private double outdoorLitersPerM2(Plant plant) {
+    return switch (plant.getType()) {
+      case SUCCULENT -> 2.0;
+      case TROPICAL -> 6.0;
+      case FERN -> 5.0;
+      case CONIFER -> 3.5;
+      default -> 4.0;
+    };
+  }
+
+  private double enforceMinimumReasonableWater(Plant plant, double liters) {
+    if (liters <= 0) {
       return liters;
     }
-    // Avoid zero recommendations in user-facing flows; ask user to refine inputs.
-    double fallback = outdoor ? 0.5 : 0.2;
-    log.warn("Watering liters was <= 0, using fallback {} (outdoor={})", fallback, outdoor);
-    return fallback;
+    double minReasonable;
+    if (isOutdoor(plant)) {
+      double area = plant.getOutdoorAreaM2() == null || plant.getOutdoorAreaM2() <= 0 ? 1.0 : plant.getOutdoorAreaM2();
+      minReasonable = Math.max(0.5, area * outdoorLitersPerM2(plant) * 0.35);
+    } else {
+      double pot = plant.getPotVolumeLiters() > 0 ? plant.getPotVolumeLiters() : 1.5;
+      minReasonable = Math.max(0.12, pot * plant.getType().getMinWaterPercent() * 0.85);
+    }
+    double adjusted = Math.max(liters, minReasonable);
+    if (adjusted > liters) {
+      log.info("Raised low water recommendation from {} to {} for plantId={} name='{}'",
+          roundTwoDecimals(liters), roundTwoDecimals(adjusted), plant.getId(), plant.getName());
+    }
+    return roundTwoDecimals(adjusted);
   }
 }

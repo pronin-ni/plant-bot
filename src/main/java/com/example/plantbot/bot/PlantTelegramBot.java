@@ -215,13 +215,15 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
               + "• /calendar — календарь поливов\n"
               + "• /stats — статистика\n"
               + "• /learning — адаптация интервала\n"
-              + "• /setcity — город для погоды");
+              + "• /setcity — город для погоды\n"
+              + "• /recalc — уточнить и пересчитать норму полива");
       case "/add" -> startAddPlant(user, message.getChatId());
       case "/list" -> sendPlantList(user, message.getChatId());
       case "/delete" -> sendDeleteList(user, message.getChatId());
       case "/calendar" -> sendCalendar(user, message.getChatId());
       case "/stats" -> sendStats(user, message.getChatId());
       case "/learning" -> sendLearning(user, message.getChatId());
+      case "/recalc" -> startRecalc(user, message.getChatId());
       case "/cancel" -> cancelFlow(user, message.getChatId());
       case "/setcity" -> {
         if (parts.length > 1) {
@@ -305,6 +307,10 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         resolveAndSetCity(user, message.getChatId(), text);
       }
       case SET_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
+      case RECALC_WAIT_CITY -> resolveCityForRecalc(user, message.getChatId(), text);
+      case RECALC_WAIT_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
+      case RECALC_OUTDOOR_SOIL, RECALC_OUTDOOR_SUN, RECALC_OUTDOOR_MULCH ->
+          sendTextWithCancel(message.getChatId(), "Используй кнопки ниже для уточнения и пересчета.");
       default -> sendText(message.getChatId(), "Чтобы начать, используй /add");
     }
   }
@@ -360,6 +366,85 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return;
     }
 
+    if (data.startsWith("recalc:")) {
+      Long plantId = Long.parseLong(data.substring("recalc:".length()));
+      Plant plant = plantService.getById(plantId);
+      if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
+        sendText(chatId, "Растение не найдено.");
+        return;
+      }
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      state.reset();
+      state.setRecalcPlantId(plantId);
+      state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
+      SendMessage msg = new SendMessage(String.valueOf(chatId),
+          "Уточним данные для пересчета \"" + plant.getName() + "\".\n"
+              + "1) Укажи точный город/населенный пункт для погоды.\n"
+              + "Можно оставить текущий город кнопкой ниже.");
+      msg.setReplyMarkup(recalcCityButtons(user));
+      safeExecute(msg);
+      return;
+    }
+
+    if ("recalc:city:current".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getRecalcPlantId() == null) {
+        sendText(chatId, "Сначала выбери растение через /recalc");
+        return;
+      }
+      if (user.getCity() == null || user.getCity().isBlank()) {
+        state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
+        sendTextWithCancel(chatId, "Текущий город не задан. Введи город текстом.");
+        return;
+      }
+      continueRecalcAfterCity(user, chatId, state);
+      return;
+    }
+
+    if (data.startsWith("recalcsoil:")) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_SOIL || state.getRecalcPlantId() == null) {
+        return;
+      }
+      try {
+        state.setOutdoorSoilType(com.example.plantbot.domain.OutdoorSoilType.valueOf(data.substring("recalcsoil:".length())));
+        state.setStep(ConversationState.Step.RECALC_OUTDOOR_SUN);
+        SendMessage msg = new SendMessage(String.valueOf(chatId), "3) Освещенность участка:");
+        msg.setReplyMarkup(recalcSunButtons());
+        safeExecute(msg);
+      } catch (IllegalArgumentException ex) {
+        sendText(chatId, "Не распознал тип почвы. Выбери кнопку.");
+      }
+      return;
+    }
+
+    if (data.startsWith("recalcsun:")) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_SUN || state.getRecalcPlantId() == null) {
+        return;
+      }
+      try {
+        state.setSunExposure(com.example.plantbot.domain.SunExposure.valueOf(data.substring("recalcsun:".length())));
+        state.setStep(ConversationState.Step.RECALC_OUTDOOR_MULCH);
+        SendMessage msg = new SendMessage(String.valueOf(chatId), "4) Есть мульча?");
+        msg.setReplyMarkup(recalcMulchButtons());
+        safeExecute(msg);
+      } catch (IllegalArgumentException ex) {
+        sendText(chatId, "Не распознал освещенность. Выбери кнопку.");
+      }
+      return;
+    }
+
+    if (data.startsWith("recalcmulch:")) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_MULCH || state.getRecalcPlantId() == null) {
+        return;
+      }
+      state.setMulched("yes".equals(data.substring("recalcmulch:".length())));
+      finishRecalc(user, chatId, state);
+      return;
+    }
+
     if (data.startsWith("citypick:")) {
       List<CityOption> options = pendingCityOptions.get(user.getTelegramId());
       if (options == null || options.isEmpty()) {
@@ -375,8 +460,13 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       applySelectedCity(user, selected);
       pendingCityOptions.remove(user.getTelegramId());
       ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      state.reset();
-      sendText(chatId, "🌆 Город сохранен: " + selected.displayName());
+      if (state.getStep() == ConversationState.Step.RECALC_WAIT_CITY_CHOOSE && state.getRecalcPlantId() != null) {
+        sendText(chatId, "🌆 Локация для пересчета: " + selected.displayName());
+        continueRecalcAfterCity(user, chatId, state);
+      } else {
+        state.reset();
+        sendText(chatId, "🌆 Город сохранен: " + selected.displayName());
+      }
       return;
     }
 
@@ -539,6 +629,106 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       }
       return;
     }
+  }
+
+  private void startRecalc(User user, Long chatId) {
+    List<Plant> plants = plantService.list(user);
+    if (plants.isEmpty()) {
+      sendText(chatId, "🌱 Сначала добавь растение через /add");
+      return;
+    }
+    SendMessage msg = new SendMessage(String.valueOf(chatId), "Выбери растение для уточнения нормы полива:");
+    msg.setReplyMarkup(recalcPlantButtons(plants));
+    safeExecute(msg);
+  }
+
+  private void resolveCityForRecalc(User user, Long chatId, String query) {
+    if (query == null || query.isBlank()) {
+      sendTextWithCancel(chatId, "Введи город или нажми кнопку оставить текущий город.");
+      return;
+    }
+
+    List<CityOption> options = weatherService.resolveCityOptions(query, 5);
+    if (options.isEmpty()) {
+      sendTextWithCancel(chatId, "Не нашел город. Попробуй формат: Вартемяги или Вартемяги, RU");
+      return;
+    }
+
+    ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+    if (options.size() == 1) {
+      applySelectedCity(user, options.get(0));
+      sendText(chatId, "🌆 Локация для пересчета: " + options.get(0).displayName());
+      continueRecalcAfterCity(user, chatId, state);
+      return;
+    }
+
+    pendingCityOptions.put(user.getTelegramId(), options);
+    state.setStep(ConversationState.Step.RECALC_WAIT_CITY_CHOOSE);
+    StringBuilder sb = new StringBuilder("Нашел несколько вариантов. Выбери нужный:\n");
+    for (int i = 0; i < options.size(); i++) {
+      sb.append(i + 1).append(". ").append(options.get(i).displayName()).append("\n");
+    }
+    SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
+    msg.setReplyMarkup(cityPickButtons(options.size()));
+    safeExecute(msg);
+  }
+
+  private void continueRecalcAfterCity(User user, Long chatId, ConversationState state) {
+    Plant plant = plantService.getById(state.getRecalcPlantId());
+    if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
+      state.reset();
+      sendText(chatId, "Растение не найдено.");
+      return;
+    }
+
+    if (plant.getPlacement() == PlantPlacement.OUTDOOR) {
+      state.setStep(ConversationState.Step.RECALC_OUTDOOR_SOIL);
+      SendMessage msg = new SendMessage(String.valueOf(chatId), "2) Уточни тип почвы:");
+      msg.setReplyMarkup(recalcSoilButtons());
+      safeExecute(msg);
+      return;
+    }
+
+    finishRecalc(user, chatId, state);
+  }
+
+  private void finishRecalc(User user, Long chatId, ConversationState state) {
+    Plant plant = plantService.getById(state.getRecalcPlantId());
+    if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
+      state.reset();
+      sendText(chatId, "Растение не найдено.");
+      return;
+    }
+
+    if (state.getOutdoorSoilType() != null) {
+      plant.setOutdoorSoilType(state.getOutdoorSoilType());
+    }
+    if (state.getSunExposure() != null) {
+      plant.setSunExposure(state.getSunExposure());
+    }
+    if (state.getMulched() != null) {
+      plant.setMulched(state.getMulched());
+    }
+    plant = plantService.save(plant);
+
+    WateringRecommendation rec = recommendationService.recommend(plant, user);
+    StringBuilder sb = new StringBuilder("🔄 Пересчет готов для \"")
+        .append(plant.getName()).append("\"\n")
+        .append("• Интервал: ").append(formatDays(rec.intervalDays())).append("\n")
+        .append("• Объем воды: ").append(formatWaterAmount(plant, rec));
+
+    boolean minimum = (plant.getPlacement() == PlantPlacement.OUTDOOR && rec.waterLiters() <= 0.5)
+        || (plant.getPlacement() != PlantPlacement.OUTDOOR && rec.waterLiters() <= 0.2);
+    if (minimum) {
+      sb.append("\n\n⚠️ Получилось минимальное значение. Уточни локацию/условия и повтори /recalc.");
+    }
+
+    sendText(chatId, sb.toString());
+    log.info("Recalc finished: user={} plantId={} placement={} soil={} sun={} mulch={} interval={} water={}",
+        user.getTelegramId(), plant.getId(), plant.getPlacement(), plant.getOutdoorSoilType(),
+        plant.getSunExposure(), plant.getMulched(), rec.intervalDays(), rec.waterLiters());
+    state.reset();
+    pendingCityOptions.remove(user.getTelegramId());
   }
 
   private void startAddPlant(User user, Long chatId) {
@@ -879,6 +1069,69 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     return markup;
   }
 
+  private InlineKeyboardMarkup recalcPlantButtons(List<Plant> plants) {
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+    for (Plant plant : plants) {
+      InlineKeyboardButton button = new InlineKeyboardButton("Пересчитать: " + plant.getName());
+      button.setCallbackData("recalc:" + plant.getId());
+      rows.add(List.of(button));
+    }
+    rows.add(List.of(cancelButton().getKeyboard().get(0).get(0)));
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  private InlineKeyboardMarkup recalcCityButtons(User user) {
+    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+    if (user.getCity() != null && !user.getCity().isBlank()) {
+      InlineKeyboardButton current = new InlineKeyboardButton("Оставить текущий город (" + user.getCity() + ")");
+      current.setCallbackData("recalc:city:current");
+      rows.add(List.of(current));
+    }
+    rows.add(List.of(cancelButton().getKeyboard().get(0).get(0)));
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(rows);
+    return markup;
+  }
+
+  private InlineKeyboardMarkup recalcSoilButtons() {
+    InlineKeyboardButton sandy = new InlineKeyboardButton("Песчаный");
+    sandy.setCallbackData("recalcsoil:SANDY");
+    InlineKeyboardButton loamy = new InlineKeyboardButton("Суглинистый");
+    loamy.setCallbackData("recalcsoil:LOAMY");
+    InlineKeyboardButton clay = new InlineKeyboardButton("Глинистый");
+    clay.setCallbackData("recalcsoil:CLAY");
+    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(sandy, loamy, clay), List.of(cancel)));
+    return markup;
+  }
+
+  private InlineKeyboardMarkup recalcSunButtons() {
+    InlineKeyboardButton full = new InlineKeyboardButton("Полное солнце");
+    full.setCallbackData("recalcsun:FULL_SUN");
+    InlineKeyboardButton partial = new InlineKeyboardButton("Полутень");
+    partial.setCallbackData("recalcsun:PARTIAL_SHADE");
+    InlineKeyboardButton shade = new InlineKeyboardButton("Тень");
+    shade.setCallbackData("recalcsun:SHADE");
+    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(full, partial, shade), List.of(cancel)));
+    return markup;
+  }
+
+  private InlineKeyboardMarkup recalcMulchButtons() {
+    InlineKeyboardButton yes = new InlineKeyboardButton("Да");
+    yes.setCallbackData("recalcmulch:yes");
+    InlineKeyboardButton no = new InlineKeyboardButton("Нет");
+    no.setCallbackData("recalcmulch:no");
+    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(yes, no), List.of(cancel)));
+    return markup;
+  }
+
   private InlineKeyboardMarkup typeButtons() {
     List<List<InlineKeyboardButton>> rows = new ArrayList<>();
     for (PlantType type : PlantType.values()) {
@@ -951,8 +1204,18 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     applySelectedCity(user, city);
     pendingCityOptions.remove(user.getTelegramId());
     ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-    state.reset();
 
+    if (state.getStep() == ConversationState.Step.RECALC_WAIT_CITY
+        || state.getStep() == ConversationState.Step.RECALC_WAIT_CITY_CHOOSE) {
+      SendMessage msg = new SendMessage(String.valueOf(message.getChatId()),
+          "📍 Геопозиция получена.\n🌆 Локация для пересчета: " + city.displayName());
+      msg.setReplyMarkup(new ReplyKeyboardRemove(true));
+      safeExecute(msg);
+      continueRecalcAfterCity(user, message.getChatId(), state);
+      return;
+    }
+
+    state.reset();
     SendMessage msg = new SendMessage(String.valueOf(message.getChatId()),
         "📍 Геопозиция получена.\n🌆 Город сохранен: " + city.displayName());
     msg.setReplyMarkup(new ReplyKeyboardRemove(true));
@@ -1046,12 +1309,18 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private String formatWaterAmount(Plant plant, WateringRecommendation rec) {
     if (plant.getPlacement() == PlantPlacement.OUTDOOR && plant.getOutdoorAreaM2() != null && plant.getOutdoorAreaM2() > 0) {
       if (rec.waterLiters() <= 0.5) {
-        return "минимум 0.5 л на " + plant.getOutdoorAreaM2() + " м² (уточни город/условия участка)";
+        if (plant.getOutdoorAreaM2() >= 2.0) {
+          return "минимум 0.5 л на " + plant.getOutdoorAreaM2() + " м² (уточни город/условия участка)";
+        }
+        return rec.waterLiters() + " л на " + plant.getOutdoorAreaM2() + " м²";
       }
       return rec.waterLiters() + " л на " + plant.getOutdoorAreaM2() + " м²";
     }
     if (rec.waterLiters() <= 0.2) {
-      return "минимум 0.2 л (уточни тип растения и условия)";
+      if (plant.getPotVolumeLiters() >= 1.8) {
+        return "минимум 0.2 л (уточни тип растения и условия)";
+      }
+      return rec.waterLiters() + " л";
     }
     return rec.waterLiters() + " л";
   }
