@@ -13,6 +13,7 @@ import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -36,6 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PlantTelegramBot extends TelegramLongPollingBot {
   private final UserService userService;
   private final PlantService plantService;
@@ -369,7 +371,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private void safeExecute(SendMessage message) {
     try {
       execute(message);
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.error("Failed to send message to chat {}: {}", message.getChatId(), ex.getMessage(), ex);
     }
   }
 

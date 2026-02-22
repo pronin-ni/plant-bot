@@ -23,7 +23,7 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
   implementation 'org.springframework.boot:spring-boot-starter-web'
   implementation 'org.springframework.boot:spring-boot-starter-actuator'
-  implementation "org.telegram:telegrambots-spring-boot-starter:6.9.7.1"
+  implementation "org.telegram:telegrambots:6.9.7.1"
   implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
   implementation 'org.hibernate.orm:hibernate-community-dialects:6.4.4.Final'
   implementation 'javax.xml.bind:jaxb-api:2.3.1'
