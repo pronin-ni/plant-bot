@@ -12,8 +12,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,8 +42,17 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.app-name:plant-bot}")
   private String appName;
 
+  @Value("${openrouter.backoff-minutes:60}")
+  private long backoffMinutes;
+
+  private volatile Instant backoffUntil = Instant.EPOCH;
+
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
+      return Optional.empty();
+    }
+    if (backoffUntil.isAfter(Instant.now())) {
+      log.info("OpenRouter skipped due to backoff until {}", backoffUntil);
       return Optional.empty();
     }
     try {
@@ -96,6 +107,20 @@ public class OpenRouterPlantAdvisorService {
       log.info("OpenRouter suggestion success. input='{}', normalized='{}', interval={}, type={}",
           plantName, normalizedName, interval, suggestedType);
       return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
+    } catch (HttpStatusCodeException ex) {
+      String body = ex.getResponseBodyAsString();
+      if (ex.getStatusCode().value() == 404 && body != null && body.contains("data policy")) {
+        activateBackoff();
+        log.warn("OpenRouter disabled temporarily by data policy for model='{}'. "
+            + "Use paid model or enable free model publication in https://openrouter.ai/settings/privacy. "
+            + "status={} body={}", model, ex.getStatusCode(), body);
+        return Optional.empty();
+      }
+      if (ex.getStatusCode().value() == 429 || ex.getStatusCode().is5xxServerError()) {
+        activateBackoff();
+      }
+      log.warn("OpenRouter HTTP failure for '{}': {} {}", plantName, ex.getStatusCode(), body);
+      return Optional.empty();
     } catch (Exception ex) {
       log.warn("OpenRouter suggestion failed for '{}': {}", plantName, ex.getMessage());
       return Optional.empty();
@@ -134,5 +159,10 @@ public class OpenRouterPlantAdvisorService {
     } catch (Exception ignored) {
       return PlantType.DEFAULT;
     }
+  }
+
+  private void activateBackoff() {
+    long minutes = Math.max(1, backoffMinutes);
+    backoffUntil = Instant.now().plusSeconds(minutes * 60L);
   }
 }
