@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:./data/plantbot.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        format_sql: false
+    open-in-view: false
+
+bot:
+  token: ${TELEGRAM_BOT_TOKEN:}
+  username: ${TELEGRAM_BOT_USERNAME:}
+
+openweather:
+  api-key: ${OPENWEATHER_API_KEY:}
+  base-url: https://api.openweathermap.org/data/2.5/weather
+  units: metric
+
+scheduler:
+  daily-cron: "0 0 9 * * *"
+
+app:
+  learning:
+    last-n: 5
+    alpha: 0.5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

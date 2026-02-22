@@ -1,0 +1,40 @@
+plugins {
+  id 'java'
+  id 'org.springframework.boot' version '3.2.4'
+  id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.example'
+version = '0.1.0'
+
+def javaVersion = 17
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(javaVersion)
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'org.springframework.boot:spring-boot-starter'
+  implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+  implementation 'org.springframework.boot:spring-boot-starter-web'
+  implementation 'org.springframework.boot:spring-boot-starter-actuator'
+  implementation "org.telegram:telegrambots:6.9.7.1"
+  implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
+  implementation 'org.hibernate.orm:hibernate-community-dialects:6.4.4.Final'
+  implementation 'javax.xml.bind:jaxb-api:2.3.1'
+  runtimeOnly 'org.glassfish.jaxb:jaxb-runtime:2.3.8'
+
+  compileOnly 'org.projectlombok:lombok'
+  annotationProcessor 'org.projectlombok:lombok'
+
+  testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+  useJUnitPlatform()
+}
