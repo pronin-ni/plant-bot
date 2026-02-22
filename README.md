@@ -7,12 +7,14 @@
 1. Установи Java 17+.
 2. Создай бота через BotFather и получи токен.
 3. Получи ключ OpenWeather (опционально, для адаптации по погоде).
-4. Запусти:
+4. Получи ключ Perenual (для автоподбора базового интервала по названию растения).
+5. Запусти:
 
 ```bash
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
+export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 
 ./scripts/ensure-gradle-wrapper.sh
 ./gradlew bootRun
@@ -22,7 +24,7 @@ export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 
 ## Команды
 
-- `/add` — добавить растение
+- `/add` — добавить растение (с автопоиском базового интервала через Perenual)
 - `/list` — список растений
 - `/calendar` — календарь поливов на месяц
 - `/stats` — статистика
@@ -36,6 +38,7 @@ export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
+export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 
 docker compose up -d
 ```
@@ -46,4 +49,4 @@ docker compose up -d
 
 ## GHCR (образ из GitHub)
 
-После пуша в `main` GitHub Actions опубликует образ в GHCR:\n`ghcr.io/pronin-ni/plant-bot:latest`\n
+После пуша в `main` GitHub Actions опубликует образ в GHCR: `ghcr.io/pronin-ni/plant-bot:latest`

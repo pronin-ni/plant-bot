@@ -4,12 +4,14 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.LearningService;
+import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.util.LearningInfo;
+import com.example.plantbot.util.PlantLookupResult;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +28,6 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -41,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PlantTelegramBot extends TelegramLongPollingBot {
   private final UserService userService;
   private final PlantService plantService;
+  private final PlantCatalogService plantCatalogService;
   private final WateringRecommendationService recommendationService;
   private final WateringLogService wateringLogService;
   private final WeatherService weatherService;
@@ -130,6 +132,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       case ADD_NAME -> {
         state.setName(text);
         state.setStep(ConversationState.Step.ADD_POT);
+        applyAutoInterval(state, message.getChatId());
         sendTextWithCancel(message.getChatId(), "Введите объём горшка в литрах (например: 2.5)");
       }
       case ADD_POT -> {
@@ -139,8 +142,15 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           return;
         }
         state.setPotVolume(volume);
-        state.setStep(ConversationState.Step.ADD_INTERVAL);
-        sendTextWithCancel(message.getChatId(), "Введите базовый интервал полива в днях (например: 7)");
+        if (state.getBaseInterval() == null) {
+          state.setStep(ConversationState.Step.ADD_INTERVAL);
+          sendTextWithCancel(message.getChatId(), "Введите базовый интервал полива в днях (например: 7)");
+        } else {
+          state.setStep(ConversationState.Step.ADD_TYPE);
+          SendMessage msg = new SendMessage(String.valueOf(message.getChatId()), "Тип растения:");
+          msg.setReplyMarkup(typeButtons());
+          safeExecute(msg);
+        }
       }
       case ADD_INTERVAL -> {
         Integer interval = parseInt(text);
@@ -213,7 +223,20 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
     state.reset();
     state.setStep(ConversationState.Step.ADD_NAME);
-    sendTextWithCancel(chatId, "Как называется растение?");
+    sendTextWithCancel(chatId, "Как называется растение? Я попробую автоматически подобрать базовый интервал полива.");
+  }
+
+  private void applyAutoInterval(ConversationState state, Long chatId) {
+    Optional<PlantLookupResult> suggestion = plantCatalogService.suggestIntervalDays(state.getName());
+    if (suggestion.isEmpty()) {
+      sendText(chatId, "Автопоиск интервала не сработал. Попрошу ввести интервал вручную на следующем шаге.");
+      return;
+    }
+    PlantLookupResult result = suggestion.get();
+    state.setBaseInterval(result.baseIntervalDays());
+    sendText(chatId, String.format(Locale.ROOT,
+        "Нашел \"%s\" (%s). Базовый интервал: %d дн.",
+        result.displayName(), result.source(), result.baseIntervalDays()));
   }
 
   private void sendPlantList(User user, Long chatId) {

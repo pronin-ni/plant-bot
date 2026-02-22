@@ -20,6 +20,10 @@ openweather:
   base-url: https://api.openweathermap.org/data/2.5/weather
   units: metric
 
+perenual:
+  api-key: ${PERENUAL_API_KEY:}
+  base-url: https://perenual.com/api
+
 scheduler:
   daily-cron: "0 0 9 * * *"
 
