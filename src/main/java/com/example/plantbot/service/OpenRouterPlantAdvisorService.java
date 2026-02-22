@@ -454,4 +454,15 @@ public class OpenRouterPlantAdvisorService {
 
   private record CachedWateringProfile(Optional<AIWateringProfile> value, Instant expiresAt) {
   }
+
+  public CacheClearStats clearCaches() {
+    int careSize = careAdviceCache.size();
+    int wateringSize = wateringProfileCache.size();
+    careAdviceCache.clear();
+    wateringProfileCache.clear();
+    return new CacheClearStats(careSize, wateringSize);
+  }
+
+  public record CacheClearStats(int careAdviceEntries, int wateringProfileEntries) {
+  }
 }

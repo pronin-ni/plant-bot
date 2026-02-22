@@ -671,4 +671,14 @@ public class PlantCatalogService {
     perenualBackoffUntilMillis = System.currentTimeMillis() + backoffMillis;
     log.warn("Perenual backoff enabled for {} minutes", backoffMillis / 60000L);
   }
+
+  public int clearLookupCache() {
+    int rows = (int) plantLookupCacheRepository.count();
+    if (rows > 0) {
+      plantLookupCacheRepository.deleteAllInBatch();
+    }
+    perenualBackoffUntilMillis = 0L;
+    log.info("Plant lookup cache cleared. rows={}", rows);
+    return rows;
+  }
 }

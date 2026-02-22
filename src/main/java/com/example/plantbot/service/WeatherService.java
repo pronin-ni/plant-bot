@@ -357,6 +357,18 @@ public class WeatherService {
     return sb.toString().replace('-', ' ').trim();
   }
 
+  public CacheClearStats clearCaches() {
+    int weatherEntries = cache.size();
+    int rainKeys = rainHistory.size();
+    int rainSamples = rainHistory.values().stream().mapToInt(List::size).sum();
+    cache.clear();
+    rainHistory.clear();
+    return new CacheClearStats(weatherEntries, rainKeys, rainSamples);
+  }
+
+  public record CacheClearStats(int weatherEntries, int rainKeys, int rainSamples) {
+  }
+
   private record CachedWeather(WeatherData data, Instant expiresAt) {
   }
 

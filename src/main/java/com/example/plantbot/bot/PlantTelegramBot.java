@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Location;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -216,7 +217,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
               + "• /stats — статистика\n"
               + "• /learning — адаптация интервала\n"
               + "• /setcity — город для погоды\n"
-              + "• /recalc — уточнить и пересчитать норму полива");
+              + "• /recalc — уточнить и пересчитать норму полива\n"
+              + "• /clearcache — очистить накопленные кэши");
       case "/add" -> startAddPlant(user, message.getChatId());
       case "/list" -> sendPlantList(user, message.getChatId());
       case "/delete" -> sendDeleteList(user, message.getChatId());
@@ -224,6 +226,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       case "/stats" -> sendStats(user, message.getChatId());
       case "/learning" -> sendLearning(user, message.getChatId());
       case "/recalc" -> startRecalc(user, message.getChatId());
+      case "/clearcache" -> askClearCacheConfirmation(message.getChatId());
       case "/cancel" -> cancelFlow(user, message.getChatId());
       case "/setcity" -> {
         if (parts.length > 1) {
@@ -363,6 +366,16 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
     if ("cancel".equals(data)) {
       cancelFlow(user, chatId);
+      return;
+    }
+
+    if ("clearcache:confirm".equals(data)) {
+      clearAllCaches(chatId);
+      return;
+    }
+
+    if ("clearcache:cancel".equals(data)) {
+      sendText(chatId, "Ок, очистку кэша отменил.");
       return;
     }
 
@@ -889,9 +902,14 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   }
 
   private void sendPlantList(User user, Long chatId) {
+    Integer loadingMessageId = sendLoadingMessage(chatId, "⏳ Собираю список растений и считаю рекомендации...");
+
     List<Plant> plants = plantService.list(user);
     if (plants.isEmpty()) {
-      sendText(chatId, "🌱 Список пока пуст.\nДобавь первое растение командой /add");
+      String text = "🌱 Список пока пуст.\nДобавь первое растение командой /add";
+      if (!tryEditMessage(chatId, loadingMessageId, text, null)) {
+        sendText(chatId, text);
+      }
       return;
     }
 
@@ -919,9 +937,12 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       }
     }
 
-    SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
-    msg.setReplyMarkup(listWaterButtons(plants));
-    safeExecute(msg);
+    InlineKeyboardMarkup markup = listWaterButtons(plants);
+    if (!tryEditMessage(chatId, loadingMessageId, sb.toString(), markup)) {
+      SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
+      msg.setReplyMarkup(markup);
+      safeExecute(msg);
+    }
   }
 
   private void appendPlantCard(StringBuilder sb, User user, Plant plant) {
@@ -1012,6 +1033,30 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     }
     SendMessage msg = new SendMessage(String.valueOf(chatId), "Выбери растение для удаления:");
     msg.setReplyMarkup(deleteButtons(plants));
+    safeExecute(msg);
+  }
+
+  private void clearAllCaches(Long chatId) {
+    int lookupRows = plantCatalogService.clearLookupCache();
+    OpenRouterPlantAdvisorService.CacheClearStats openRouterStats = openRouterPlantAdvisorService.clearCaches();
+    WeatherService.CacheClearStats weatherStats = weatherService.clearCaches();
+
+    String text = "🧹 Кэши очищены:\n"
+        + "• Поиск растений (SQLite): " + lookupRows + "\n"
+        + "• OpenRouter (care/watering): " + openRouterStats.careAdviceEntries() + "/" + openRouterStats.wateringProfileEntries() + "\n"
+        + "• Погода (cache/rainKeys/samples): " + weatherStats.weatherEntries() + "/"
+        + weatherStats.rainKeys() + "/" + weatherStats.rainSamples();
+    sendText(chatId, text);
+    log.info("Caches cleared via command: lookupRows={}, openRouterCare={}, openRouterWater={}, weatherEntries={}, rainKeys={}, rainSamples={}",
+        lookupRows, openRouterStats.careAdviceEntries(), openRouterStats.wateringProfileEntries(),
+        weatherStats.weatherEntries(), weatherStats.rainKeys(), weatherStats.rainSamples());
+  }
+
+  private void askClearCacheConfirmation(Long chatId) {
+    SendMessage msg = new SendMessage(String.valueOf(chatId),
+        "Очистить все накопленные кэши?\n"
+            + "Будут очищены: поиск растений, OpenRouter-кэши и кэш погоды.");
+    msg.setReplyMarkup(clearCacheConfirmButtons());
     safeExecute(msg);
   }
 
@@ -1129,6 +1174,16 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
     InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
     markup.setKeyboard(List.of(List.of(yes, no), List.of(cancel)));
+    return markup;
+  }
+
+  private InlineKeyboardMarkup clearCacheConfirmButtons() {
+    InlineKeyboardButton confirm = new InlineKeyboardButton("Да, очистить");
+    confirm.setCallbackData("clearcache:confirm");
+    InlineKeyboardButton cancel = new InlineKeyboardButton("Отмена");
+    cancel.setCallbackData("clearcache:cancel");
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(confirm, cancel)));
     return markup;
   }
 
@@ -1283,6 +1338,34 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       execute(message);
     } catch (Exception ex) {
       log.error("Failed to send message to chat {}: {}", message.getChatId(), ex.getMessage(), ex);
+    }
+  }
+
+  private Integer sendLoadingMessage(Long chatId, String text) {
+    try {
+      Message sent = execute(new SendMessage(String.valueOf(chatId), text));
+      return sent.getMessageId();
+    } catch (Exception ex) {
+      log.warn("Failed to send loading message to chat {}: {}", chatId, ex.getMessage());
+      return null;
+    }
+  }
+
+  private boolean tryEditMessage(Long chatId, Integer messageId, String text, InlineKeyboardMarkup markup) {
+    if (messageId == null) {
+      return false;
+    }
+    try {
+      EditMessageText edit = new EditMessageText();
+      edit.setChatId(String.valueOf(chatId));
+      edit.setMessageId(messageId);
+      edit.setText(text);
+      edit.setReplyMarkup(markup);
+      execute(edit);
+      return true;
+    } catch (Exception ex) {
+      log.warn("Failed to edit message {} in chat {}: {}", messageId, chatId, ex.getMessage());
+      return false;
     }
   }
 
