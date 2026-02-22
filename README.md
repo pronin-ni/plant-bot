@@ -13,6 +13,8 @@
 ```bash
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
+export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
+export OPENROUTER_MODEL=openai/gpt-4o-mini
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 
@@ -38,6 +40,8 @@ export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 ```bash
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
+export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
+export OPENROUTER_MODEL=openai/gpt-4o-mini
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 
@@ -58,6 +62,43 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 После пуша в `main` GitHub Actions опубликует образ в GHCR: `ghcr.io/pronin-ni/plant-bot:latest`
 
-Примечание по автопоиску: при русском названии бот использует цепочку `словарь -> MyMemory ru->en -> транслитерация -> iNaturalist aliases`.
+Примечание по автопоиску: сначала запрос в OpenRouter, затем цепочка `словарь -> MyMemory ru->en -> транслитерация -> iNaturalist aliases`.
 Если Perenual недоступен или достигнут лимит, бот использует fallback через GBIF и эвристику.
 Для экономии лимитов API включен TTL-кэш поиска в SQLite (`perenual.cache-ttl-minutes`, по умолчанию 10080 = 7 дней).
+
+### OpenRouter prompt and response contract
+
+System prompt:
+
+```text
+You are a plant-care assistant.
+Task: estimate watering interval in days for ONE houseplant name.
+Return ONLY valid JSON (no markdown, no prose) with this exact schema:
+{
+  "normalized_name": "string",
+  "interval_days": 1,
+  "type_hint": "SUCCULENT|TROPICAL|FERN|DEFAULT",
+  "confidence": 0.0
+}
+Rules:
+- interval_days must be integer in [1..30]
+- confidence must be number in [0..1]
+- if uncertain, choose DEFAULT and a conservative interval_days
+```
+
+User prompt example:
+
+```text
+Plant name: Гибискус
+```
+
+Expected response example:
+
+```json
+{
+  "normalized_name": "Hibiscus",
+  "interval_days": 5,
+  "type_hint": "TROPICAL",
+  "confidence": 0.78
+}
+```
