@@ -15,6 +15,7 @@ export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
+export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
@@ -35,6 +36,7 @@ export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 Опциональные (рекомендуются):
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_MODEL` (пример: `openai/gpt-4o-mini`)
+- `OPENROUTER_CARE_CACHE_TTL_MINUTES` (TTL кэша советов по циклу/добавкам, по умолчанию `10080`)
 - `OPENWEATHER_API_KEY`
 - `PERENUAL_API_KEY`
 
@@ -45,7 +47,7 @@ export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 ## Команды
 
 - `/add` — добавить растение (автопоиск интервала и типа + подтверждение: оставить/изменить, поддерживает ввод названия на русском)
-- `/list` — список растений
+- `/list` — список растений (дата следующего полива, рекомендованный объём воды, цикл и добавки)
 - `/delete` — удалить растение
 - `/calendar` — календарь поливов на текущий и следующий месяц
 - `/stats` — статистика
@@ -60,6 +62,7 @@ export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
+export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000

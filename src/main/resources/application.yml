@@ -21,6 +21,7 @@ openrouter:
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
   site-url: ${OPENROUTER_SITE_URL:}
   app-name: ${OPENROUTER_APP_NAME:plant-bot}
+  care-cache-ttl-minutes: ${OPENROUTER_CARE_CACHE_TTL_MINUTES:10080}
   backoff-minutes: 60
 
 openweather:

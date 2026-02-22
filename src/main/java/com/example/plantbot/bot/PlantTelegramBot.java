@@ -4,6 +4,7 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.LearningService;
+import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.UserService;
@@ -11,6 +12,7 @@ import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.util.LearningInfo;
+import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.PlantLookupResult;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
@@ -50,6 +52,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private final WateringLogService wateringLogService;
   private final WeatherService weatherService;
   private final LearningService learningService;
+  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
   @Value("${bot.token}")
   private String botToken;
@@ -394,9 +397,14 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     for (Plant plant : plants) {
       WateringRecommendation rec = recommendationService.recommend(plant, user.getCity());
       LocalDate due = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
+      Optional<PlantCareAdvice> careAdvice = openRouterPlantAdvisorService.suggestCareAdvice(plant, rec.intervalDays());
+
       sb.append("• ").append(plant.getName())
           .append(" — последн. полив: ").append(plant.getLastWateredDate())
-          .append(", след. полив: ").append(due).append("\n");
+          .append(", след. полив: ").append(due).append("\n")
+          .append("  Рекоменд. объём: ").append(rec.waterLiters()).append(" л\n")
+          .append("  Цикл: ").append(formatCycle(careAdvice, rec.intervalDays())).append("\n")
+          .append("  Добавки: ").append(formatAdditives(plant, careAdvice)).append("\n");
     }
     SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
     msg.setReplyMarkup(listWaterButtons(plants));
@@ -590,6 +598,27 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     } catch (Exception ex) {
       return null;
     }
+  }
+
+  private String formatCycle(Optional<PlantCareAdvice> careAdvice, double fallbackIntervalDays) {
+    if (careAdvice.isPresent()) {
+      PlantCareAdvice advice = careAdvice.get();
+      String note = (advice.note() == null || advice.note().isBlank()) ? "" : " (" + advice.note() + ")";
+      return advice.wateringCycleDays() + " дн." + note;
+    }
+    return formatDays(fallbackIntervalDays);
+  }
+
+  private String formatAdditives(Plant plant, Optional<PlantCareAdvice> careAdvice) {
+    if (careAdvice.isPresent() && careAdvice.get().additives() != null && !careAdvice.get().additives().isEmpty()) {
+      return String.join(", ", careAdvice.get().additives());
+    }
+    return switch (plant.getType()) {
+      case TROPICAL -> "гуматы или экстракт водорослей (слабо, 1 раз в 2-4 полива)";
+      case FERN -> "янтарная кислота (редко), без концентрированных удобрений";
+      case SUCCULENT -> "обычно без добавок, максимум слабое удобрение раз в 4-6 поливов";
+      default -> "мягкое комплексное удобрение в слабой концентрации";
+    };
   }
 
   private String formatDays(double days) {
