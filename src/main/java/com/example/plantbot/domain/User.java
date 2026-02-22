@@ -26,6 +26,9 @@ public class User {
   private String firstName;
   private String lastName;
   private String city;
+  private String cityDisplayName;
+  private Double cityLat;
+  private Double cityLon;
 
   private Instant createdAt = Instant.now();
 

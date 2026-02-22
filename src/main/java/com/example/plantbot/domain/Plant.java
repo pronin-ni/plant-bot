@@ -28,6 +28,24 @@ public class Plant {
   @Column(nullable = false)
   private double potVolumeLiters;
 
+  @Enumerated(EnumType.STRING)
+  @Column
+  private PlantPlacement placement = PlantPlacement.INDOOR;
+
+  private Double outdoorAreaM2;
+
+  @Enumerated(EnumType.STRING)
+  private OutdoorSoilType outdoorSoilType;
+
+  @Enumerated(EnumType.STRING)
+  private SunExposure sunExposure;
+
+  private Boolean mulched;
+
+  private Boolean perennial;
+
+  private Boolean winterDormancyEnabled;
+
   @Column(nullable = false)
   private LocalDate lastWateredDate;
 

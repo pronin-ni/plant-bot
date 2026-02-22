@@ -28,7 +28,11 @@ public class NotificationScheduler {
     LocalDate today = LocalDate.now();
     List<Plant> plants = plantRepository.findAll();
     for (Plant plant : plants) {
-      WateringRecommendation rec = recommendationService.recommend(plant, plant.getUser().getCity());
+      User user = plant.getUser();
+      WateringRecommendation rec = recommendationService.recommend(plant, user);
+      if (rec.waterLiters() <= 0.0) {
+        continue;
+      }
       LocalDate dueDate = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
       boolean due = !today.isBefore(dueDate);
       boolean alreadyRemindedToday = today.equals(plant.getLastReminderDate());

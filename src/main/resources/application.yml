@@ -14,6 +14,7 @@ spring:
 bot:
   token: ${TELEGRAM_BOT_TOKEN:}
   username: ${TELEGRAM_BOT_USERNAME:}
+  update-threads: ${BOT_UPDATE_THREADS:4}
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}
@@ -27,6 +28,8 @@ openrouter:
 openweather:
   api-key: ${OPENWEATHER_API_KEY:}
   base-url: https://api.openweathermap.org/data/2.5/weather
+  geo-base-url: https://api.openweathermap.org/geo/1.0/direct
+  geo-reverse-base-url: https://api.openweathermap.org/geo/1.0/reverse
   units: metric
   cache-ttl-minutes: 15
 
