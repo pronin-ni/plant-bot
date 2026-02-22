@@ -1,8 +1,8 @@
 version: "3.9"
 services:
   plant-bot:
-    image: ghcr.io/pronin-ni/plant-bot:latest
-    container_name: plant-bot
+    build: .
+    container_name: plant-bot-dev
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
@@ -17,7 +17,4 @@ services:
       PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
       TZ: "Europe/Moscow"
     volumes:
-      - plantbot-data:/app/data
-
-volumes:
-  plantbot-data:
+      - ./data:/app/data

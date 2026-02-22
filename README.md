@@ -44,9 +44,15 @@ export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 docker compose up -d
 ```
 
-База хранится в `./data`, поэтому данные сохраняются между перезапусками контейнера.
+База хранится в named volume `plantbot-data`, поэтому данные сохраняются между перезапусками контейнера.
 
 Можно также скопировать `.env.example` в `.env` и заполнить, тогда `docker compose` подхватит переменные автоматически.
+
+Для локальной сборки из исходников используй `docker-compose.dev.yml`:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
 
 ## GHCR (образ из GitHub)
 
