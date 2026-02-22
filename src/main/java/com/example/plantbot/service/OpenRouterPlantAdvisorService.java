@@ -154,11 +154,26 @@ public class OpenRouterPlantAdvisorService {
         }
       }
 
+      String soilType = normalizeAdviceNote(advice.path("soil_type").asText("").trim());
+      List<String> soilComposition = new ArrayList<>();
+      JsonNode soilCompositionNode = advice.path("soil_composition");
+      if (soilCompositionNode.isArray()) {
+        for (JsonNode node : soilCompositionNode) {
+          String value = normalizeAdviceNote(node.asText("").trim());
+          if (!value.isEmpty()) {
+            soilComposition.add(value);
+          }
+          if (soilComposition.size() >= 5) {
+            break;
+          }
+        }
+      }
+
       String note = normalizeAdviceNote(advice.path("note").asText("").trim());
-      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, note, "OpenRouter:" + model);
+      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + model);
       putCareAdviceCache(cacheKey, Optional.of(result));
-      log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, source='{}'",
-          plant.getName(), cycle, additives, result.source());
+      log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
+          plant.getName(), cycle, additives, soilType, soilComposition, result.source());
       return Optional.of(result);
     } catch (Exception ex) {
       putCareAdviceCache(cacheKey, Optional.empty());
@@ -252,14 +267,18 @@ public class OpenRouterPlantAdvisorService {
         {
           "watering_cycle_days": 1,
           "additives": ["string"],
+          "soil_type": "string",
+          "soil_composition": ["string"],
           "note": "string"
         }
         Rules:
         - watering_cycle_days must be integer in [1..30]
         - additives: 0..3 short items suitable for the next watering (e.g., seaweed extract, calcium-magnesium)
+        - soil_type: short string with recommended soil type in Russian
+        - soil_composition: 2..5 short components in Russian (e.g., торф, перлит, кора)
         - if additives are unsafe or not needed, return empty array
         - note should be short and practical (max 120 chars)
-        - IMPORTANT: additives and note must be in Russian
+        - IMPORTANT: additives, soil_type, soil_composition and note must be in Russian
         """;
   }
 

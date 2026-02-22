@@ -405,6 +405,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           .append("• Следующий полив: ").append(due).append("\n")
           .append("• Рекомендуемый объем: ").append(rec.waterLiters()).append(" л\n")
           .append("• Цикл полива: ").append(formatCycle(careAdvice, rec.intervalDays())).append("\n")
+          .append("• Грунт: ").append(formatSoilType(plant, careAdvice)).append("\n")
+          .append("• Состав грунта: ").append(formatSoilComposition(plant, careAdvice)).append("\n")
           .append("• Добавки: ").append(formatAdditives(plant, careAdvice)).append("\n");
     }
     SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
@@ -619,6 +621,32 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       case FERN -> "янтарная кислота (редко), без концентрированных удобрений";
       case SUCCULENT -> "обычно без добавок, максимум слабое удобрение раз в 4-6 поливов";
       default -> "мягкое комплексное удобрение в слабой концентрации";
+    };
+  }
+
+  private String formatSoilType(Plant plant, Optional<PlantCareAdvice> careAdvice) {
+    if (careAdvice.isPresent() && careAdvice.get().soilType() != null && !careAdvice.get().soilType().isBlank()) {
+      return careAdvice.get().soilType();
+    }
+    return switch (plant.getType()) {
+      case TROPICAL -> "рыхлый влагоемкий, слабокислый";
+      case FERN -> "легкий влагоемкий, воздухопроницаемый";
+      case SUCCULENT -> "очень дренированный, минеральный";
+      default -> "универсальный рыхлый с дренажом";
+    };
+  }
+
+  private String formatSoilComposition(Plant plant, Optional<PlantCareAdvice> careAdvice) {
+    if (careAdvice.isPresent()
+        && careAdvice.get().soilComposition() != null
+        && !careAdvice.get().soilComposition().isEmpty()) {
+      return String.join(", ", careAdvice.get().soilComposition());
+    }
+    return switch (plant.getType()) {
+      case TROPICAL -> "торф, кокос, перлит, кора";
+      case FERN -> "листовая земля, торф, перлит, немного сфагнума";
+      case SUCCULENT -> "грунт для кактусов, перлит, пемза/цеолит, крупный песок";
+      default -> "универсальный грунт, перлит, немного коры";
     };
   }
 
