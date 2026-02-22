@@ -40,6 +40,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Month;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
@@ -190,7 +191,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   public boolean sendWateringReminder(Plant plant, WateringRecommendation rec) {
     String text = "\uD83D\uDCA7 Пора поливать \"" + plant.getName() + "\"!\n"
         + "Рекомендуемый интервал: " + formatDays(rec.intervalDays()) + "\n"
-        + "Рекомендуемый объём воды: " + rec.waterLiters() + " л";
+        + "Рекомендуемый объём воды: " + formatWaterAmount(plant, rec);
     SendMessage msg = new SendMessage(String.valueOf(plant.getUser().getTelegramId()), text);
     msg.setReplyMarkup(wateredButton(plant.getId()));
     try {
@@ -369,6 +370,21 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return;
     }
 
+    if ("recalc:city:current".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getRecalcPlantId() == null) {
+        sendText(chatId, "Сначала выбери растение через /recalc");
+        return;
+      }
+      if (user.getCity() == null || user.getCity().isBlank()) {
+        state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
+        sendTextWithCancel(chatId, "Текущий город не задан. Введи город текстом.");
+        return;
+      }
+      continueRecalcAfterCity(user, chatId, state);
+      return;
+    }
+
     if ("clearcache:confirm".equals(data)) {
       clearAllCaches(chatId);
       return;
@@ -380,7 +396,12 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     }
 
     if (data.startsWith("recalc:")) {
-      Long plantId = Long.parseLong(data.substring("recalc:".length()));
+      String raw = data.substring("recalc:".length());
+      Long plantId = parseLong(raw);
+      if (plantId == null) {
+        sendText(chatId, "Некорректный идентификатор растения. Повтори /recalc");
+        return;
+      }
       Plant plant = plantService.getById(plantId);
       if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
         sendText(chatId, "Растение не найдено.");
@@ -396,21 +417,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
               + "Можно оставить текущий город кнопкой ниже.");
       msg.setReplyMarkup(recalcCityButtons(user));
       safeExecute(msg);
-      return;
-    }
-
-    if ("recalc:city:current".equals(data)) {
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getRecalcPlantId() == null) {
-        sendText(chatId, "Сначала выбери растение через /recalc");
-        return;
-      }
-      if (user.getCity() == null || user.getCity().isBlank()) {
-        state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
-        sendTextWithCancel(chatId, "Текущий город не задан. Введи город текстом.");
-        return;
-      }
-      continueRecalcAfterCity(user, chatId, state);
       return;
     }
 
@@ -1390,22 +1396,21 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   }
 
   private String formatWaterAmount(Plant plant, WateringRecommendation rec) {
+    if (isWinterDormancyNow(plant)) {
+      return "пауза полива (зимний режим)";
+    }
     if (plant.getPlacement() == PlantPlacement.OUTDOOR && plant.getOutdoorAreaM2() != null && plant.getOutdoorAreaM2() > 0) {
-      if (rec.waterLiters() <= 0.5) {
+      if (rec.waterLiters() <= 0.5 && plant.getOutdoorAreaM2() >= 2.0) {
         if (plant.getOutdoorAreaM2() >= 2.0) {
           return "минимум 0.5 л на " + plant.getOutdoorAreaM2() + " м² (уточни город/условия участка)";
         }
-        return rec.waterLiters() + " л на " + plant.getOutdoorAreaM2() + " м²";
       }
-      return rec.waterLiters() + " л на " + plant.getOutdoorAreaM2() + " м²";
+      return formatVolume(rec.waterLiters()) + " на " + plant.getOutdoorAreaM2() + " м²";
     }
-    if (rec.waterLiters() <= 0.2) {
-      if (plant.getPotVolumeLiters() >= 1.8) {
-        return "минимум 0.2 л (уточни тип растения и условия)";
-      }
-      return rec.waterLiters() + " л";
+    if (rec.waterLiters() <= 0.2 && plant.getPotVolumeLiters() >= 3.0) {
+      return "минимум " + formatVolume(rec.waterLiters()) + " (уточни тип растения и условия)";
     }
-    return rec.waterLiters() + " л";
+    return formatVolume(rec.waterLiters());
   }
 
   private String formatOutdoorMeta(Plant plant) {
@@ -1481,6 +1486,34 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   private String formatDays(double days) {
     return String.format(Locale.ROOT, "%.1f дн.", days);
+  }
+
+  private boolean isWinterDormancyNow(Plant plant) {
+    if (plant.getPlacement() != PlantPlacement.OUTDOOR) {
+      return false;
+    }
+    if (!Boolean.TRUE.equals(plant.getPerennial()) || !Boolean.TRUE.equals(plant.getWinterDormancyEnabled())) {
+      return false;
+    }
+    Month month = LocalDate.now().getMonth();
+    return month == Month.DECEMBER || month == Month.JANUARY || month == Month.FEBRUARY;
+  }
+
+  private Long parseLong(String text) {
+    try {
+      return Long.parseLong(text.trim());
+    } catch (Exception ex) {
+      return null;
+    }
+  }
+
+  private String formatVolume(double liters) {
+    double rounded = Math.round(liters * 100.0) / 100.0;
+    if (rounded < 1.0) {
+      int ml = (int) Math.round(rounded * 1000.0);
+      return ml + " мл";
+    }
+    return String.format(Locale.ROOT, "%.2f л", rounded);
   }
 
   private String monthTitle(YearMonth month) {
