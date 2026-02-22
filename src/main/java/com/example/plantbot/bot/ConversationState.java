@@ -6,8 +6,10 @@ public class ConversationState {
   public enum Step {
     NONE,
     ADD_NAME,
+    ADD_INTERVAL_DECISION,
     ADD_POT,
     ADD_INTERVAL,
+    ADD_TYPE_DECISION,
     ADD_TYPE,
     SET_CITY
   }
@@ -17,6 +19,7 @@ public class ConversationState {
   private Double potVolume;
   private Integer baseInterval;
   private PlantType type;
+  private PlantType suggestedType;
 
   public Step getStep() {
     return step;
@@ -58,11 +61,20 @@ public class ConversationState {
     this.type = type;
   }
 
+  public PlantType getSuggestedType() {
+    return suggestedType;
+  }
+
+  public void setSuggestedType(PlantType suggestedType) {
+    this.suggestedType = suggestedType;
+  }
+
   public void reset() {
     step = Step.NONE;
     name = null;
     potVolume = null;
     baseInterval = null;
     type = null;
+    suggestedType = null;
   }
 }

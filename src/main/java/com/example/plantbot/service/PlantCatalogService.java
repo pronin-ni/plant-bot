@@ -1,5 +1,8 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.PlantLookupCache;
+import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.repository.PlantLookupCacheRepository;
 import com.example.plantbot.util.PlantLookupResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -171,6 +175,7 @@ public class PlantCatalogService {
   );
 
   private final RestTemplate restTemplate;
+  private final PlantLookupCacheRepository plantLookupCacheRepository;
 
   @Value("${perenual.api-key:}")
   private String apiKey;
@@ -184,13 +189,23 @@ public class PlantCatalogService {
   @Value("${inaturalist.base-url:https://api.inaturalist.org/v1}")
   private String iNaturalistBaseUrl;
 
+  @Value("${perenual.cache-ttl-minutes:10080}")
+  private long cacheTtlMinutes;
+
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
       log.warn("Plant lookup skipped: empty query or missing PERENUAL_API_KEY");
       return Optional.empty();
     }
 
-    List<String> queries = buildQueryCandidates(plantName.trim());
+    String normalizedInput = normalizeQuery(plantName.trim());
+    Optional<PlantLookupResult> cached = getCached(normalizedInput);
+    if (cached != null) {
+      log.info("Plant lookup cache hit. input='{}', found={}", normalizedInput, cached.isPresent());
+      return cached;
+    }
+
+    List<String> queries = buildQueryCandidates(normalizedInput);
     log.info("Plant lookup started. input='{}', candidates={}", plantName, queries);
 
     for (String query : queries) {
@@ -203,18 +218,23 @@ public class PlantCatalogService {
       int speciesId = item.path("id").asInt(0);
       String commonName = item.path("common_name").asText(plantName);
       String watering = item.path("watering").asText("");
+      PlantType suggestedType = inferPlantType(commonName, watering, query);
 
       Integer benchmarkDays = fetchBenchmarkDays(speciesId);
       int days = benchmarkDays != null ? benchmarkDays : mapWateringToDays(watering);
       int clamped = clamp(days, 1, 30);
 
-      log.info("Plant lookup success. query='{}', speciesId={}, commonName='{}', intervalDays={}",
-          query, speciesId, commonName, clamped);
-      return Optional.of(new PlantLookupResult(commonName, clamped, "Perenual"));
+      log.info("Plant lookup success. query='{}', speciesId={}, commonName='{}', intervalDays={}, suggestedType={}",
+          query, speciesId, commonName, clamped, suggestedType);
+      Optional<PlantLookupResult> value = Optional.of(new PlantLookupResult(commonName, clamped, "Perenual", suggestedType));
+      putCached(normalizedInput, value);
+      return value;
     }
 
     log.warn("Plant lookup failed for input='{}'", plantName);
-    return Optional.empty();
+    Optional<PlantLookupResult> empty = Optional.empty();
+    putCached(normalizedInput, empty);
+    return empty;
   }
 
   private Optional<JsonNode> searchFirstSpecies(String query) {
@@ -416,5 +436,82 @@ public class PlantCatalogService {
 
   private int clamp(int value, int min, int max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  private Optional<PlantLookupResult> getCached(String key) {
+    Optional<PlantLookupCache> cached = plantLookupCacheRepository.findByQueryKey(key);
+    if (cached.isEmpty()) {
+      return null;
+    }
+    PlantLookupCache entry = cached.get();
+    if (entry.getExpiresAt() == null || entry.getExpiresAt().isBefore(Instant.now())) {
+      plantLookupCacheRepository.delete(entry);
+      return null;
+    }
+    if (!entry.isHit()) {
+      return Optional.empty();
+    }
+    if (entry.getDisplayName() == null || entry.getBaseIntervalDays() == null) {
+      return Optional.empty();
+    }
+    return Optional.of(new PlantLookupResult(
+        entry.getDisplayName(),
+        entry.getBaseIntervalDays(),
+        entry.getSource() == null ? "Perenual" : entry.getSource(),
+        entry.getSuggestedType() == null ? PlantType.DEFAULT : entry.getSuggestedType()
+    ));
+  }
+
+  private void putCached(String key, Optional<PlantLookupResult> value) {
+    long ttlSeconds = Math.max(1, cacheTtlMinutes) * 60L;
+    PlantLookupCache row = plantLookupCacheRepository.findByQueryKey(key).orElseGet(PlantLookupCache::new);
+    row.setQueryKey(key);
+    row.setHit(value.isPresent());
+    row.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
+    row.setUpdatedAt(Instant.now());
+    if (value.isPresent()) {
+      PlantLookupResult payload = value.get();
+      row.setDisplayName(payload.displayName());
+      row.setBaseIntervalDays(payload.baseIntervalDays());
+      row.setSource(payload.source());
+      row.setSuggestedType(payload.suggestedType());
+    } else {
+      row.setDisplayName(null);
+      row.setBaseIntervalDays(null);
+      row.setSource(null);
+      row.setSuggestedType(null);
+    }
+    plantLookupCacheRepository.save(row);
+  }
+
+  private PlantType inferPlantType(String commonName, String watering, String query) {
+    String joined = (commonName + " " + watering + " " + query).toLowerCase();
+    if (joined.contains("fern")) {
+      return PlantType.FERN;
+    }
+    if (joined.contains("cactus")
+        || joined.contains("succulent")
+        || joined.contains("haworthia")
+        || joined.contains("aloe")
+        || joined.contains("jade")
+        || joined.contains("lithops")) {
+      return PlantType.SUCCULENT;
+    }
+    if (joined.contains("minimum")) {
+      return PlantType.SUCCULENT;
+    }
+    if (joined.contains("orchid")
+        || joined.contains("monstera")
+        || joined.contains("philodendron")
+        || joined.contains("anthurium")
+        || joined.contains("dracaena")
+        || joined.contains("ficus")
+        || joined.contains("pothos")
+        || joined.contains("calathea")
+        || joined.contains("alocasia")
+        || joined.contains("zamioculcas")) {
+      return PlantType.TROPICAL;
+    }
+    return PlantType.DEFAULT;
   }
 }

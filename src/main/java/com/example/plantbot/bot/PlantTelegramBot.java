@@ -134,11 +134,16 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     switch (state.getStep()) {
       case ADD_NAME -> {
         state.setName(text);
-        state.setStep(ConversationState.Step.ADD_POT);
-        applyAutoInterval(state, message.getChatId());
-        sendTextWithCancel(message.getChatId(), "Введите объём горшка в литрах (например: 2.5)");
+        if (applyAutoInterval(state, message.getChatId())) {
+          state.setStep(ConversationState.Step.ADD_INTERVAL_DECISION);
+        } else {
+          state.setStep(ConversationState.Step.ADD_POT);
+          sendTextWithCancel(message.getChatId(), "Введите объём горшка в литрах (например: 2.5)");
+        }
         log.info("Add flow: name accepted user={} name='{}'", user.getTelegramId(), state.getName());
       }
+      case ADD_INTERVAL_DECISION -> sendTextWithCancel(message.getChatId(),
+          "Подтверди интервал кнопками ниже: оставить найденный или ввести вручную.");
       case ADD_POT -> {
         Double volume = parseDouble(text);
         if (volume == null || volume <= 0) {
@@ -150,10 +155,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           state.setStep(ConversationState.Step.ADD_INTERVAL);
           sendTextWithCancel(message.getChatId(), "Введите базовый интервал полива в днях (например: 7)");
         } else {
-          state.setStep(ConversationState.Step.ADD_TYPE);
-          SendMessage msg = new SendMessage(String.valueOf(message.getChatId()), "Тип растения:");
-          msg.setReplyMarkup(typeButtons());
-          safeExecute(msg);
+          askForTypeDecisionOrManual(state, message.getChatId());
         }
         log.info("Add flow: pot accepted user={} pot={} interval={}",
             user.getTelegramId(), state.getPotVolume(), state.getBaseInterval());
@@ -165,12 +167,11 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
           return;
         }
         state.setBaseInterval(interval);
-        state.setStep(ConversationState.Step.ADD_TYPE);
-        SendMessage msg = new SendMessage(String.valueOf(message.getChatId()), "Тип растения:");
-        msg.setReplyMarkup(typeButtons());
-        safeExecute(msg);
+        askForTypeDecisionOrManual(state, message.getChatId());
         log.info("Add flow: manual interval set user={} interval={}", user.getTelegramId(), interval);
       }
+      case ADD_TYPE_DECISION -> sendTextWithCancel(message.getChatId(),
+          "Подтверди тип растения кнопками ниже: оставить найденный или выбрать вручную.");
       case SET_CITY -> {
         user.setCity(text);
         userService.save(user);
@@ -219,11 +220,51 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       PlantType type = PlantType.valueOf(typeName);
       ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
       if (state.getStep() == ConversationState.Step.ADD_TYPE) {
-        Plant plant = plantService.addPlant(user, state.getName(), state.getPotVolume(), state.getBaseInterval(), type);
-        state.reset();
-        sendText(chatId, "\uD83C\uDF3F Растение \"" + plant.getName() + "\" добавлено!");
-        log.info("Plant created: user={} plantId={} name='{}' interval={} pot={}",
-            user.getTelegramId(), plant.getId(), plant.getName(), plant.getBaseIntervalDays(), plant.getPotVolumeLiters());
+        state.setType(type);
+        finishAddPlant(user, chatId, state);
+      }
+      return;
+    }
+
+    if ("interval:accept".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() == ConversationState.Step.ADD_INTERVAL_DECISION && state.getBaseInterval() != null) {
+        state.setStep(ConversationState.Step.ADD_POT);
+        sendTextWithCancel(chatId, "Ок. Используем найденный интервал. Теперь введи объём горшка в литрах (например: 2.5)");
+        log.info("Add flow: interval accepted user={} interval={}", user.getTelegramId(), state.getBaseInterval());
+      }
+      return;
+    }
+
+    if ("interval:edit".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() == ConversationState.Step.ADD_INTERVAL_DECISION) {
+        state.setBaseInterval(null);
+        state.setStep(ConversationState.Step.ADD_POT);
+        sendTextWithCancel(chatId, "Ок. Интервал введем вручную позже. Сейчас введи объём горшка в литрах (например: 2.5)");
+        log.info("Add flow: interval switched to manual user={}", user.getTelegramId());
+      }
+      return;
+    }
+
+    if ("type:accept".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() == ConversationState.Step.ADD_TYPE_DECISION && state.getSuggestedType() != null) {
+        state.setType(state.getSuggestedType());
+        log.info("Add flow: type accepted user={} type={}", user.getTelegramId(), state.getType());
+        finishAddPlant(user, chatId, state);
+      }
+      return;
+    }
+
+    if ("type:edit".equals(data)) {
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() == ConversationState.Step.ADD_TYPE_DECISION) {
+        state.setStep(ConversationState.Step.ADD_TYPE);
+        SendMessage msg = new SendMessage(String.valueOf(chatId), "Выбери тип растения вручную:");
+        msg.setReplyMarkup(typeButtons());
+        safeExecute(msg);
+        log.info("Add flow: type switched to manual user={}", user.getTelegramId());
       }
     }
   }
@@ -235,19 +276,71 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     sendTextWithCancel(chatId, "Как называется растение? Я попробую автоматически подобрать базовый интервал полива.");
   }
 
-  private void applyAutoInterval(ConversationState state, Long chatId) {
+  private boolean applyAutoInterval(ConversationState state, Long chatId) {
     Optional<PlantLookupResult> suggestion = plantCatalogService.suggestIntervalDays(state.getName());
     if (suggestion.isEmpty()) {
       sendText(chatId, "Автопоиск интервала не сработал. Попрошу ввести интервал вручную на следующем шаге.");
       log.info("Auto interval not found for '{}'", state.getName());
-      return;
+      return false;
     }
     PlantLookupResult result = suggestion.get();
     state.setBaseInterval(result.baseIntervalDays());
-    sendText(chatId, String.format(Locale.ROOT,
-        "Нашел \"%s\" (%s). Базовый интервал: %d дн.",
+    state.setSuggestedType(result.suggestedType());
+    SendMessage msg = new SendMessage(String.valueOf(chatId), String.format(Locale.ROOT,
+        "Нашел \"%s\" (%s). Базовый интервал: %d дн. Оставить или изменить?",
         result.displayName(), result.source(), result.baseIntervalDays()));
-    log.info("Auto interval applied for '{}' -> {} days", state.getName(), result.baseIntervalDays());
+    msg.setReplyMarkup(intervalDecisionButtons());
+    safeExecute(msg);
+    log.info("Auto interval applied for '{}' -> {} days, suggestedType={}",
+        state.getName(), result.baseIntervalDays(), result.suggestedType());
+    return true;
+  }
+
+  private InlineKeyboardMarkup intervalDecisionButtons() {
+    InlineKeyboardButton keep = new InlineKeyboardButton("Оставить");
+    keep.setCallbackData("interval:accept");
+    InlineKeyboardButton edit = new InlineKeyboardButton("Изменить");
+    edit.setCallbackData("interval:edit");
+    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(keep, edit), List.of(cancel)));
+    return markup;
+  }
+
+  private void askForTypeDecisionOrManual(ConversationState state, Long chatId) {
+    if (state.getSuggestedType() != null && state.getSuggestedType() != PlantType.DEFAULT) {
+      state.setStep(ConversationState.Step.ADD_TYPE_DECISION);
+      SendMessage msg = new SendMessage(String.valueOf(chatId),
+          "Нашел тип растения: " + state.getSuggestedType().getTitle() + ". Оставить или изменить?");
+      msg.setReplyMarkup(typeDecisionButtons());
+      safeExecute(msg);
+      return;
+    }
+    state.setStep(ConversationState.Step.ADD_TYPE);
+    SendMessage msg = new SendMessage(String.valueOf(chatId), "Тип растения:");
+    msg.setReplyMarkup(typeButtons());
+    safeExecute(msg);
+  }
+
+  private InlineKeyboardMarkup typeDecisionButtons() {
+    InlineKeyboardButton keep = new InlineKeyboardButton("Оставить");
+    keep.setCallbackData("type:accept");
+    InlineKeyboardButton edit = new InlineKeyboardButton("Изменить");
+    edit.setCallbackData("type:edit");
+    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
+    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
+    markup.setKeyboard(List.of(List.of(keep, edit), List.of(cancel)));
+    return markup;
+  }
+
+  private void finishAddPlant(User user, Long chatId, ConversationState state) {
+    PlantType type = state.getType() == null ? PlantType.DEFAULT : state.getType();
+    Plant plant = plantService.addPlant(user, state.getName(), state.getPotVolume(), state.getBaseInterval(), type);
+    state.reset();
+    sendText(chatId, "\uD83C\uDF3F Растение \"" + plant.getName() + "\" добавлено!");
+    log.info("Plant created: user={} plantId={} name='{}' interval={} pot={} type={}",
+        user.getTelegramId(), plant.getId(), plant.getName(), plant.getBaseIntervalDays(),
+        plant.getPotVolumeLiters(), plant.getType());
   }
 
   private void sendPlantList(User user, Long chatId) {

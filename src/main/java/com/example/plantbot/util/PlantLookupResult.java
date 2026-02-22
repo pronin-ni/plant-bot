@@ -1,4 +1,9 @@
 package com.example.plantbot.util;
 
-public record PlantLookupResult(String displayName, int baseIntervalDays, String source) {
+import com.example.plantbot.domain.PlantType;
+
+public record PlantLookupResult(String displayName,
+                                int baseIntervalDays,
+                                String source,
+                                PlantType suggestedType) {
 }

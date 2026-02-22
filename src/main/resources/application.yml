@@ -23,6 +23,7 @@ openweather:
 perenual:
   api-key: ${PERENUAL_API_KEY:}
   base-url: https://perenual.com/api
+  cache-ttl-minutes: 10080
 
 translate:
   base-url: https://api.mymemory.translated.net/get
