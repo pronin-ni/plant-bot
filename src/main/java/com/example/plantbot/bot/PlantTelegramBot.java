@@ -243,17 +243,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return;
     }
 
-    if (data.startsWith("type:")) {
-      String typeName = data.substring("type:".length());
-      PlantType type = PlantType.valueOf(typeName);
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getStep() == ConversationState.Step.ADD_TYPE) {
-        state.setType(type);
-        finishAddPlant(user, chatId, state);
-      }
-      return;
-    }
-
     if ("interval:accept".equals(data)) {
       ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
       if (state.getStep() == ConversationState.Step.ADD_INTERVAL_DECISION && state.getBaseInterval() != null) {
@@ -294,6 +283,26 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         safeExecute(msg);
         log.info("Add flow: type switched to manual user={}", user.getTelegramId());
       }
+    }
+
+    if (data.startsWith("type:")) {
+      String typeName = data.substring("type:".length());
+      if ("accept".equals(typeName) || "edit".equals(typeName)) {
+        // handled by explicit branches above
+        return;
+      }
+      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
+      if (state.getStep() == ConversationState.Step.ADD_TYPE) {
+        try {
+          PlantType type = PlantType.valueOf(typeName);
+          state.setType(type);
+          finishAddPlant(user, chatId, state);
+        } catch (IllegalArgumentException ex) {
+          log.warn("Unknown plant type callback: '{}'", data);
+          sendText(chatId, "Не распознал тип растения. Выбери вариант из кнопок.");
+        }
+      }
+      return;
     }
   }
 

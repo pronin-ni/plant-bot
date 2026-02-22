@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -401,11 +402,24 @@ public class PlantCatalogService {
       if (translated.isEmpty()) {
         return Optional.empty();
       }
-      log.info("Plant query translated ru->en: '{}' -> '{}'", text, translated);
-      return Optional.of(translated);
+      String normalized = maybeDecodePercentEncoding(translated);
+      log.info("Plant query translated ru->en: '{}' -> '{}'", text, normalized);
+      return Optional.of(normalized);
     } catch (Exception ex) {
       log.warn("Translation failed for '{}': {}", text, ex.getMessage());
       return Optional.empty();
+    }
+  }
+
+  private String maybeDecodePercentEncoding(String value) {
+    if (value == null || value.isBlank() || !value.contains("%")) {
+      return value;
+    }
+    try {
+      return URLDecoder.decode(value, StandardCharsets.UTF_8);
+    } catch (Exception ex) {
+      log.warn("Failed to decode translated value '{}': {}", value, ex.getMessage());
+      return value;
     }
   }
 

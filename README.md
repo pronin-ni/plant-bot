@@ -17,12 +17,30 @@ export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
+export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
+export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 
 ./scripts/ensure-gradle-wrapper.sh
 ./gradlew bootRun
 ```
 
 База данных SQLite будет создана в `./data/plantbot.db`.
+
+## Переменные окружения
+
+Обязательные:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_BOT_USERNAME`
+
+Опциональные (рекомендуются):
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (пример: `openai/gpt-4o-mini`)
+- `OPENWEATHER_API_KEY`
+- `PERENUAL_API_KEY`
+
+Сетевые таймауты HTTP-клиента (мс):
+- `HTTP_CLIENT_CONNECT_TIMEOUT_MS` (по умолчанию `5000`)
+- `HTTP_CLIENT_READ_TIMEOUT_MS` (по умолчанию `15000`)
 
 ## Команды
 
@@ -44,6 +62,8 @@ export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
+export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
+export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 
 docker compose up -d
 ```

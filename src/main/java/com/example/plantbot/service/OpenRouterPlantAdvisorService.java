@@ -19,11 +19,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OpenRouterPlantAdvisorService {
+  private static final Pattern FENCED_JSON_PATTERN = Pattern.compile("(?s)^```(?:json)?\\s*(.*?)\\s*```$");
+
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
 
@@ -90,7 +94,14 @@ public class OpenRouterPlantAdvisorService {
         return Optional.empty();
       }
 
-      JsonNode advice = objectMapper.readTree(content);
+      String jsonPayload = sanitizeJsonPayload(content);
+      if (jsonPayload.isEmpty()) {
+        log.warn("OpenRouter returned empty payload after sanitization. input='{}', rawPreview='{}'",
+            plantName, preview(content));
+        return Optional.empty();
+      }
+
+      JsonNode advice = objectMapper.readTree(jsonPayload);
       int interval = advice.path("interval_days").asInt(0);
       if (interval <= 0) {
         return Optional.empty();
@@ -104,8 +115,8 @@ public class OpenRouterPlantAdvisorService {
 
       PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
       String source = "OpenRouter:" + model;
-      log.info("OpenRouter suggestion success. input='{}', normalized='{}', interval={}, type={}",
-          plantName, normalizedName, interval, suggestedType);
+      log.info("OpenRouter suggestion success. input='{}', normalized='{}', interval={}, type={}, rawPreview='{}'",
+          plantName, normalizedName, interval, suggestedType, preview(content));
       return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
     } catch (HttpStatusCodeException ex) {
       String body = ex.getResponseBodyAsString();
@@ -125,6 +136,33 @@ public class OpenRouterPlantAdvisorService {
       log.warn("OpenRouter suggestion failed for '{}': {}", plantName, ex.getMessage());
       return Optional.empty();
     }
+  }
+
+  private String sanitizeJsonPayload(String content) {
+    String trimmed = content == null ? "" : content.trim();
+    if (trimmed.isEmpty()) {
+      return "";
+    }
+
+    Matcher fenced = FENCED_JSON_PATTERN.matcher(trimmed);
+    if (fenced.matches()) {
+      trimmed = fenced.group(1).trim();
+    }
+
+    int firstBrace = trimmed.indexOf('{');
+    int lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return trimmed.substring(firstBrace, lastBrace + 1).trim();
+    }
+    return trimmed;
+  }
+
+  private String preview(String value) {
+    if (value == null) {
+      return "";
+    }
+    String oneLine = value.replace("\n", "\\n").replace("\r", "");
+    return oneLine.length() <= 220 ? oneLine : oneLine.substring(0, 220) + "...";
   }
 
   // Prompt is strict JSON contract to keep parsing deterministic.

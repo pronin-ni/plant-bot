@@ -43,6 +43,11 @@ inaturalist:
 gbif:
   base-url: https://api.gbif.org/v1
 
+http:
+  client:
+    connect-timeout-ms: ${HTTP_CLIENT_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${HTTP_CLIENT_READ_TIMEOUT_MS:15000}
+
 scheduler:
   daily-cron: "0 0 9 * * *"
 
