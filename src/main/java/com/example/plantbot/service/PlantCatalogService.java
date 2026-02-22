@@ -177,6 +177,7 @@ public class PlantCatalogService {
 
   private final RestTemplate restTemplate;
   private final PlantLookupCacheRepository plantLookupCacheRepository;
+  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
   @Value("${perenual.api-key:}")
   private String apiKey;
@@ -208,15 +209,34 @@ public class PlantCatalogService {
     Optional<PlantLookupResult> cached = getCached(normalizedInput);
     if (cached != null) {
       log.info("Plant lookup cache hit. input='{}', found={}", normalizedInput, cached.isPresent());
+      if (cached.isPresent()) {
+        PlantLookupResult r = cached.get();
+        log.info("Plant lookup resolved via CACHE: query='{}', source='{}', interval={}, type={}",
+            normalizedInput, r.source(), r.baseIntervalDays(), r.suggestedType());
+      } else {
+        log.info("Plant lookup resolved via CACHE: query='{}', source='CACHE_MISS'", normalizedInput);
+      }
       return cached;
     }
 
     List<String> queries = buildQueryCandidates(normalizedInput);
     log.info("Plant lookup started. input='{}', candidates={}", plantName, queries);
 
+    Optional<PlantLookupResult> aiSuggestion = openRouterPlantAdvisorService.suggestIntervalDays(plantName);
+    if (aiSuggestion.isPresent()) {
+      putCached(normalizedInput, aiSuggestion);
+      PlantLookupResult r = aiSuggestion.get();
+      log.info("Plant lookup resolved via OPENROUTER: query='{}', source='{}', interval={}, type={}",
+          normalizedInput, r.source(), r.baseIntervalDays(), r.suggestedType());
+      return aiSuggestion;
+    }
+
     if (isPerenualBackoffActive()) {
       Optional<PlantLookupResult> fallback = fallbackLookup(queries, plantName);
       putCached(normalizedInput, fallback);
+      fallback.ifPresent(r -> log.info(
+          "Plant lookup resolved via FALLBACK_BACKOFF: query='{}', source='{}', interval={}, type={}",
+          normalizedInput, r.source(), r.baseIntervalDays(), r.suggestedType()));
       return fallback;
     }
 
@@ -240,12 +260,17 @@ public class PlantCatalogService {
           query, speciesId, commonName, clamped, suggestedType);
       Optional<PlantLookupResult> value = Optional.of(new PlantLookupResult(commonName, clamped, "Perenual", suggestedType));
       putCached(normalizedInput, value);
+      log.info("Plant lookup resolved via PERENUAL: query='{}', source='{}', interval={}, type={}",
+          normalizedInput, "Perenual", clamped, suggestedType);
       return value;
     }
 
     Optional<PlantLookupResult> fallback = fallbackLookup(queries, plantName);
     if (fallback.isPresent()) {
       putCached(normalizedInput, fallback);
+      PlantLookupResult r = fallback.get();
+      log.info("Plant lookup resolved via FALLBACK: query='{}', source='{}', interval={}, type={}",
+          normalizedInput, r.source(), r.baseIntervalDays(), r.suggestedType());
       return fallback;
     }
 
