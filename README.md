@@ -51,4 +51,4 @@ docker compose up -d
 
 После пуша в `main` GitHub Actions опубликует образ в GHCR: `ghcr.io/pronin-ni/plant-bot:latest`
 
-Примечание по автопоиску: при русском названии бот пробует перевод `ru->en` через MyMemory и fallback-транслитерацию.
+Примечание по автопоиску: при русском названии бот использует цепочку `словарь -> MyMemory ru->en -> транслитерация -> iNaturalist aliases`.

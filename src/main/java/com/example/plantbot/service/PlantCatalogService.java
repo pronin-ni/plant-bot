@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -25,6 +26,149 @@ public class PlantCatalogService {
   private static final Pattern RANGE_PATTERN = Pattern.compile("(\\d+)\\s*[-–]\\s*(\\d+)");
   private static final Pattern SINGLE_PATTERN = Pattern.compile("(\\d+)");
   private static final Pattern CYRILLIC_PATTERN = Pattern.compile(".*[\\p{IsCyrillic}].*");
+  private static final Map<String, String> RU_TO_EN = Map.ofEntries(
+      Map.entry("абутилон", "abutilon"),
+      Map.entry("аглаонема", "aglaonema"),
+      Map.entry("адениум", "adenium"),
+      Map.entry("адиантум", "maidenhair fern"),
+      Map.entry("азалия", "azalea"),
+      Map.entry("алламанда", "allamanda"),
+      Map.entry("алоэ", "aloe"),
+      Map.entry("алоэ вера", "aloe vera"),
+      Map.entry("альтернантера", "alternanthera"),
+      Map.entry("амариллис", "amaryllis"),
+      Map.entry("антуриум", "anthurium"),
+      Map.entry("аспарагус", "asparagus fern"),
+      Map.entry("аспидистра", "aspidistra"),
+      Map.entry("аукуба", "aucuba"),
+      Map.entry("ахименес", "achimenes"),
+      Map.entry("бальзамин", "impatiens"),
+      Map.entry("банан декоративный", "banana plant"),
+      Map.entry("бегония", "begonia"),
+      Map.entry("бегония рекс", "rex begonia"),
+      Map.entry("бильбергия", "billbergia"),
+      Map.entry("бокарнея", "ponytail palm"),
+      Map.entry("бугенвиллия", "bougainvillea"),
+      Map.entry("вашингтония", "washingtonia palm"),
+      Map.entry("венерина мухоловка", "venus flytrap"),
+      Map.entry("вриезия", "vriesea"),
+      Map.entry("гардения", "gardenia"),
+      Map.entry("герань", "geranium"),
+      Map.entry("гибискус", "hibiscus"),
+      Map.entry("гименокаллис", "hymenocallis"),
+      Map.entry("гипоэстес", "hypoestes"),
+      Map.entry("глоксиния", "gloxinia"),
+      Map.entry("гузмания", "guzmania"),
+      Map.entry("декабрист", "christmas cactus"),
+      Map.entry("дендробиум", "dendrobium"),
+      Map.entry("дионея", "venus flytrap"),
+      Map.entry("дипладения", "mandevilla"),
+      Map.entry("диффенбахия", "dieffenbachia"),
+      Map.entry("долларовое дерево", "zamioculcas"),
+      Map.entry("драцена", "dracaena"),
+      Map.entry("драцена маргината", "dracaena marginata"),
+      Map.entry("замиокулькас", "zamioculcas"),
+      Map.entry("замиокулькас замиелистный", "zamioculcas zamiifolia"),
+      Map.entry("зебрина", "tradescantia zebrina"),
+      Map.entry("зигокактус", "christmas cactus"),
+      Map.entry("ипомея батат", "ornamental sweet potato"),
+      Map.entry("каладиум", "caladium"),
+      Map.entry("каланхоэ", "kalanchoe"),
+      Map.entry("калина комнатная", "viburnum"),
+      Map.entry("каллисия", "callisia"),
+      Map.entry("каллизия", "callisia"),
+      Map.entry("калла", "calla lily"),
+      Map.entry("камелия", "camellia"),
+      Map.entry("камнеломка", "saxifraga"),
+      Map.entry("кактус", "cactus"),
+      Map.entry("кактус шлюмбергера", "christmas cactus"),
+      Map.entry("каттлея", "cattleya"),
+      Map.entry("колеус", "coleus"),
+      Map.entry("колерия", "kohleria"),
+      Map.entry("кордилина", "cordyline"),
+      Map.entry("кофе арабика", "coffee plant"),
+      Map.entry("крассула", "jade plant"),
+      Map.entry("кротон", "croton"),
+      Map.entry("кумкват", "kumquat"),
+      Map.entry("лавр", "bay laurel"),
+      Map.entry("лимон комнатный", "lemon tree"),
+      Map.entry("литопс", "lithops"),
+      Map.entry("мандарин комнатный", "mandarin tree"),
+      Map.entry("маранта", "maranta"),
+      Map.entry("мединилла", "medinilla"),
+      Map.entry("мирт", "myrtle"),
+      Map.entry("молочай", "euphorbia"),
+      Map.entry("монстера", "monstera"),
+      Map.entry("монстера делициоза", "monstera deliciosa"),
+      Map.entry("нефролепис", "nephrolepis fern"),
+      Map.entry("нолина", "ponytail palm"),
+      Map.entry("олеандр", "oleander"),
+      Map.entry("опунция", "prickly pear cactus"),
+      Map.entry("орхидея", "orchid"),
+      Map.entry("орхидея фаленопсис", "phalaenopsis"),
+      Map.entry("орхидея дендробиум", "dendrobium"),
+      Map.entry("пальма арека", "areca palm"),
+      Map.entry("пальма хамедорея", "parlor palm"),
+      Map.entry("папоротник", "fern"),
+      Map.entry("пассифлора", "passionflower"),
+      Map.entry("пахира", "money tree"),
+      Map.entry("пахиподиум", "pachypodium"),
+      Map.entry("пеларгония", "geranium"),
+      Map.entry("пеперомия", "peperomia"),
+      Map.entry("перец декоративный", "ornamental pepper"),
+      Map.entry("плектрантус", "plectranthus"),
+      Map.entry("плющ", "ivy"),
+      Map.entry("плющ хедера", "english ivy"),
+      Map.entry("подокарпус", "podocarpus"),
+      Map.entry("потос", "pothos"),
+      Map.entry("примула", "primrose"),
+      Map.entry("пуансеттия", "poinsettia"),
+      Map.entry("радермахера", "radermachera"),
+      Map.entry("рео", "tradescantia spathacea"),
+      Map.entry("рипсалис", "rhipsalis"),
+      Map.entry("роза комнатная", "mini rose"),
+      Map.entry("сансевиерия", "snake plant"),
+      Map.entry("сансевьера", "snake plant"),
+      Map.entry("сансевиерия трифасциата", "sansevieria trifasciata"),
+      Map.entry("сенполия", "african violet"),
+      Map.entry("сингониум", "syngonium"),
+      Map.entry("солейролия", "soleirolia"),
+      Map.entry("спатифиллум", "peace lily"),
+      Map.entry("стрелиция", "bird of paradise"),
+      Map.entry("стрептокарпус", "streptocarpus"),
+      Map.entry("суккулент", "succulent"),
+      Map.entry("тилландсия", "tillandsia"),
+      Map.entry("толстянка", "jade plant"),
+      Map.entry("традесканция", "tradescantia"),
+      Map.entry("туя комнатная", "thuja"),
+      Map.entry("узамбарская фиалка", "african violet"),
+      Map.entry("фаленопсис", "phalaenopsis"),
+      Map.entry("фатсия", "fatsia"),
+      Map.entry("фиалка", "violet"),
+      Map.entry("фикус", "ficus"),
+      Map.entry("фикус бенджамина", "ficus benjamina"),
+      Map.entry("фикус каучуконосный", "rubber plant"),
+      Map.entry("филодендрон", "philodendron"),
+      Map.entry("финиковая пальма", "date palm"),
+      Map.entry("фиттония", "fittonia"),
+      Map.entry("фуксия", "fuchsia"),
+      Map.entry("хамедорея", "parlor palm"),
+      Map.entry("хамеропс", "chamaerops"),
+      Map.entry("хавортия", "haworthia"),
+      Map.entry("хедера", "english ivy"),
+      Map.entry("хлорофитум", "chlorophytum"),
+      Map.entry("хойя", "hoya"),
+      Map.entry("хризантема комнатная", "chrysanthemum"),
+      Map.entry("циссус", "grape ivy"),
+      Map.entry("циперус", "papyrus"),
+      Map.entry("цитрус", "citrus"),
+      Map.entry("шеффлера", "schefflera"),
+      Map.entry("шлюмбергера", "christmas cactus"),
+      Map.entry("эписция", "episcia"),
+      Map.entry("эпипремнум", "pothos"),
+      Map.entry("эуфорбия", "euphorbia"),
+      Map.entry("юкка", "yucca")
+  );
 
   private final RestTemplate restTemplate;
 
@@ -36,6 +180,9 @@ public class PlantCatalogService {
 
   @Value("${translate.base-url:https://api.mymemory.translated.net/get}")
   private String translateBaseUrl;
+
+  @Value("${inaturalist.base-url:https://api.inaturalist.org/v1}")
+  private String iNaturalistBaseUrl;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
@@ -88,12 +235,34 @@ public class PlantCatalogService {
 
   private List<String> buildQueryCandidates(String original) {
     Set<String> candidates = new LinkedHashSet<>();
-    candidates.add(original);
-    if (CYRILLIC_PATTERN.matcher(original).matches()) {
-      translateToEnglish(original).ifPresent(candidates::add);
-      candidates.add(transliterateRuToEn(original));
+    String normalized = normalizeQuery(original);
+    candidates.add(normalized);
+    if (CYRILLIC_PATTERN.matcher(normalized).matches()) {
+      dictionaryTranslate(normalized).ifPresent(candidates::add);
+      translateToEnglish(normalized).ifPresent(candidates::add);
+      candidates.add(transliterateRuToEn(normalized));
+      iNaturalistToQueries(normalized).forEach(candidates::add);
     }
     return new ArrayList<>(candidates);
+  }
+
+  private String normalizeQuery(String value) {
+    return value == null ? "" : value.trim().toLowerCase().replace('ё', 'е');
+  }
+
+  private Optional<String> dictionaryTranslate(String text) {
+    String direct = RU_TO_EN.get(text);
+    if (direct != null && !direct.isBlank()) {
+      log.info("Plant query dictionary ru->en: '{}' -> '{}'", text, direct);
+      return Optional.of(direct);
+    }
+    for (Map.Entry<String, String> item : RU_TO_EN.entrySet()) {
+      if (text.contains(item.getKey())) {
+        log.info("Plant query dictionary contains ru->en: '{}' -> '{}'", text, item.getValue());
+        return Optional.of(item.getValue());
+      }
+    }
+    return Optional.empty();
   }
 
   private Optional<String> translateToEnglish(String text) {
@@ -110,6 +279,38 @@ public class PlantCatalogService {
     } catch (Exception ex) {
       log.warn("Translation failed for '{}': {}", text, ex.getMessage());
       return Optional.empty();
+    }
+  }
+
+  private List<String> iNaturalistToQueries(String text) {
+    List<String> result = new ArrayList<>();
+    String encoded = URLEncoder.encode(text, StandardCharsets.UTF_8);
+    String url = String.format("%s/taxa/autocomplete?q=%s&locale=ru&all_names=true&per_page=3",
+        iNaturalistBaseUrl, encoded);
+    try {
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode items = response == null ? null : response.path("results");
+      if (items == null || !items.isArray() || items.isEmpty()) {
+        log.info("iNaturalist miss for query='{}'", text);
+        return result;
+      }
+      for (JsonNode item : items) {
+        String scientific = item.path("name").asText("").trim();
+        String common = item.path("preferred_common_name").asText("").trim();
+        if (!common.isEmpty()) {
+          result.add(common);
+        }
+        if (!scientific.isEmpty()) {
+          result.add(scientific);
+        }
+      }
+      if (!result.isEmpty()) {
+        log.info("iNaturalist aliases for '{}': {}", text, result);
+      }
+      return result;
+    } catch (Exception ex) {
+      log.warn("iNaturalist request failed for '{}': {}", text, ex.getMessage());
+      return result;
     }
   }
 
