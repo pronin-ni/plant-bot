@@ -44,6 +44,7 @@ import java.time.Month;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -59,6 +60,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class PlantTelegramBot extends TelegramLongPollingBot {
   private static final Locale RU_LOCALE = Locale.forLanguageTag("ru-RU");
+  private static final int TELEGRAM_TEXT_LIMIT = 4000;
   private final UserService userService;
   private final PlantService plantService;
   private final PlantCatalogService plantCatalogService;
@@ -77,9 +79,13 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   @Value("${bot.update-threads:4}")
   private int updateThreads;
 
+  @Value("${bot.list-card-cache-ttl-minutes:360}")
+  private long listCardCacheTtlMinutes;
+
   private final Map<Long, ConversationState> states = new ConcurrentHashMap<>();
   private final Map<Long, List<CityOption>> pendingCityOptions = new ConcurrentHashMap<>();
   private final Map<Long, Object> userLocks = new ConcurrentHashMap<>();
+  private final Map<Long, PlantCardCacheEntry> plantCardCache = new ConcurrentHashMap<>();
   private ExecutorService updateExecutor;
 
   @PostConstruct
@@ -218,7 +224,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
               + "• /stats — статистика\n"
               + "• /learning — адаптация интервала\n"
               + "• /setcity — город для погоды\n"
-              + "• /recalc — уточнить и пересчитать норму полива\n"
+              + "• /recalc — обновить расписание полива\n"
               + "• /clearcache — очистить накопленные кэши");
       case "/add" -> startAddPlant(user, message.getChatId());
       case "/list" -> sendPlantList(user, message.getChatId());
@@ -311,10 +317,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         resolveAndSetCity(user, message.getChatId(), text);
       }
       case SET_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
-      case RECALC_WAIT_CITY -> resolveCityForRecalc(user, message.getChatId(), text);
-      case RECALC_WAIT_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
-      case RECALC_OUTDOOR_SOIL, RECALC_OUTDOOR_SUN, RECALC_OUTDOOR_MULCH ->
-          sendTextWithCancel(message.getChatId(), "Используй кнопки ниже для уточнения и пересчета.");
+      case RECALC_WAIT_CITY, RECALC_WAIT_CITY_CHOOSE, RECALC_OUTDOOR_SOIL, RECALC_OUTDOOR_SUN, RECALC_OUTDOOR_MULCH ->
+          sendText(message.getChatId(), "Сценарий уточняющих шагов отключен. Используй /recalc для полного обновления расписания.");
       default -> sendText(message.getChatId(), "Чтобы начать, используй /add");
     }
   }
@@ -335,15 +339,17 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
         sendText(chatId, "Это растение принадлежит другому пользователю.");
         return;
       }
-      WateringRecommendation rec = recommendationService.recommend(plant, user);
-      Optional<WeatherData> weather = weatherService.getCurrent(user.getCity(), user.getCityLat(), user.getCityLon());
+      WateringRecommendation rec = recommendationService.recommendQuick(plant);
       plant.setLastWateredDate(LocalDate.now());
       plant.setLastReminderDate(null);
       plantService.save(plant);
+      invalidatePlantCardCache(plant.getId());
       wateringLogService.addLog(plant, LocalDate.now(), rec.intervalDays(), rec.waterLiters(),
-          weather.map(WeatherData::temperatureC).orElse(null),
-          weather.map(WeatherData::humidityPercent).orElse(null));
-      sendText(chatId, "✅ Полив отмечен: \"" + plant.getName() + "\"");
+          null,
+          null);
+      LocalDate nextWateringDate = LocalDate.now().plusDays((long) Math.floor(rec.intervalDays()));
+      sendText(chatId, "✅ Полив отмечен: \"" + plant.getName() + "\"\n"
+          + "Следующий полив: " + nextWateringDate);
       return;
     }
 
@@ -360,6 +366,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       }
       String name = plant.getName();
       plantService.delete(plant);
+      invalidatePlantCardCache(plantId);
       sendText(chatId, "🗑 Удалено: \"" + name + "\"");
       log.info("Plant deleted: user={} plantId={} name='{}'", user.getTelegramId(), plantId, name);
       return;
@@ -367,21 +374,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
     if ("cancel".equals(data)) {
       cancelFlow(user, chatId);
-      return;
-    }
-
-    if ("recalc:city:current".equals(data)) {
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getRecalcPlantId() == null) {
-        sendText(chatId, "Сначала выбери растение через /recalc");
-        return;
-      }
-      if (user.getCity() == null || user.getCity().isBlank()) {
-        state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
-        sendTextWithCancel(chatId, "Текущий город не задан. Введи город текстом.");
-        return;
-      }
-      continueRecalcAfterCity(user, chatId, state);
       return;
     }
 
@@ -395,72 +387,9 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return;
     }
 
-    if (data.startsWith("recalc:")) {
-      String raw = data.substring("recalc:".length());
-      Long plantId = parseLong(raw);
-      if (plantId == null) {
-        sendText(chatId, "Некорректный идентификатор растения. Повтори /recalc");
-        return;
-      }
-      Plant plant = plantService.getById(plantId);
-      if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
-        sendText(chatId, "Растение не найдено.");
-        return;
-      }
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      state.reset();
-      state.setRecalcPlantId(plantId);
-      state.setStep(ConversationState.Step.RECALC_WAIT_CITY);
-      SendMessage msg = new SendMessage(String.valueOf(chatId),
-          "Уточним данные для пересчета \"" + plant.getName() + "\".\n"
-              + "1) Укажи точный город/населенный пункт для погоды.\n"
-              + "Можно оставить текущий город кнопкой ниже.");
-      msg.setReplyMarkup(recalcCityButtons(user));
-      safeExecute(msg);
-      return;
-    }
-
-    if (data.startsWith("recalcsoil:")) {
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_SOIL || state.getRecalcPlantId() == null) {
-        return;
-      }
-      try {
-        state.setOutdoorSoilType(com.example.plantbot.domain.OutdoorSoilType.valueOf(data.substring("recalcsoil:".length())));
-        state.setStep(ConversationState.Step.RECALC_OUTDOOR_SUN);
-        SendMessage msg = new SendMessage(String.valueOf(chatId), "3) Освещенность участка:");
-        msg.setReplyMarkup(recalcSunButtons());
-        safeExecute(msg);
-      } catch (IllegalArgumentException ex) {
-        sendText(chatId, "Не распознал тип почвы. Выбери кнопку.");
-      }
-      return;
-    }
-
-    if (data.startsWith("recalcsun:")) {
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_SUN || state.getRecalcPlantId() == null) {
-        return;
-      }
-      try {
-        state.setSunExposure(com.example.plantbot.domain.SunExposure.valueOf(data.substring("recalcsun:".length())));
-        state.setStep(ConversationState.Step.RECALC_OUTDOOR_MULCH);
-        SendMessage msg = new SendMessage(String.valueOf(chatId), "4) Есть мульча?");
-        msg.setReplyMarkup(recalcMulchButtons());
-        safeExecute(msg);
-      } catch (IllegalArgumentException ex) {
-        sendText(chatId, "Не распознал освещенность. Выбери кнопку.");
-      }
-      return;
-    }
-
-    if (data.startsWith("recalcmulch:")) {
-      ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getStep() != ConversationState.Step.RECALC_OUTDOOR_MULCH || state.getRecalcPlantId() == null) {
-        return;
-      }
-      state.setMulched("yes".equals(data.substring("recalcmulch:".length())));
-      finishRecalc(user, chatId, state);
+    if (data.startsWith("recalc:") || data.startsWith("recalcsoil:")
+        || data.startsWith("recalcsun:") || data.startsWith("recalcmulch:")) {
+      sendText(chatId, "Этот сценарий больше не используется. Запусти /recalc для обновления расписания.");
       return;
     }
 
@@ -479,13 +408,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       applySelectedCity(user, selected);
       pendingCityOptions.remove(user.getTelegramId());
       ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-      if (state.getStep() == ConversationState.Step.RECALC_WAIT_CITY_CHOOSE && state.getRecalcPlantId() != null) {
-        sendText(chatId, "🌆 Локация для пересчета: " + selected.displayName());
-        continueRecalcAfterCity(user, chatId, state);
-      } else {
-        state.reset();
-        sendText(chatId, "🌆 Город сохранен: " + selected.displayName());
-      }
+      state.reset();
+      sendText(chatId, "🌆 Город сохранен: " + selected.displayName());
       return;
     }
 
@@ -656,98 +580,25 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       sendText(chatId, "🌱 Сначала добавь растение через /add");
       return;
     }
-    SendMessage msg = new SendMessage(String.valueOf(chatId), "Выбери растение для уточнения нормы полива:");
-    msg.setReplyMarkup(recalcPlantButtons(plants));
-    safeExecute(msg);
-  }
 
-  private void resolveCityForRecalc(User user, Long chatId, String query) {
-    if (query == null || query.isBlank()) {
-      sendTextWithCancel(chatId, "Введи город или нажми кнопку оставить текущий город.");
-      return;
+    invalidateUserPlantCardCache(plants);
+
+    Integer loadingMessageId = sendLoadingMessage(chatId, "⏳ Пересчитываю график полива по всем растениям...");
+    StringBuilder result = new StringBuilder("🔄 Пересчет завершен\n");
+
+    for (Plant plant : plants) {
+      WateringRecommendation rec = recommendationService.recommend(plant, user);
+      LocalDate due = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
+      putPlantCardCache(plant.getId(), buildPlantCard(user, plant, rec));
+      result.append("\n• ").append(plant.getName())
+          .append(": ").append(formatDays(rec.intervalDays()))
+          .append(", ").append(formatWaterAmount(plant, rec))
+          .append(", следующий полив ").append(due);
     }
 
-    List<CityOption> options = weatherService.resolveCityOptions(query, 5);
-    if (options.isEmpty()) {
-      sendTextWithCancel(chatId, "Не нашел город. Попробуй формат: Вартемяги или Вартемяги, RU");
-      return;
+    if (!tryEditMessage(chatId, loadingMessageId, result.toString(), null)) {
+      sendText(chatId, result.toString());
     }
-
-    ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-    if (options.size() == 1) {
-      applySelectedCity(user, options.get(0));
-      sendText(chatId, "🌆 Локация для пересчета: " + options.get(0).displayName());
-      continueRecalcAfterCity(user, chatId, state);
-      return;
-    }
-
-    pendingCityOptions.put(user.getTelegramId(), options);
-    state.setStep(ConversationState.Step.RECALC_WAIT_CITY_CHOOSE);
-    StringBuilder sb = new StringBuilder("Нашел несколько вариантов. Выбери нужный:\n");
-    for (int i = 0; i < options.size(); i++) {
-      sb.append(i + 1).append(". ").append(options.get(i).displayName()).append("\n");
-    }
-    SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
-    msg.setReplyMarkup(cityPickButtons(options.size()));
-    safeExecute(msg);
-  }
-
-  private void continueRecalcAfterCity(User user, Long chatId, ConversationState state) {
-    Plant plant = plantService.getById(state.getRecalcPlantId());
-    if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
-      state.reset();
-      sendText(chatId, "Растение не найдено.");
-      return;
-    }
-
-    if (plant.getPlacement() == PlantPlacement.OUTDOOR) {
-      state.setStep(ConversationState.Step.RECALC_OUTDOOR_SOIL);
-      SendMessage msg = new SendMessage(String.valueOf(chatId), "2) Уточни тип почвы:");
-      msg.setReplyMarkup(recalcSoilButtons());
-      safeExecute(msg);
-      return;
-    }
-
-    finishRecalc(user, chatId, state);
-  }
-
-  private void finishRecalc(User user, Long chatId, ConversationState state) {
-    Plant plant = plantService.getById(state.getRecalcPlantId());
-    if (plant == null || !plant.getUser().getTelegramId().equals(user.getTelegramId())) {
-      state.reset();
-      sendText(chatId, "Растение не найдено.");
-      return;
-    }
-
-    if (state.getOutdoorSoilType() != null) {
-      plant.setOutdoorSoilType(state.getOutdoorSoilType());
-    }
-    if (state.getSunExposure() != null) {
-      plant.setSunExposure(state.getSunExposure());
-    }
-    if (state.getMulched() != null) {
-      plant.setMulched(state.getMulched());
-    }
-    plant = plantService.save(plant);
-
-    WateringRecommendation rec = recommendationService.recommend(plant, user);
-    StringBuilder sb = new StringBuilder("🔄 Пересчет готов для \"")
-        .append(plant.getName()).append("\"\n")
-        .append("• Интервал: ").append(formatDays(rec.intervalDays())).append("\n")
-        .append("• Объем воды: ").append(formatWaterAmount(plant, rec));
-
-    boolean minimum = (plant.getPlacement() == PlantPlacement.OUTDOOR && rec.waterLiters() <= 0.5)
-        || (plant.getPlacement() != PlantPlacement.OUTDOOR && rec.waterLiters() <= 0.2);
-    if (minimum) {
-      sb.append("\n\n⚠️ Получилось минимальное значение. Уточни локацию/условия и повтори /recalc.");
-    }
-
-    sendText(chatId, sb.toString());
-    log.info("Recalc finished: user={} plantId={} placement={} soil={} sun={} mulch={} interval={} water={}",
-        user.getTelegramId(), plant.getId(), plant.getPlacement(), plant.getOutdoorSoilType(),
-        plant.getSunExposure(), plant.getMulched(), rec.intervalDays(), rec.waterLiters());
-    state.reset();
-    pendingCityOptions.remove(user.getTelegramId());
   }
 
   private void startAddPlant(User user, Long chatId) {
@@ -929,33 +780,48 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       }
     }
 
-    StringBuilder sb = new StringBuilder("🌿 Твои растения\n");
-    if (!indoor.isEmpty()) {
-      sb.append("\n🏠 Домашние\n");
-      for (Plant plant : indoor) {
-        appendPlantCard(sb, user, plant);
+    Map<Long, String> plantCards = new LinkedHashMap<>();
+    List<Plant> pending = new ArrayList<>();
+    for (Plant plant : indoor) {
+      PlantCardCacheEntry cached = plantCardCache.get(plant.getId());
+      if (isPlantCardCacheFresh(cached)) {
+        plantCards.put(plant.getId(), cached.cardText());
+      } else {
+        plantCards.put(plant.getId(), buildLoadingPlantCard(plant));
+        pending.add(plant);
       }
     }
-    if (!outdoor.isEmpty()) {
-      sb.append("\n🌤 Уличные\n");
-      for (Plant plant : outdoor) {
-        appendPlantCard(sb, user, plant);
+    for (Plant plant : outdoor) {
+      PlantCardCacheEntry cached = plantCardCache.get(plant.getId());
+      if (isPlantCardCacheFresh(cached)) {
+        plantCards.put(plant.getId(), cached.cardText());
+      } else {
+        plantCards.put(plant.getId(), buildLoadingPlantCard(plant));
+        pending.add(plant);
       }
     }
 
     InlineKeyboardMarkup markup = listWaterButtons(plants);
-    if (!tryEditMessage(chatId, loadingMessageId, sb.toString(), markup)) {
-      SendMessage msg = new SendMessage(String.valueOf(chatId), sb.toString());
-      msg.setReplyMarkup(markup);
-      safeExecute(msg);
+    String initial = buildPlantListText(indoor, outdoor, plantCards);
+    Integer targetMessageId = loadingMessageId;
+    if (!tryEditMessage(chatId, loadingMessageId, initial, markup)) {
+      targetMessageId = sendMessageWithMarkup(chatId, initial, markup);
+    }
+
+    for (Plant plant : pending) {
+      WateringRecommendation rec = recommendationService.recommend(plant, user);
+      String card = buildPlantCard(user, plant, rec);
+      putPlantCardCache(plant.getId(), card);
+      plantCards.put(plant.getId(), card);
+      String updated = buildPlantListText(indoor, outdoor, plantCards);
+      tryEditMessage(chatId, targetMessageId, updated, markup);
     }
   }
 
-  private void appendPlantCard(StringBuilder sb, User user, Plant plant) {
-    WateringRecommendation rec = recommendationService.recommend(plant, user);
+  private String buildPlantCard(User user, Plant plant, WateringRecommendation rec) {
     LocalDate due = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
     Optional<PlantCareAdvice> careAdvice = openRouterPlantAdvisorService.suggestCareAdvice(plant, rec.intervalDays());
-    sb.append("\n🪴 ").append(plant.getName()).append("\n")
+    StringBuilder sb = new StringBuilder("\n🪴 ").append(plant.getName()).append("\n")
         .append("• Последний полив: ").append(plant.getLastWateredDate()).append("\n")
         .append("• Следующий полив: ").append(due).append("\n")
         .append("• Рекомендуемый объём: ").append(formatWaterAmount(plant, rec)).append("\n")
@@ -967,6 +833,51 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       sb.append("• Уличные условия: ").append(formatOutdoorMeta(plant)).append("\n");
     }
     sb.append("────────\n");
+    return sb.toString();
+  }
+
+  private String buildLoadingPlantCard(Plant plant) {
+    return "\n🪴 " + plant.getName() + "\n"
+        + "• Обновляю рекомендации...\n"
+        + "────────\n";
+  }
+
+  private String buildPlantListText(List<Plant> indoor, List<Plant> outdoor, Map<Long, String> cards) {
+    StringBuilder sb = new StringBuilder("🌿 Твои растения\n");
+    if (!indoor.isEmpty()) {
+      sb.append("\n🏠 Домашние\n");
+      for (Plant plant : indoor) {
+        sb.append(cards.getOrDefault(plant.getId(), buildLoadingPlantCard(plant)));
+      }
+    }
+    if (!outdoor.isEmpty()) {
+      sb.append("\n🌤 Уличные\n");
+      for (Plant plant : outdoor) {
+        sb.append(cards.getOrDefault(plant.getId(), buildLoadingPlantCard(plant)));
+      }
+    }
+    return sb.toString();
+  }
+
+  private void putPlantCardCache(Long plantId, String cardText) {
+    long ttlSeconds = Math.max(1, listCardCacheTtlMinutes) * 60L;
+    plantCardCache.put(plantId, new PlantCardCacheEntry(cardText, Instant.now().plusSeconds(ttlSeconds)));
+  }
+
+  private boolean isPlantCardCacheFresh(PlantCardCacheEntry entry) {
+    return entry != null && entry.expiresAt().isAfter(Instant.now());
+  }
+
+  private void invalidatePlantCardCache(Long plantId) {
+    if (plantId != null) {
+      plantCardCache.remove(plantId);
+    }
+  }
+
+  private void invalidateUserPlantCardCache(List<Plant> plants) {
+    for (Plant plant : plants) {
+      plantCardCache.remove(plant.getId());
+    }
   }
 
   private void sendCalendar(User user, Long chatId) {
@@ -1046,16 +957,19 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     int lookupRows = plantCatalogService.clearLookupCache();
     OpenRouterPlantAdvisorService.CacheClearStats openRouterStats = openRouterPlantAdvisorService.clearCaches();
     WeatherService.CacheClearStats weatherStats = weatherService.clearCaches();
+    int listCardEntries = plantCardCache.size();
+    plantCardCache.clear();
 
     String text = "🧹 Кэши очищены:\n"
         + "• Поиск растений (SQLite): " + lookupRows + "\n"
         + "• OpenRouter (care/watering): " + openRouterStats.careAdviceEntries() + "/" + openRouterStats.wateringProfileEntries() + "\n"
         + "• Погода (cache/rainKeys/samples): " + weatherStats.weatherEntries() + "/"
-        + weatherStats.rainKeys() + "/" + weatherStats.rainSamples();
+        + weatherStats.rainKeys() + "/" + weatherStats.rainSamples() + "\n"
+        + "• Карточки /list (in-memory): " + listCardEntries;
     sendText(chatId, text);
-    log.info("Caches cleared via command: lookupRows={}, openRouterCare={}, openRouterWater={}, weatherEntries={}, rainKeys={}, rainSamples={}",
+    log.info("Caches cleared via command: lookupRows={}, openRouterCare={}, openRouterWater={}, weatherEntries={}, rainKeys={}, rainSamples={}, listCardEntries={}",
         lookupRows, openRouterStats.careAdviceEntries(), openRouterStats.wateringProfileEntries(),
-        weatherStats.weatherEntries(), weatherStats.rainKeys(), weatherStats.rainSamples());
+        weatherStats.weatherEntries(), weatherStats.rainKeys(), weatherStats.rainSamples(), listCardEntries);
   }
 
   private void askClearCacheConfirmation(Long chatId) {
@@ -1120,69 +1034,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     return markup;
   }
 
-  private InlineKeyboardMarkup recalcPlantButtons(List<Plant> plants) {
-    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-    for (Plant plant : plants) {
-      InlineKeyboardButton button = new InlineKeyboardButton("Пересчитать: " + plant.getName());
-      button.setCallbackData("recalc:" + plant.getId());
-      rows.add(List.of(button));
-    }
-    rows.add(List.of(cancelButton().getKeyboard().get(0).get(0)));
-    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-    markup.setKeyboard(rows);
-    return markup;
-  }
-
-  private InlineKeyboardMarkup recalcCityButtons(User user) {
-    List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-    if (user.getCity() != null && !user.getCity().isBlank()) {
-      InlineKeyboardButton current = new InlineKeyboardButton("Оставить текущий город (" + user.getCity() + ")");
-      current.setCallbackData("recalc:city:current");
-      rows.add(List.of(current));
-    }
-    rows.add(List.of(cancelButton().getKeyboard().get(0).get(0)));
-    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-    markup.setKeyboard(rows);
-    return markup;
-  }
-
-  private InlineKeyboardMarkup recalcSoilButtons() {
-    InlineKeyboardButton sandy = new InlineKeyboardButton("Песчаный");
-    sandy.setCallbackData("recalcsoil:SANDY");
-    InlineKeyboardButton loamy = new InlineKeyboardButton("Суглинистый");
-    loamy.setCallbackData("recalcsoil:LOAMY");
-    InlineKeyboardButton clay = new InlineKeyboardButton("Глинистый");
-    clay.setCallbackData("recalcsoil:CLAY");
-    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
-    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-    markup.setKeyboard(List.of(List.of(sandy, loamy, clay), List.of(cancel)));
-    return markup;
-  }
-
-  private InlineKeyboardMarkup recalcSunButtons() {
-    InlineKeyboardButton full = new InlineKeyboardButton("Полное солнце");
-    full.setCallbackData("recalcsun:FULL_SUN");
-    InlineKeyboardButton partial = new InlineKeyboardButton("Полутень");
-    partial.setCallbackData("recalcsun:PARTIAL_SHADE");
-    InlineKeyboardButton shade = new InlineKeyboardButton("Тень");
-    shade.setCallbackData("recalcsun:SHADE");
-    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
-    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-    markup.setKeyboard(List.of(List.of(full, partial, shade), List.of(cancel)));
-    return markup;
-  }
-
-  private InlineKeyboardMarkup recalcMulchButtons() {
-    InlineKeyboardButton yes = new InlineKeyboardButton("Да");
-    yes.setCallbackData("recalcmulch:yes");
-    InlineKeyboardButton no = new InlineKeyboardButton("Нет");
-    no.setCallbackData("recalcmulch:no");
-    InlineKeyboardButton cancel = cancelButton().getKeyboard().get(0).get(0);
-    InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-    markup.setKeyboard(List.of(List.of(yes, no), List.of(cancel)));
-    return markup;
-  }
-
   private InlineKeyboardMarkup clearCacheConfirmButtons() {
     InlineKeyboardButton confirm = new InlineKeyboardButton("Да, очистить");
     confirm.setCallbackData("clearcache:confirm");
@@ -1207,7 +1058,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   }
 
   private void sendText(Long chatId, String text) {
-    SendMessage msg = new SendMessage(String.valueOf(chatId), text);
+    SendMessage msg = new SendMessage(String.valueOf(chatId), truncateTelegramText(text));
     safeExecute(msg);
   }
 
@@ -1265,17 +1116,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     applySelectedCity(user, city);
     pendingCityOptions.remove(user.getTelegramId());
     ConversationState state = states.computeIfAbsent(user.getTelegramId(), id -> new ConversationState());
-
-    if (state.getStep() == ConversationState.Step.RECALC_WAIT_CITY
-        || state.getStep() == ConversationState.Step.RECALC_WAIT_CITY_CHOOSE) {
-      SendMessage msg = new SendMessage(String.valueOf(message.getChatId()),
-          "📍 Геопозиция получена.\n🌆 Локация для пересчета: " + city.displayName());
-      msg.setReplyMarkup(new ReplyKeyboardRemove(true));
-      safeExecute(msg);
-      continueRecalcAfterCity(user, message.getChatId(), state);
-      return;
-    }
-
     state.reset();
     SendMessage msg = new SendMessage(String.valueOf(message.getChatId()),
         "📍 Геопозиция получена.\n🌆 Город сохранен: " + city.displayName());
@@ -1349,10 +1189,22 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   private Integer sendLoadingMessage(Long chatId, String text) {
     try {
-      Message sent = execute(new SendMessage(String.valueOf(chatId), text));
+      Message sent = execute(new SendMessage(String.valueOf(chatId), truncateTelegramText(text)));
       return sent.getMessageId();
     } catch (Exception ex) {
       log.warn("Failed to send loading message to chat {}: {}", chatId, ex.getMessage());
+      return null;
+    }
+  }
+
+  private Integer sendMessageWithMarkup(Long chatId, String text, InlineKeyboardMarkup markup) {
+    try {
+      SendMessage msg = new SendMessage(String.valueOf(chatId), truncateTelegramText(text));
+      msg.setReplyMarkup(markup);
+      Message sent = execute(msg);
+      return sent.getMessageId();
+    } catch (Exception ex) {
+      log.warn("Failed to send message with markup to chat {}: {}", chatId, ex.getMessage());
       return null;
     }
   }
@@ -1365,7 +1217,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       EditMessageText edit = new EditMessageText();
       edit.setChatId(String.valueOf(chatId));
       edit.setMessageId(messageId);
-      edit.setText(text);
+      edit.setText(truncateTelegramText(text));
       edit.setReplyMarkup(markup);
       execute(edit);
       return true;
@@ -1499,14 +1351,6 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     return month == Month.DECEMBER || month == Month.JANUARY || month == Month.FEBRUARY;
   }
 
-  private Long parseLong(String text) {
-    try {
-      return Long.parseLong(text.trim());
-    } catch (Exception ex) {
-      return null;
-    }
-  }
-
   private String formatVolume(double liters) {
     double rounded = Math.round(liters * 100.0) / 100.0;
     if (rounded < 1.0) {
@@ -1516,11 +1360,24 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     return String.format(Locale.ROOT, "%.2f л", rounded);
   }
 
+  private String truncateTelegramText(String text) {
+    if (text == null) {
+      return "";
+    }
+    if (text.length() <= TELEGRAM_TEXT_LIMIT) {
+      return text;
+    }
+    return text.substring(0, TELEGRAM_TEXT_LIMIT - 20) + "\n...\n(сообщение сокращено)";
+  }
+
   private String monthTitle(YearMonth month) {
     String label = month.getMonth().getDisplayName(TextStyle.FULL_STANDALONE, RU_LOCALE);
     if (label.isEmpty()) {
       return month.getMonth().toString() + " " + month.getYear();
     }
     return Character.toUpperCase(label.charAt(0)) + label.substring(1) + " " + month.getYear();
+  }
+
+  private record PlantCardCacheEntry(String cardText, Instant expiresAt) {
   }
 }

@@ -399,17 +399,21 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private String buildCareCacheKey(Plant plant, double recommendedIntervalDays) {
-    return (plant.getName().trim().toLowerCase() + "|"
+    String modelKey = (model == null || model.isBlank()) ? "model:unknown" : "model:" + model.trim().toLowerCase();
+    return (modelKey + "|"
+        + plant.getName().trim().toLowerCase() + "|"
         + plant.getType().name() + "|"
         + plant.getPotVolumeLiters() + "|"
         + Math.round(recommendedIntervalDays * 10.0) / 10.0);
   }
 
   private String buildWateringProfileCacheKey(Plant plant, WeatherData weather, boolean outdoor) {
+    String modelKey = (model == null || model.isBlank()) ? "model:unknown" : "model:" + model.trim().toLowerCase();
     double t = weather == null ? 20.0 : Math.round(weather.temperatureC());
     double h = weather == null ? 50.0 : Math.round(weather.humidityPercent() / 5.0) * 5.0;
     double r = weather == null ? 0.0 : Math.round(weather.precipitationMm1h() * 2.0) / 2.0;
-    return plant.getName().trim().toLowerCase()
+    return modelKey
+        + "|" + plant.getName().trim().toLowerCase()
         + "|" + plant.getType().name()
         + "|" + (outdoor ? "out" : "in")
         + "|t=" + t + "|h=" + h + "|r=" + r;

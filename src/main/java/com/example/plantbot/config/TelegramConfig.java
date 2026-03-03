@@ -32,10 +32,14 @@ public class TelegramConfig {
     try {
       TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
       botsApi.registerBot(plantTelegramBot);
-      registerCommands();
       log.info("Telegram bot registered: {}", username);
     } catch (Exception ex) {
       throw new IllegalStateException("Failed to register Telegram bot", ex);
+    }
+    try {
+      registerCommands();
+    } catch (Exception ex) {
+      log.warn("Bot is running, but command menu registration failed: {}", ex.getMessage());
     }
   }
 
@@ -54,11 +58,18 @@ public class TelegramConfig {
         new BotCommand("/cancel", "Отменить текущее действие")
     );
 
-    SetMyCommands setMyCommands = new SetMyCommands();
-    setMyCommands.setCommands(commands);
-    setMyCommands.setScope(new BotCommandScopeDefault());
-    setMyCommands.setLanguageCode("ru");
-    plantTelegramBot.execute(setMyCommands);
+    SetMyCommands defaultCommands = new SetMyCommands();
+    defaultCommands.setCommands(commands);
+    defaultCommands.setScope(new BotCommandScopeDefault());
+    defaultCommands.setLanguageCode(null);
+    plantTelegramBot.execute(defaultCommands);
+
+    SetMyCommands ruCommands = new SetMyCommands();
+    ruCommands.setCommands(commands);
+    ruCommands.setScope(new BotCommandScopeDefault());
+    ruCommands.setLanguageCode("ru");
+    plantTelegramBot.execute(ruCommands);
+
     log.info("Telegram commands registered automatically: {} commands", commands.size());
   }
 }

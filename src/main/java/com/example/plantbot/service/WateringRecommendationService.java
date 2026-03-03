@@ -62,6 +62,31 @@ public class WateringRecommendationService {
       interval = clamp(interval * p.intervalFactor(), 1.0, 60.0);
       waterLiters = roundTwoDecimals(waterLiters * p.waterFactor());
     }
+    interval = clampIntervalByConfidence(base, interval, smoothedOpt.isPresent());
+    waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
+    waterLiters = safeNonZeroLiters(waterLiters, plant);
+    return new WateringRecommendation(interval, waterLiters);
+  }
+
+  // Fast local-only recommendation path for user actions where low latency matters.
+  // Does not call external APIs (weather/OpenRouter).
+  public WateringRecommendation recommendQuick(Plant plant) {
+    double base = plant.getBaseIntervalDays();
+    double seasonFactor = seasonFactor(LocalDate.now().getMonth());
+    double plantFactor = plantFactor(plant);
+
+    OptionalDouble smoothedOpt = learningService.getSmoothedInterval(plant);
+    double learned = smoothedOpt.isPresent() ? smoothedOpt.getAsDouble() : base;
+
+    double interval = learned * seasonFactor * plantFactor;
+    interval = clamp(interval, 1.0, 60.0);
+    interval = clampIntervalByConfidence(base, interval, smoothedOpt.isPresent());
+
+    if (isOutdoor(plant) && isWinterDormancyActive(plant)) {
+      return new WateringRecommendation(90.0, 0.0);
+    }
+
+    double waterLiters = recommendWaterLiters(plant, null);
     waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
     waterLiters = safeNonZeroLiters(waterLiters, plant);
     return new WateringRecommendation(interval, waterLiters);
@@ -271,5 +296,18 @@ public class WateringRecommendationService {
           roundTwoDecimals(liters), roundTwoDecimals(adjusted), plant.getId(), plant.getName());
     }
     return roundTwoDecimals(adjusted);
+  }
+
+  private double clampIntervalByConfidence(double baseInterval, double interval, boolean hasHistory) {
+    double minFactor = hasHistory ? 0.5 : 0.7;
+    double maxFactor = hasHistory ? 2.0 : 1.5;
+    double min = Math.max(1.0, baseInterval * minFactor);
+    double max = Math.max(3.0, baseInterval * maxFactor);
+    double clamped = clamp(interval, min, max);
+    if (clamped != interval) {
+      log.info("Interval clamped from {} to {} (base={}, hasHistory={})",
+          roundTwoDecimals(interval), roundTwoDecimals(clamped), baseInterval, hasHistory);
+    }
+    return clamped;
   }
 }
