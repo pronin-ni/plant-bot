@@ -40,4 +40,22 @@ public class UserService {
   public User save(User user) {
     return userRepository.save(user);
   }
+
+  public User getOrCreateByTelegramData(Long telegramId, String username, String firstName, String lastName) {
+    User user = userRepository.findByTelegramId(telegramId).orElseGet(() -> {
+      User created = new User();
+      created.setTelegramId(telegramId);
+      return created;
+    });
+    if (username != null) {
+      user.setUsername(username);
+    }
+    if (firstName != null) {
+      user.setFirstName(firstName);
+    }
+    if (lastName != null) {
+      user.setLastName(lastName);
+    }
+    return userRepository.save(user);
+  }
 }

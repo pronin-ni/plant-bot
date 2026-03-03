@@ -56,6 +56,8 @@ public class Plant {
   @Column(nullable = false)
   private PlantType type = PlantType.DEFAULT;
 
+  private String photoUrl;
+
   private String lookupSource;
 
   private Instant lookupAt;

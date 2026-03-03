@@ -3,3 +3,7 @@
 .git
 .idea
 *.iml
+build
+plant-care-mini-app/node_modules
+plant-care-mini-app/dist
+plant-care-mini-app/.vite

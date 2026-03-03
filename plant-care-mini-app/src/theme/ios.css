@@ -1,0 +1,84 @@
+:root {
+  --ios-bg: 245 246 248;
+  --ios-card: 255 255 255;
+  --ios-text: 28 28 30;
+  --ios-subtext: 99 99 102;
+  --ios-border: 209 209 214;
+  --ios-accent: #34c759;
+  --ios-bg-color: #f5f6f8;
+  --ios-card-color: #ffffff;
+  --ios-text-color: #1c1c1e;
+  --ios-subtext-color: #636366;
+
+  --tg-theme-bg-color: #f5f6f8;
+  --tg-theme-text-color: #1c1c1e;
+  --tg-theme-hint-color: #636366;
+  --tg-theme-secondary-bg-color: #ffffff;
+}
+
+.dark {
+  --ios-bg: 18 18 20;
+  --ios-card: 30 30 32;
+  --ios-text: 245 245 247;
+  --ios-subtext: 174 174 178;
+  --ios-border: 58 58 60;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--ios-bg-color);
+  color: var(--ios-text-color);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background-image:
+    radial-gradient(circle at 20% -10%, color-mix(in srgb, var(--ios-accent) 12%, transparent) 0, transparent 40%),
+    radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--ios-card-color) 72%, transparent) 0, transparent 35%);
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding: max(env(safe-area-inset-top), 10px) 16px max(env(safe-area-inset-bottom), 14px);
+}
+
+.ios-blur-card {
+  background: color-mix(in srgb, var(--ios-card-color) 82%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, rgb(var(--ios-border)) 55%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  transition: transform 180ms ease, box-shadow 220ms ease;
+}
+
+.ios-tabbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, rgb(var(--ios-border)) 56%, transparent);
+  background: color-mix(in srgb, var(--ios-card-color) 68%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+button,
+input {
+  -webkit-tap-highlight-color: transparent;
+}

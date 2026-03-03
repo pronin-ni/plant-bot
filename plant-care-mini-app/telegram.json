@@ -1,0 +1,8 @@
+{
+  "name": "Мои Растения",
+  "short_name": "plants",
+  "description": "Telegram Mini App для ухода за растениями",
+  "url": "https://your-domain.example/mini-app/",
+  "platform": "telegram-mini-app",
+  "version": "0.1.0"
+}

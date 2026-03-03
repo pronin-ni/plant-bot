@@ -1,8 +1,17 @@
 # syntax=docker/dockerfile:1
+
+FROM node:20-alpine AS frontend-build
+WORKDIR /frontend
+COPY plant-care-mini-app/package.json ./
+RUN npm install
+COPY plant-care-mini-app ./
+RUN npm run build
+
 FROM gradle:8.6-jdk17 AS build
 WORKDIR /app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY src ./src
+COPY --from=frontend-build /frontend/dist ./src/main/resources/static/mini-app
 RUN gradle -q bootJar
 
 FROM eclipse-temurin:17-jre
