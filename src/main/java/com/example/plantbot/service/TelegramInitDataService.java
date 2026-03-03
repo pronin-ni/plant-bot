@@ -30,11 +30,26 @@ public class TelegramInitDataService {
   @Value("${telegram.auth.max-age-seconds:86400}")
   private long maxAgeSeconds;
 
+  @Value("${app.dev-auth-enabled:false}")
+  private boolean devAuthEnabled;
+
+  @Value("${app.dev-telegram-id:999000111}")
+  private long devTelegramId;
+
+  @Value("${app.dev-username:dev_user}")
+  private String devUsername;
+
   public User validateAndResolveUser(String initData) {
     if (initData == null || initData.isBlank()) {
+      if (devAuthEnabled) {
+        return userService.getOrCreateByTelegramData(devTelegramId, devUsername, "Dev", "User");
+      }
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "X-Telegram-Init-Data пустой");
     }
     if (botToken == null || botToken.isBlank()) {
+      if (devAuthEnabled) {
+        return userService.getOrCreateByTelegramData(devTelegramId, devUsername, "Dev", "User");
+      }
       throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен bot.token");
     }
 

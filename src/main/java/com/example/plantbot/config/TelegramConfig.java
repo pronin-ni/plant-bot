@@ -26,10 +26,12 @@ public class TelegramConfig {
     String token = plantTelegramBot.getBotToken();
     String username = plantTelegramBot.getBotUsername();
     if (token == null || token.isBlank()) {
-      throw new IllegalStateException("TELEGRAM_BOT_TOKEN is empty");
+      log.warn("TELEGRAM_BOT_TOKEN is empty; Telegram bot registration skipped");
+      return;
     }
     if (username == null || username.isBlank()) {
-      throw new IllegalStateException("TELEGRAM_BOT_USERNAME is empty");
+      log.warn("TELEGRAM_BOT_USERNAME is empty; Telegram bot registration skipped");
+      return;
     }
     try {
       TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);

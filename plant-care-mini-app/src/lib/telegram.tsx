@@ -187,3 +187,43 @@ export function TelegramSdkProviderBridge({ children }: { children: ReactNode })
 
   return <>{content}</>;
 }
+
+
+export async function cloudStorageGet(key: string): Promise<string | null> {
+  const webApp = getTelegramWebApp();
+  const cloudStorage = (webApp as unknown as { CloudStorage?: { getItem: (k: string, cb: (err: string | null, value: string | null) => void) => void } }).CloudStorage;
+  if (!cloudStorage) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    cloudStorage.getItem(key, (_err, value) => resolve(value ?? null));
+  });
+}
+
+export async function cloudStorageSet(key: string, value: string): Promise<void> {
+  const webApp = getTelegramWebApp();
+  const cloudStorage = (webApp as unknown as { CloudStorage?: { setItem: (k: string, v: string, cb: (err: string | null) => void) => void } }).CloudStorage;
+  if (!cloudStorage) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    cloudStorage.setItem(key, value, () => resolve());
+  });
+}
+
+export function showMainButton(text: string, onClick: () => void) {
+  const webApp = getTelegramWebApp();
+  const button = (webApp as unknown as { MainButton?: { setParams: (params: Record<string, unknown>) => void; show: () => void; onClick: (cb: () => void) => void } }).MainButton;
+  if (!button) {
+    return;
+  }
+  button.setParams({ text, is_visible: true });
+  button.show();
+  button.onClick(onClick);
+}
+
+export function hideMainButton() {
+  const webApp = getTelegramWebApp();
+  const button = (webApp as unknown as { MainButton?: { hide: () => void } }).MainButton;
+  button?.hide();
+}

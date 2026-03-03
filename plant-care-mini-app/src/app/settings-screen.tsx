@@ -3,6 +3,9 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
+import { BackupRestore } from '@/app/Settings/BackupRestore';
+import { AchievementsView } from '@/app/Achievements/AchievementsView';
 import { getCalendarSync, getLearning, getStats, updateCalendarSync, updateCity } from '@/lib/api';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
 import { useAuthStore } from '@/lib/store';
@@ -114,6 +117,11 @@ export function SettingsScreen() {
           {cityMutation.isPending ? 'Сохраняем...' : 'Сохранить город'}
         </Button>
       </div>
+
+
+      <HomeAssistantSetup />
+      <BackupRestore />
+      <AchievementsView />
 
       <div className="ios-blur-card p-4">
         <div className="mb-2 flex items-center gap-2">

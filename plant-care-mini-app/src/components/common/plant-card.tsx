@@ -3,6 +3,7 @@ import { Home, TreePine } from 'lucide-react';
 
 import { ProgressRing } from '@/components/common/progress-ring';
 import { WaterButton } from '@/components/common/water-button';
+import { ConditionsWidget } from '@/components/ConditionsWidget';
 import { cn } from '@/lib/cn';
 import type { PlantDto } from '@/types/api';
 
@@ -43,9 +44,10 @@ export function PlantCard({ plant, progress, nextWateringText, isWatering = fals
         <ProgressRing value={progress} label="цикл" />
       </div>
 
-      <p className="mb-3 text-center text-[12px] text-ios-subtext">{nextWateringText}</p>
+      <p className="mb-2 text-center text-[12px] text-ios-subtext">{nextWateringText}</p>
+      <ConditionsWidget plantId={plant.id} compact />
 
-      <div className="mt-auto">
+      <div className="mt-auto pt-2">
         <div onClick={(event) => event.stopPropagation()}>
           <WaterButton isLoading={isWatering} onClick={onWater} />
         </div>

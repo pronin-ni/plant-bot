@@ -4,6 +4,12 @@ import { Camera, Droplets, Leaf, LocateFixed, Trash2, Waves } from 'lucide-react
 import { motion } from 'framer-motion';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
+import { ConditionsWidget } from '@/components/ConditionsWidget';
+import { ConditionsChart } from '@/components/ConditionsChart';
+import { RoomAndSensorSelector } from '@/components/RoomAndSensorSelector';
+import { SmartReminderCard } from '@/components/SmartReminderCard';
+import { GrowthGallery } from '@/app/PlantDetail/GrowthGallery';
+import { DiagnosisTool } from '@/app/PlantDetail/DiagnosisTool';
 import { ProgressRing } from '@/components/common/progress-ring';
 import { Button } from '@/components/ui/button';
 import { deletePlant, getPlantById, uploadPlantPhoto, waterPlant } from '@/lib/api';
@@ -123,6 +129,8 @@ export function PlantDetailSheet() {
             </label>
           </div>
 
+          <GrowthGallery plantId={plant.id} photoUrl={plant.photoUrl} />
+
           <div className="ios-blur-card flex items-center justify-between p-4">
             <div>
               <p className="text-ios-caption text-ios-subtext">Состояние цикла</p>
@@ -132,11 +140,18 @@ export function PlantDetailSheet() {
             <ProgressRing value={getProgress(plant)} label="влага" />
           </div>
 
+          <SmartReminderCard plant={plant} />
+
           <div className="grid grid-cols-3 gap-2">
             <InfoPill icon={Droplets} label="Объём" value={`${plant.recommendedWaterMl ?? 0} мл`} />
             <InfoPill icon={Waves} label="Интервал" value={`${plant.baseIntervalDays ?? 7} дн.`} />
             <InfoPill icon={LocateFixed} label="Тип" value={plant.placement === 'OUTDOOR' ? 'Улица' : 'Дом'} />
           </div>
+
+          <ConditionsWidget plantId={plant.id} />
+          <ConditionsChart plantId={plant.id} />
+          <RoomAndSensorSelector plantId={plant.id} compact />
+          <DiagnosisTool plantName={plant.name} />
 
           <motion.div
             animate={waterMutation.isPending ? { scale: [1, 1.03, 1] } : { scale: 1 }}

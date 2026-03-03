@@ -9,6 +9,13 @@ export interface PlantDto {
   id: number;
   name: string;
   placement: 'INDOOR' | 'OUTDOOR';
+  potVolumeLiters?: number;
+  outdoorAreaM2?: number | null;
+  outdoorSoilType?: 'SANDY' | 'LOAMY' | 'CLAY' | null;
+  sunExposure?: 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE' | null;
+  mulched?: boolean | null;
+  perennial?: boolean | null;
+  winterDormancyEnabled?: boolean | null;
   lastWateredDate: string;
   baseIntervalDays?: number;
   nextWateringDate?: string;
@@ -49,4 +56,42 @@ export interface CalendarSyncDto {
   enabled: boolean;
   webcalUrl: string;
   httpsUrl: string;
+}
+
+export interface OpenRouterIdentifyResult {
+  russianName?: string;
+  latinName?: string;
+  family?: string;
+  confidence: number;
+  wateringIntervalDays: number;
+  lightLevel?: string;
+  humidityPercent?: string;
+  shortDescription?: string;
+  alternatives: string[];
+}
+
+export interface OpenRouterDiagnoseResult {
+  problem?: string;
+  confidence: number;
+  description?: string;
+  causes: string[];
+  treatment?: string;
+  prevention?: string;
+  urgency: 'low' | 'medium' | 'high';
+}
+
+export interface AchievementItem {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+}
+
+export interface AchievementsDto {
+  unlocked: number;
+  total: number;
+  items: AchievementItem[];
 }

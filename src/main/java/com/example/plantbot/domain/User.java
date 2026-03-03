@@ -31,7 +31,7 @@ public class User {
   private Double cityLat;
   private Double cityLon;
   private Boolean calendarSyncEnabled = false;
-  @Column(nullable = false, unique = true)
+  @Column(name = "calendar_token")
   private String calendarToken = UUID.randomUUID().toString();
 
   private Instant createdAt = Instant.now();

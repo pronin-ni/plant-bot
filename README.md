@@ -120,6 +120,8 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
       OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
+      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
       OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
       OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
       OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
@@ -155,6 +157,8 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
       OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
+      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
       OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
       OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
       OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
@@ -190,6 +194,62 @@ volumes:
 - `GET /api/stats`
 - `GET /api/learning`
 - `POST /api/users/city`
+
+
+## Home Assistant интеграция
+
+Что поддерживается:
+- безопасное подключение Home Assistant (`/api/home-assistant/config`)
+- токен хранится только на backend в зашифрованном виде (AES-GCM), на frontend не возвращается
+- автообнаружение комнат (Area) и сенсоров `temperature_*`, `humidity_*`, `soil_moisture_*`, `illuminance_*`
+- ручной выбор `entity_id` для температуры, влажности, влажности почвы, освещенности
+- почасовой polling Home Assistant c random offset, timeout 10s, retries=3
+- fallback на базовый график, если HA недоступен > 6 часов
+- Telegram уведомление пользователю при длительной недоступности HA
+- мягкая автокоррекция интервала полива (не больше ±35%)
+- отключение автокоррекции для конкретного растения
+- история корректировок и история условий за 7 дней
+
+Новые API:
+- `POST /api/home-assistant/config`
+- `GET /api/home-assistant/rooms-and-sensors`
+- `PUT /api/plants/{plantId}/room`
+- `GET /api/plants/{plantId}/conditions`
+- `GET /api/plants/{plantId}/history-conditions?days=7`
+
+HA полностью опционален:
+- пользователь указывает URL и токен прямо в Mini App (`Settings -> Home Assistant`);
+- если HA не подключён, расчеты идут по базовой логике без HA;
+- отдельные переменные для HA в `.env` не нужны.
+
+Безопасность токена HA:
+- токен не отдаётся на фронтенд;
+- backend хранит его в зашифрованном виде;
+- ключ шифрования создаётся автоматически локально в `./data/ha-master.key`.
+
+Frontend (Mini App):
+- `Settings -> Home Assistant` — подключение по URL + Token
+- `Add Plant` и `Plant Detail` — выбор комнаты/сенсоров и автокоррекции
+- `Plant Card` и `Plant Detail` — виджет условий
+- `Plant Detail` — график температуры/влажности за 7 дней + предупреждение по освещенности
+
+## OpenRouter: модели для фото (identify/diagnose)
+
+Для фото-запросов используются отдельные переменные:
+- `OPENROUTER_MODEL_PHOTO_IDENTIFY` — модель для `POST /api/plant/identify-openrouter`
+- `OPENROUTER_MODEL_PHOTO_DIAGNOSE` — модель для `POST /api/plant/diagnose-openrouter`
+
+Рекомендуемые значения:
+- identify (быстро/дешево): `google/gemini-flash-1.5` или `qwen/qwen-vl-max`
+- diagnose (точнее): `google/gemini-1.5-pro` или `anthropic/claude-3.5-sonnet`
+
+Fallback-логика на backend:
+- identify: `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
+- diagnose: `OPENROUTER_MODEL_PHOTO_DIAGNOSE` -> `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
+
+Важно:
+- фронтенд никогда не ходит в OpenRouter напрямую;
+- фото всегда отправляется на backend, и уже backend делает OpenRouter `/chat/completions` с `content: [text, image_url]`.
 
 ## Опциональная синхронизация с Google/Apple календарём
 
@@ -231,3 +291,19 @@ Smoke-check для miniapp-only:
 docker compose --profile miniapp-only up -d --build plant-miniapp
 curl -fsS http://localhost:8080/actuator/health
 ```
+
+
+## Локальный запуск без Telegram токена
+
+Для разработки Mini App/REST без Telegram initData:
+
+```bash
+TELEGRAM_BOT_ENABLED=false APP_DEV_AUTH_ENABLED=true ./gradlew bootRun
+```
+
+В этом режиме используется fallback-пользователь из переменных:
+
+- `APP_DEV_TELEGRAM_ID`
+- `APP_DEV_USERNAME`
+
+Использовать только для локальной разработки.

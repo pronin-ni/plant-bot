@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -56,6 +57,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @Component
+@ConditionalOnProperty(prefix = "telegram.bot", name = "enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class PlantTelegramBot extends TelegramLongPollingBot {
@@ -208,6 +210,17 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return true;
     } catch (Exception ex) {
       log.error("Failed to send watering reminder to chat {}: {}", msg.getChatId(), ex.getMessage(), ex);
+      return false;
+    }
+  }
+
+  public boolean sendSystemNotification(Long telegramId, String text) {
+    SendMessage msg = new SendMessage(String.valueOf(telegramId), text);
+    try {
+      execute(msg);
+      return true;
+    } catch (Exception ex) {
+      log.error("Failed to send system notification to chat {}: {}", telegramId, ex.getMessage(), ex);
       return false;
     }
   }

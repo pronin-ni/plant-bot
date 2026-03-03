@@ -5,8 +5,19 @@ import type {
   CalendarEventDto,
   PlantDto,
   PlantLearningDto,
-  PlantStatsDto
+  PlantStatsDto,
+  OpenRouterIdentifyResult,
+  OpenRouterDiagnoseResult,
+  AchievementsDto
 } from '@/types/api';
+import type {
+  HomeAssistantConfigRequest,
+  HomeAssistantConfigResponse,
+  HomeAssistantRoomsSensorsResponse,
+  PlantConditionsHistoryResponse,
+  PlantConditionsResponse,
+  PlantRoomBindingRequest
+} from '@/types/home-assistant';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -132,4 +143,59 @@ export async function updateCity(city: string): Promise<AuthValidationResponse> 
     method: 'POST',
     body: JSON.stringify({ city })
   });
+}
+
+
+export async function saveHomeAssistantConfig(payload: HomeAssistantConfigRequest): Promise<HomeAssistantConfigResponse> {
+  return apiFetch<HomeAssistantConfigResponse>('/api/home-assistant/config', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+
+export async function getHomeAssistantRoomsAndSensors(): Promise<HomeAssistantRoomsSensorsResponse> {
+  return apiFetch<HomeAssistantRoomsSensorsResponse>('/api/home-assistant/rooms-and-sensors', {
+    method: 'GET'
+  });
+}
+
+export async function bindPlantRoom(plantId: number, payload: PlantRoomBindingRequest): Promise<PlantConditionsResponse> {
+  return apiFetch<PlantConditionsResponse>(`/api/plants/${plantId}/room`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getPlantConditions(plantId: number): Promise<PlantConditionsResponse> {
+  return apiFetch<PlantConditionsResponse>(`/api/plants/${plantId}/conditions`, { method: 'GET' });
+}
+
+export async function getPlantConditionsHistory(plantId: number, days = 7): Promise<PlantConditionsHistoryResponse> {
+  return apiFetch<PlantConditionsHistoryResponse>(`/api/plants/${plantId}/history-conditions?days=${days}`, {
+    method: 'GET'
+  });
+}
+
+
+export async function identifyPlantOpenRouter(imageBase64: string): Promise<OpenRouterIdentifyResult> {
+  return apiFetch<OpenRouterIdentifyResult>('/api/plant/identify-openrouter', {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64 })
+  });
+}
+
+export async function diagnosePlantOpenRouter(imageBase64: string, plantName: string): Promise<OpenRouterDiagnoseResult> {
+  return apiFetch<OpenRouterDiagnoseResult>('/api/plant/diagnose-openrouter', {
+    method: 'POST',
+    body: JSON.stringify({ imageBase64, plantName })
+  });
+}
+
+export async function getAchievements(): Promise<AchievementsDto> {
+  return apiFetch<AchievementsDto>('/api/user/achievements', { method: 'GET' });
+}
+
+export async function checkAchievements(): Promise<AchievementsDto> {
+  return apiFetch<AchievementsDto>('/api/user/achievements/check', { method: 'POST' });
 }

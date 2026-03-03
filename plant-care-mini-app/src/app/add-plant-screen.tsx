@@ -4,8 +4,11 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { RoomAndSensorSelector } from '@/components/RoomAndSensorSelector';
+import { PlantPhotoCapture } from '@/app/AddPlant/PlantPhotoCapture';
 import { createPlant, searchPlants } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import type { OpenRouterIdentifyResult } from '@/types/api';
 
 type Placement = 'INDOOR' | 'OUTDOOR';
 type PlantType = 'DEFAULT' | 'TROPICAL' | 'FERN' | 'SUCCULENT' | 'CONIFER';
@@ -38,6 +41,8 @@ export function AddPlantScreen() {
 
   const [searchHint, setSearchHint] = useState<string[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
+  const [createdPlantId, setCreatedPlantId] = useState<number | null>(null);
+  const [aiHint, setAiHint] = useState<string | null>(null);
 
   const steps = useMemo<StepKey[]>(() => {
     return placement === 'OUTDOOR'
@@ -62,9 +67,9 @@ export function AddPlantScreen() {
         perennial: placement === 'OUTDOOR' ? perennial : null,
         winterDormancyEnabled: placement === 'OUTDOOR' ? winterDormancyEnabled : null
       }),
-    onSuccess: () => {
+    onSuccess: (createdPlant) => {
       hapticNotify('success');
-      resetForm();
+      setCreatedPlantId(createdPlant.id);
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
@@ -95,8 +100,25 @@ export function AddPlantScreen() {
     setStepIndex((prev) => Math.max(prev - 1, 0));
   };
 
+  const applyIdentify = (result: OpenRouterIdentifyResult) => {
+    if (result.russianName && !name.trim()) {
+      setName(result.russianName);
+    }
+    if (result.wateringIntervalDays > 0) {
+      setBaseIntervalDays(String(result.wateringIntervalDays));
+    }
+    const latin = result.latinName ? ` (${result.latinName})` : '';
+    if (result.confidence < 60) {
+      setAiHint(`Низкая уверенность (${result.confidence}%). Проверьте вручную.${latin}`);
+      return;
+    }
+    setAiHint(`Определено: ${result.russianName ?? 'без названия'}${latin}, уверенность ${result.confidence}%`);
+  };
+
   return (
     <section className="space-y-3">
+      <PlantPhotoCapture onIdentified={applyIdentify} />
+      {aiHint ? <p className="text-xs text-ios-subtext">{aiHint}</p> : null}
       <div className="ios-blur-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-ios-caption text-ios-subtext">Шаг {stepIndex + 1} из {steps.length}</p>
@@ -282,6 +304,13 @@ export function AddPlantScreen() {
                 <p><b>Горшок:</b> {potVolumeLiters} л</p>
               )}
               <p><b>Тип:</b> {type}</p>
+              {createdPlantId ? (
+                <div className="pt-2">
+                  <RoomAndSensorSelector plantId={createdPlantId} compact />
+                </div>
+              ) : (
+                <p className="text-[12px] text-ios-subtext">После сохранения появится блок привязки комнаты и сенсоров Home Assistant.</p>
+              )}
             </div>
           ) : null}
         </motion.div>
@@ -301,21 +330,6 @@ export function AddPlantScreen() {
     </section>
   );
 
-  function resetForm() {
-    setName('');
-    setPotVolumeLiters('2');
-    setBaseIntervalDays('7');
-    setPlacement('INDOOR');
-    setType('DEFAULT');
-    setOutdoorAreaM2('3');
-    setOutdoorSoilType('LOAMY');
-    setSunExposure('PARTIAL_SHADE');
-    setMulched(false);
-    setPerennial(true);
-    setWinterDormancyEnabled(true);
-    setSearchHint([]);
-    setStepIndex(0);
-  }
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

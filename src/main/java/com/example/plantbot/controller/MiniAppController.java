@@ -17,6 +17,7 @@ import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
+import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.TelegramInitDataService;
 import com.example.plantbot.service.UserService;
@@ -43,6 +44,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -64,6 +66,7 @@ public class MiniAppController {
   private final WateringLogService wateringLogService;
   private final UserService userService;
   private final UserRepository userRepository;
+  private final PhotoUrlSignerService photoUrlSignerService;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
@@ -156,7 +159,7 @@ public class MiniAppController {
     User user = telegramInitDataService.validateAndResolveUser(initData);
     Plant plant = requireOwnedPlant(user, plantId);
 
-    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant);
+    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
     LocalDate today = LocalDate.now();
     plant.setLastWateredDate(today);
     plant.setLastReminderDate(null);
@@ -179,7 +182,35 @@ public class MiniAppController {
     String photoUrl = savePhoto(user, plant, request.photoBase64());
     plant.setPhotoUrl(photoUrl);
     plantService.save(plant);
-    return new PhotoUploadResponse(true, photoUrl);
+    return new PhotoUploadResponse(true, buildPlantPhotoUrl(plant));
+  }
+
+  @GetMapping(value = "/plants/{id}/photo")
+  public ResponseEntity<byte[]> getPhoto(
+      @PathVariable("id") Long plantId,
+      @RequestParam(name = "exp", required = false) Long exp,
+      @RequestParam(name = "sig", required = false) String sig
+  ) {
+    Plant plant = plantService.getById(plantId);
+    if (plant == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
+    }
+    if (!photoUrlSignerService.isValid(plantId, plant.getPhotoUrl(), exp, sig)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Нет доступа к фото");
+    }
+    Path photoFile = resolvePhotoPath(plant);
+    if (photoFile == null || !Files.exists(photoFile)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Фото не найдено");
+    }
+    try {
+      byte[] bytes = Files.readAllBytes(photoFile);
+      MediaType mediaType = MediaType.IMAGE_JPEG;
+      return ResponseEntity.ok()
+          .contentType(mediaType)
+          .body(bytes);
+    } catch (IOException ex) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не удалось прочитать фото");
+    }
   }
 
   @GetMapping("/calendar")
@@ -208,7 +239,7 @@ public class MiniAppController {
     List<Plant> plants = plantService.list(user);
     LocalDate today = LocalDate.now();
     return plants.stream().map(plant -> {
-      WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant);
+      WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
       int interval = Math.max(1, (int) Math.floor(rec.intervalDays()));
       LocalDate due = plant.getLastWateredDate().plusDays(interval);
       boolean overdue = due.isBefore(today);
@@ -326,7 +357,10 @@ public class MiniAppController {
   }
 
   private PlantResponse toPlantResponse(Plant plant, User user) {
-    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant);
+    if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
+      user = userService.save(user);
+    }
+    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
     int interval = Math.max(1, (int) Math.floor(rec.intervalDays()));
     LocalDate next = plant.getLastWateredDate().plusDays(interval);
     int ml = (int) Math.round(rec.waterLiters() * 1000.0);
@@ -334,12 +368,19 @@ public class MiniAppController {
         plant.getId(),
         plant.getName(),
         plant.getPlacement(),
+        plant.getPotVolumeLiters(),
+        plant.getOutdoorAreaM2(),
+        plant.getOutdoorSoilType(),
+        plant.getSunExposure(),
+        plant.getMulched(),
+        plant.getPerennial(),
+        plant.getWinterDormancyEnabled(),
         plant.getLastWateredDate(),
         plant.getBaseIntervalDays(),
         next,
         ml,
         plant.getType(),
-        plant.getPhotoUrl()
+        plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant)
     );
   }
 
@@ -356,7 +397,7 @@ public class MiniAppController {
       String fileName = String.format(Locale.ROOT, "plant-%d-%d.jpg", plant.getId(), System.currentTimeMillis());
       Path file = dir.resolve(fileName);
       Files.write(file, bytes);
-      return file.toString();
+      return user.getTelegramId() + "/" + fileName;
     } catch (IllegalArgumentException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "photoBase64 невалидный");
     } catch (IOException ex) {
@@ -364,11 +405,32 @@ public class MiniAppController {
     }
   }
 
+  private String buildPlantPhotoUrl(Plant plant) {
+    return photoUrlSignerService.buildSignedPhotoUrl(plant.getId(), plant.getPhotoUrl());
+  }
+
+  private Path resolvePhotoPath(Plant plant) {
+    String photoRef = plant.getPhotoUrl();
+    if (photoRef == null || photoRef.isBlank()) {
+      return null;
+    }
+
+    if (photoRef.startsWith("./") || photoRef.startsWith("/")) {
+      return Paths.get(photoRef).normalize();
+    }
+
+    String[] parts = photoRef.split("/", 2);
+    if (parts.length == 2) {
+      return Path.of("./data/photos/" + parts[0]).resolve(parts[1]).normalize();
+    }
+    return null;
+  }
+
   private List<CalendarEventResponse> buildCalendarEvents(User user, LocalDate start, LocalDate end) {
     List<CalendarEventResponse> events = new ArrayList<>();
     List<Plant> plants = plantService.list(user);
     for (Plant plant : plants) {
-      WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant);
+      WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
       int step = Math.max(1, (int) Math.floor(rec.intervalDays()));
       LocalDate next = plant.getLastWateredDate().plusDays(step);
       while (!next.isAfter(end)) {
