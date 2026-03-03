@@ -1,5 +1,7 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.OpenRouterCacheEntry;
+import com.example.plantbot.repository.OpenRouterCacheRepository;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.util.AIWateringProfile;
@@ -23,8 +25,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,17 +35,25 @@ public class OpenRouterPlantAdvisorService {
   private static final Pattern FENCED_JSON_PATTERN = Pattern.compile("(?s)^```(?:json)?\\s*(.*?)\\s*```$");
   private static final Pattern LATIN_TEXT_PATTERN = Pattern.compile("[A-Za-z]");
   private static final Pattern CYRILLIC_TEXT_PATTERN = Pattern.compile("[А-Яа-яЁё]");
+  private static final String NS_CARE = "care";
+  private static final String NS_WATERING = "watering";
+  private static final String NS_CHAT = "chat";
 
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
-  private final ConcurrentMap<String, CachedCareAdvice> careAdviceCache = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, CachedWateringProfile> wateringProfileCache = new ConcurrentHashMap<>();
+  private final OpenRouterCacheRepository openRouterCacheRepository;
 
   @Value("${openrouter.api-key:}")
   private String apiKey;
 
   @Value("${openrouter.model:}")
   private String model;
+
+  @Value("${openrouter.model-plant:}")
+  private String plantModel;
+
+  @Value("${openrouter.model-chat:}")
+  private String chatModel;
 
   @Value("${openrouter.base-url:https://openrouter.ai/api/v1/chat/completions}")
   private String baseUrl;
@@ -62,12 +70,19 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.watering-cache-ttl-minutes:720}")
   private int wateringCacheTtlMinutes;
 
+  @Value("${openrouter.chat-cache-ttl-minutes:10080}")
+  private int chatCacheTtlMinutes;
+
+  @Value("${openrouter.cache-max-entries:5000}")
+  private int cacheMaxEntries;
+
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
-    if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
+    String modelToUse = resolvePlantModel();
+    if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
     try {
-      JsonNode body = postMessages(List.of(
+      JsonNode body = postMessages(modelToUse, List.of(
           Map.of("role", "system", "content", intervalSystemPrompt()),
           Map.of("role", "user", "content", userPrompt(plantName))
       ));
@@ -100,7 +115,7 @@ public class OpenRouterPlantAdvisorService {
       }
 
       PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
-      String source = "OpenRouter:" + model;
+      String source = "OpenRouter:" + modelToUse;
       log.info("OpenRouter interval success. input='{}', normalized='{}', interval={}, type={}, rawPreview='{}'",
           plantName, normalizedName, interval, suggestedType, preview(content));
       return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
@@ -111,21 +126,22 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays) {
+    String modelToUse = resolvePlantModel();
     if (plant == null || plant.getName() == null || plant.getName().isBlank()) {
       return Optional.empty();
     }
-    if (apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
+    if (apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
 
-    String cacheKey = buildCareCacheKey(plant, recommendedIntervalDays);
+    String cacheKey = buildCareCacheKey(modelToUse, plant, recommendedIntervalDays);
     Optional<PlantCareAdvice> cached = getCareAdviceCache(cacheKey);
     if (cached != null) {
       return cached;
     }
 
     try {
-      JsonNode body = postMessages(List.of(
+      JsonNode body = postMessages(modelToUse, List.of(
           Map.of("role", "system", "content", careAdviceSystemPrompt()),
           Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
       ));
@@ -176,7 +192,7 @@ public class OpenRouterPlantAdvisorService {
       }
 
       String note = normalizeAdviceNote(advice.path("note").asText("").trim());
-      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + model);
+      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + modelToUse);
       putCareAdviceCache(cacheKey, Optional.of(result));
       log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
           plant.getName(), cycle, additives, soilType, soilComposition, result.source());
@@ -189,16 +205,17 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
-    if (plant == null || apiKey == null || apiKey.isBlank() || model == null || model.isBlank()) {
+    String modelToUse = resolvePlantModel();
+    if (plant == null || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
-    String cacheKey = buildWateringProfileCacheKey(plant, weather, outdoor);
+    String cacheKey = buildWateringProfileCacheKey(modelToUse, plant, weather, outdoor);
     Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
     if (cached != null) {
       return cached;
     }
     try {
-      JsonNode body = postMessages(List.of(
+      JsonNode body = postMessages(modelToUse, List.of(
           Map.of("role", "system", "content", wateringProfileSystemPrompt()),
           Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
       ));
@@ -220,7 +237,7 @@ public class OpenRouterPlantAdvisorService {
       }
       intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
       waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
-      AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + model);
+      AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + modelToUse);
       putWateringProfileCache(cacheKey, Optional.of(value));
       return Optional.of(value);
     } catch (Exception ex) {
@@ -230,7 +247,47 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
-  private JsonNode postMessages(List<Map<String, Object>> messages) {
+  public Optional<String> answerGardeningQuestion(String question) {
+    String modelToUse = resolveChatModel();
+    if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+      return Optional.empty();
+    }
+
+    String normalizedQuestion = question.trim();
+    String cacheKey = buildChatCacheKey(modelToUse, normalizedQuestion);
+    Optional<String> cached = getChatAnswerCache(cacheKey);
+    if (cached != null) {
+      log.info("OpenRouter chat cache hit. question='{}', hasAnswer={}", preview(normalizedQuestion), cached.isPresent());
+      return cached;
+    }
+
+    try {
+      JsonNode body = postMessages(modelToUse, List.of(
+          Map.of("role", "system", "content", gardeningChatSystemPrompt()),
+          Map.of("role", "user", "content", normalizedQuestion)
+      ));
+      if (body == null) {
+        putChatAnswerCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      String content = extractContent(body);
+      if (content.isEmpty()) {
+        putChatAnswerCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      String answer = content.trim();
+      putChatAnswerCache(cacheKey, Optional.of(answer));
+      log.info("OpenRouter chat success. model='{}', question='{}', answerPreview='{}'",
+          modelToUse, preview(normalizedQuestion), preview(answer));
+      return Optional.of(answer);
+    } catch (Exception ex) {
+      putChatAnswerCache(cacheKey, Optional.empty());
+      log.warn("OpenRouter chat failed for '{}': {}", preview(normalizedQuestion), ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private JsonNode postMessages(String modelName, List<Map<String, Object>> messages) {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(apiKey);
@@ -242,7 +299,7 @@ public class OpenRouterPlantAdvisorService {
     }
 
     Map<String, Object> request = Map.of(
-        "model", model,
+        "model", modelName,
         "temperature", 0,
         "messages", messages
     );
@@ -301,6 +358,18 @@ public class OpenRouterPlantAdvisorService {
         - interval_days must be integer in [1..30]
         - confidence must be number in [0..1]
         - if uncertain, choose DEFAULT and a conservative interval_days
+        """;
+  }
+
+  private String gardeningChatSystemPrompt() {
+    return """
+        Ты агроном-консультант по садоводству и уходу за комнатными/уличными растениями.
+        Отвечай только на русском языке, кратко и по делу.
+        Формат:
+        - сначала короткий вывод (1-2 предложения),
+        - затем 3-7 практических шагов.
+        Если вопрос не про растения/сад — вежливо скажи, что помогаешь только по теме растений.
+        Не выдумывай факты: если данных мало, предложи что уточнить.
         """;
   }
 
@@ -398,75 +467,180 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
-  private String buildCareCacheKey(Plant plant, double recommendedIntervalDays) {
-    String modelKey = (model == null || model.isBlank()) ? "model:unknown" : "model:" + model.trim().toLowerCase();
-    return (modelKey + "|"
+  private String buildCareCacheKey(String modelName, Plant plant, double recommendedIntervalDays) {
+    String modelKey = (modelName == null || modelName.isBlank()) ? "model:unknown" : "model:" + modelName.trim().toLowerCase();
+    return (NS_CARE + "|"
+        + modelKey + "|"
         + plant.getName().trim().toLowerCase() + "|"
         + plant.getType().name() + "|"
         + plant.getPotVolumeLiters() + "|"
         + Math.round(recommendedIntervalDays * 10.0) / 10.0);
   }
 
-  private String buildWateringProfileCacheKey(Plant plant, WeatherData weather, boolean outdoor) {
-    String modelKey = (model == null || model.isBlank()) ? "model:unknown" : "model:" + model.trim().toLowerCase();
+  private String buildWateringProfileCacheKey(String modelName, Plant plant, WeatherData weather, boolean outdoor) {
+    String modelKey = (modelName == null || modelName.isBlank()) ? "model:unknown" : "model:" + modelName.trim().toLowerCase();
     double t = weather == null ? 20.0 : Math.round(weather.temperatureC());
     double h = weather == null ? 50.0 : Math.round(weather.humidityPercent() / 5.0) * 5.0;
     double r = weather == null ? 0.0 : Math.round(weather.precipitationMm1h() * 2.0) / 2.0;
-    return modelKey
+    return NS_WATERING
+        + "|" + modelKey
         + "|" + plant.getName().trim().toLowerCase()
         + "|" + plant.getType().name()
         + "|" + (outdoor ? "out" : "in")
         + "|t=" + t + "|h=" + h + "|r=" + r;
   }
 
+  private String buildChatCacheKey(String modelName, String question) {
+    String modelKey = (modelName == null || modelName.isBlank()) ? "model:unknown" : "model:" + modelName.trim().toLowerCase();
+    String normalizedQuestion = question == null ? "" : question.trim().toLowerCase().replaceAll("\\s+", " ");
+    return NS_CHAT + "|" + modelKey + "|" + normalizedQuestion;
+  }
+
+  private String resolvePlantModel() {
+    if (plantModel != null && !plantModel.isBlank()) {
+      return plantModel.trim();
+    }
+    if (model != null && !model.isBlank()) {
+      return model.trim();
+    }
+    return "";
+  }
+
+  private String resolveChatModel() {
+    if (chatModel != null && !chatModel.isBlank()) {
+      return chatModel.trim();
+    }
+    return resolvePlantModel();
+  }
+
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {
-    CachedCareAdvice row = careAdviceCache.get(key);
-    if (row == null) {
+    Optional<OpenRouterCacheEntry> cached = openRouterCacheRepository.findByCacheKey(key);
+    if (cached.isEmpty()) {
       return null;
     }
-    if (row.expiresAt().isBefore(Instant.now())) {
-      careAdviceCache.remove(key);
+    OpenRouterCacheEntry row = cached.get();
+    if (row.getExpiresAt().isBefore(Instant.now())) {
+      openRouterCacheRepository.delete(row);
       return null;
     }
-    return row.value();
+    if (!row.isHit()) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(objectMapper.readValue(row.getPayload(), PlantCareAdvice.class));
+    } catch (Exception ex) {
+      openRouterCacheRepository.delete(row);
+      return null;
+    }
   }
 
   private void putCareAdviceCache(String key, Optional<PlantCareAdvice> value) {
     long ttlSeconds = Math.max(1, careCacheTtlMinutes) * 60L;
-    careAdviceCache.put(key, new CachedCareAdvice(value, Instant.now().plusSeconds(ttlSeconds)));
+    OpenRouterCacheEntry row = openRouterCacheRepository.findByCacheKey(key).orElseGet(OpenRouterCacheEntry::new);
+    row.setCacheKey(key);
+    row.setNamespace(NS_CARE);
+    row.setHit(value.isPresent());
+    row.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
+    row.setUpdatedAt(Instant.now());
+    try {
+      row.setPayload(value.isPresent() ? objectMapper.writeValueAsString(value.get()) : null);
+    } catch (Exception ex) {
+      row.setPayload(null);
+      row.setHit(false);
+    }
+    openRouterCacheRepository.save(row);
+    enforceCacheLimit();
   }
 
   private Optional<AIWateringProfile> getWateringProfileCache(String key) {
-    CachedWateringProfile row = wateringProfileCache.get(key);
-    if (row == null) {
+    Optional<OpenRouterCacheEntry> cached = openRouterCacheRepository.findByCacheKey(key);
+    if (cached.isEmpty()) {
       return null;
     }
-    if (row.expiresAt().isBefore(Instant.now())) {
-      wateringProfileCache.remove(key);
+    OpenRouterCacheEntry row = cached.get();
+    if (row.getExpiresAt().isBefore(Instant.now())) {
+      openRouterCacheRepository.delete(row);
       return null;
     }
-    return row.value();
+    if (!row.isHit()) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(objectMapper.readValue(row.getPayload(), AIWateringProfile.class));
+    } catch (Exception ex) {
+      openRouterCacheRepository.delete(row);
+      return null;
+    }
   }
 
   private void putWateringProfileCache(String key, Optional<AIWateringProfile> value) {
     long ttlSeconds = Math.max(1, wateringCacheTtlMinutes) * 60L;
-    wateringProfileCache.put(key, new CachedWateringProfile(value, Instant.now().plusSeconds(ttlSeconds)));
+    OpenRouterCacheEntry row = openRouterCacheRepository.findByCacheKey(key).orElseGet(OpenRouterCacheEntry::new);
+    row.setCacheKey(key);
+    row.setNamespace(NS_WATERING);
+    row.setHit(value.isPresent());
+    row.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
+    row.setUpdatedAt(Instant.now());
+    try {
+      row.setPayload(value.isPresent() ? objectMapper.writeValueAsString(value.get()) : null);
+    } catch (Exception ex) {
+      row.setPayload(null);
+      row.setHit(false);
+    }
+    openRouterCacheRepository.save(row);
+    enforceCacheLimit();
   }
 
-  private record CachedCareAdvice(Optional<PlantCareAdvice> value, Instant expiresAt) {
+  private Optional<String> getChatAnswerCache(String key) {
+    Optional<OpenRouterCacheEntry> cached = openRouterCacheRepository.findByCacheKey(key);
+    if (cached.isEmpty()) {
+      return null;
+    }
+    OpenRouterCacheEntry row = cached.get();
+    if (row.getExpiresAt().isBefore(Instant.now())) {
+      openRouterCacheRepository.delete(row);
+      return null;
+    }
+    return row.isHit() ? Optional.ofNullable(row.getPayload()) : Optional.empty();
   }
 
-  private record CachedWateringProfile(Optional<AIWateringProfile> value, Instant expiresAt) {
+  private void putChatAnswerCache(String key, Optional<String> value) {
+    long ttlSeconds = Math.max(1, chatCacheTtlMinutes) * 60L;
+    OpenRouterCacheEntry row = openRouterCacheRepository.findByCacheKey(key).orElseGet(OpenRouterCacheEntry::new);
+    row.setCacheKey(key);
+    row.setNamespace(NS_CHAT);
+    row.setHit(value.isPresent());
+    row.setPayload(value.orElse(null));
+    row.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
+    row.setUpdatedAt(Instant.now());
+    openRouterCacheRepository.save(row);
+    enforceCacheLimit();
+  }
+
+  private void enforceCacheLimit() {
+    openRouterCacheRepository.deleteByExpiresAtBefore(Instant.now());
+    long max = Math.max(100, cacheMaxEntries);
+    long count = openRouterCacheRepository.count();
+    if (count <= max) {
+      return;
+    }
+    List<OpenRouterCacheEntry> oldest = openRouterCacheRepository.findTop200ByOrderByUpdatedAtAsc();
+    long toDelete = count - max;
+    if (toDelete <= 0 || oldest.isEmpty()) {
+      return;
+    }
+    int end = (int) Math.min(toDelete, oldest.size());
+    openRouterCacheRepository.deleteAllInBatch(oldest.subList(0, end));
   }
 
   public CacheClearStats clearCaches() {
-    int careSize = careAdviceCache.size();
-    int wateringSize = wateringProfileCache.size();
-    careAdviceCache.clear();
-    wateringProfileCache.clear();
-    return new CacheClearStats(careSize, wateringSize);
+    int careSize = (int) openRouterCacheRepository.countByNamespace(NS_CARE);
+    int wateringSize = (int) openRouterCacheRepository.countByNamespace(NS_WATERING);
+    int chatSize = (int) openRouterCacheRepository.countByNamespace(NS_CHAT);
+    openRouterCacheRepository.deleteAllInBatch();
+    return new CacheClearStats(careSize, wateringSize, chatSize);
   }
 
-  public record CacheClearStats(int careAdviceEntries, int wateringProfileEntries) {
+  public record CacheClearStats(int careAdviceEntries, int wateringProfileEntries, int chatEntries) {
   }
 }

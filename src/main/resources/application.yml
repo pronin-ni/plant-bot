@@ -15,15 +15,20 @@ bot:
   token: ${TELEGRAM_BOT_TOKEN:}
   username: ${TELEGRAM_BOT_USERNAME:}
   update-threads: ${BOT_UPDATE_THREADS:4}
+  list-card-cache-max-entries: ${BOT_LIST_CARD_CACHE_MAX_ENTRIES:1000}
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}
   model: ${OPENROUTER_MODEL:}
+  model-plant: ${OPENROUTER_MODEL_PLANT:}
+  model-chat: ${OPENROUTER_MODEL_CHAT:}
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
   site-url: ${OPENROUTER_SITE_URL:}
   app-name: ${OPENROUTER_APP_NAME:plant-bot}
   care-cache-ttl-minutes: ${OPENROUTER_CARE_CACHE_TTL_MINUTES:10080}
   watering-cache-ttl-minutes: ${OPENROUTER_WATERING_CACHE_TTL_MINUTES:720}
+  chat-cache-ttl-minutes: ${OPENROUTER_CHAT_CACHE_TTL_MINUTES:10080}
+  cache-max-entries: ${OPENROUTER_CACHE_MAX_ENTRIES:5000}
   backoff-minutes: 60
 
 openweather:
@@ -33,6 +38,8 @@ openweather:
   geo-reverse-base-url: https://api.openweathermap.org/geo/1.0/reverse
   units: metric
   cache-ttl-minutes: 15
+  cache-max-entries: ${OPENWEATHER_CACHE_MAX_ENTRIES:500}
+  rain-max-keys: ${OPENWEATHER_RAIN_MAX_KEYS:500}
 
 perenual:
   api-key: ${PERENUAL_API_KEY:}

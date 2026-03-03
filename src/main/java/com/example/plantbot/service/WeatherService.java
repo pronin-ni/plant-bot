@@ -57,6 +57,12 @@ public class WeatherService {
   @Value("${openweather.cache-ttl-minutes:15}")
   private long cacheTtlMinutes;
 
+  @Value("${openweather.cache-max-entries:500}")
+  private int cacheMaxEntries;
+
+  @Value("${openweather.rain-max-keys:500}")
+  private int rainMaxKeys;
+
   public Optional<WeatherData> getCurrent(String city, Double lat, Double lon) {
     if (apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
@@ -171,6 +177,7 @@ public class WeatherService {
     appendRainHistory(key, data.precipitationMm1h());
     long ttlSeconds = Math.max(1, cacheTtlMinutes) * 60L;
     cache.put(key, new CachedWeather(data, Instant.now().plusSeconds(ttlSeconds)));
+    enforceWeatherCacheLimit();
     return Optional.of(data);
   }
 
@@ -290,6 +297,7 @@ public class WeatherService {
   private void appendRainHistory(String key, double mmPerHour) {
     rainHistory.computeIfAbsent(key, k -> new ArrayList<>()).add(new RainSample(Instant.now(), mmPerHour));
     pruneRainHistory(key);
+    enforceRainHistoryLimit();
   }
 
   private void pruneRainHistory(String key) {
@@ -299,6 +307,31 @@ public class WeatherService {
     }
     Instant cutoff = Instant.now().minusSeconds(72 * 3600L);
     samples.removeIf(sample -> sample.at().isBefore(cutoff));
+  }
+
+  private void enforceWeatherCacheLimit() {
+    cache.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().expiresAt().isBefore(Instant.now()));
+    int max = Math.max(50, cacheMaxEntries);
+    if (cache.size() <= max) {
+      return;
+    }
+    int toRemove = cache.size() - max;
+    List<String> keys = new ArrayList<>(cache.keySet());
+    for (int i = 0; i < toRemove && i < keys.size(); i++) {
+      cache.remove(keys.get(i));
+    }
+  }
+
+  private void enforceRainHistoryLimit() {
+    int max = Math.max(50, rainMaxKeys);
+    if (rainHistory.size() <= max) {
+      return;
+    }
+    int toRemove = rainHistory.size() - max;
+    List<String> keys = new ArrayList<>(rainHistory.keySet());
+    for (int i = 0; i < toRemove && i < keys.size(); i++) {
+      rainHistory.remove(keys.get(i));
+    }
   }
 
   private String capitalizeWords(String text) {

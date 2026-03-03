@@ -82,6 +82,9 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   @Value("${bot.list-card-cache-ttl-minutes:360}")
   private long listCardCacheTtlMinutes;
 
+  @Value("${bot.list-card-cache-max-entries:1000}")
+  private int listCardCacheMaxEntries;
+
   private final Map<Long, ConversationState> states = new ConcurrentHashMap<>();
   private final Map<Long, List<CityOption>> pendingCityOptions = new ConcurrentHashMap<>();
   private final Map<Long, Object> userLocks = new ConcurrentHashMap<>();
@@ -225,7 +228,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
               + "• /learning — адаптация интервала\n"
               + "• /setcity — город для погоды\n"
               + "• /recalc — обновить расписание полива\n"
-              + "• /clearcache — очистить накопленные кэши");
+              + "• /clearcache — очистить накопленные кэши\n\n"
+              + "Можно просто написать вопрос по садоводству — отвечу через AI.");
       case "/add" -> startAddPlant(user, message.getChatId());
       case "/list" -> sendPlantList(user, message.getChatId());
       case "/delete" -> sendDeleteList(user, message.getChatId());
@@ -319,6 +323,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       case SET_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
       case RECALC_WAIT_CITY, RECALC_WAIT_CITY_CHOOSE, RECALC_OUTDOOR_SOIL, RECALC_OUTDOOR_SUN, RECALC_OUTDOOR_MULCH ->
           sendText(message.getChatId(), "Сценарий уточняющих шагов отключен. Используй /recalc для полного обновления расписания.");
+      case NONE -> handleFreeQuestion(message.getChatId(), text);
       default -> sendText(message.getChatId(), "Чтобы начать, используй /add");
     }
   }
@@ -329,7 +334,11 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     User user = userService.getOrCreate(callbackQuery.getFrom());
 
     if (data.startsWith("watered:")) {
-      Long plantId = Long.parseLong(data.substring("watered:".length()));
+      Long plantId = parseCallbackId(data, "watered:");
+      if (plantId == null) {
+        sendText(chatId, "Некорректный идентификатор растения.");
+        return;
+      }
       Plant plant = plantService.getById(plantId);
       if (plant == null) {
         sendText(chatId, "Растение не найдено");
@@ -354,7 +363,11 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     }
 
     if (data.startsWith("delete:")) {
-      Long plantId = Long.parseLong(data.substring("delete:".length()));
+      Long plantId = parseCallbackId(data, "delete:");
+      if (plantId == null) {
+        sendText(chatId, "Некорректный идентификатор растения.");
+        return;
+      }
       Plant plant = plantService.getById(plantId);
       if (plant == null) {
         sendText(chatId, "Растение не найдено");
@@ -862,10 +875,24 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private void putPlantCardCache(Long plantId, String cardText) {
     long ttlSeconds = Math.max(1, listCardCacheTtlMinutes) * 60L;
     plantCardCache.put(plantId, new PlantCardCacheEntry(cardText, Instant.now().plusSeconds(ttlSeconds)));
+    enforceListCardCacheLimit();
   }
 
   private boolean isPlantCardCacheFresh(PlantCardCacheEntry entry) {
     return entry != null && entry.expiresAt().isAfter(Instant.now());
+  }
+
+  private void enforceListCardCacheLimit() {
+    plantCardCache.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().expiresAt().isBefore(Instant.now()));
+    int max = Math.max(100, listCardCacheMaxEntries);
+    if (plantCardCache.size() <= max) {
+      return;
+    }
+    int toRemove = plantCardCache.size() - max;
+    List<Long> keys = new ArrayList<>(plantCardCache.keySet());
+    for (int i = 0; i < toRemove && i < keys.size(); i++) {
+      plantCardCache.remove(keys.get(i));
+    }
   }
 
   private void invalidatePlantCardCache(Long plantId) {
@@ -962,13 +989,14 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
     String text = "🧹 Кэши очищены:\n"
         + "• Поиск растений (SQLite): " + lookupRows + "\n"
-        + "• OpenRouter (care/watering): " + openRouterStats.careAdviceEntries() + "/" + openRouterStats.wateringProfileEntries() + "\n"
+        + "• OpenRouter (care/watering/chat): " + openRouterStats.careAdviceEntries() + "/"
+        + openRouterStats.wateringProfileEntries() + "/" + openRouterStats.chatEntries() + "\n"
         + "• Погода (cache/rainKeys/samples): " + weatherStats.weatherEntries() + "/"
         + weatherStats.rainKeys() + "/" + weatherStats.rainSamples() + "\n"
         + "• Карточки /list (in-memory): " + listCardEntries;
     sendText(chatId, text);
-    log.info("Caches cleared via command: lookupRows={}, openRouterCare={}, openRouterWater={}, weatherEntries={}, rainKeys={}, rainSamples={}, listCardEntries={}",
-        lookupRows, openRouterStats.careAdviceEntries(), openRouterStats.wateringProfileEntries(),
+    log.info("Caches cleared via command: lookupRows={}, openRouterCare={}, openRouterWater={}, openRouterChat={}, weatherEntries={}, rainKeys={}, rainSamples={}, listCardEntries={}",
+        lookupRows, openRouterStats.careAdviceEntries(), openRouterStats.wateringProfileEntries(), openRouterStats.chatEntries(),
         weatherStats.weatherEntries(), weatherStats.rainKeys(), weatherStats.rainSamples(), listCardEntries);
   }
 
@@ -1376,6 +1404,33 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       return month.getMonth().toString() + " " + month.getYear();
     }
     return Character.toUpperCase(label.charAt(0)) + label.substring(1) + " " + month.getYear();
+  }
+
+  private Long parseCallbackId(String data, String prefix) {
+    if (data == null || prefix == null || !data.startsWith(prefix)) {
+      return null;
+    }
+    String raw = data.substring(prefix.length()).trim();
+    try {
+      return Long.parseLong(raw);
+    } catch (Exception ex) {
+      return null;
+    }
+  }
+
+  private void handleFreeQuestion(Long chatId, String text) {
+    Integer loadingMessageId = sendLoadingMessage(chatId, "🤖 Готовлю ответ по садоводству...");
+    Optional<String> answer = openRouterPlantAdvisorService.answerGardeningQuestion(text);
+    if (answer.isPresent()) {
+      if (!tryEditMessage(chatId, loadingMessageId, answer.get(), null)) {
+        sendText(chatId, answer.get());
+      }
+      return;
+    }
+    String fallback = "Не удалось получить ответ от AI сейчас.\nПопробуй еще раз или используй /add для работы с растениями.";
+    if (!tryEditMessage(chatId, loadingMessageId, fallback, null)) {
+      sendText(chatId, fallback);
+    }
   }
 
   private record PlantCardCacheEntry(String cardText, Instant expiresAt) {

@@ -4,20 +4,28 @@
 
 ## Запуск
 
-1. Установи Java 17+.
-2. Создай бота через BotFather и получи токен.
-3. Получи ключ OpenWeather (опционально, для адаптации по погоде).
-4. Получи ключ Perenual (для автоподбора базового интервала по названию растения).
-5. Запусти:
+1. Установить Java 17+.
+2. Создать бота через BotFather и получить токен.
+3. Получить ключ OpenWeather (опционально, для адаптации по погоде).
+4. Получить ключ Perenual (для автоподбора базового интервала по названию растения).
+5. Запустить:
 
 ```bash
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export BOT_UPDATE_THREADS=4
+export BOT_LIST_CARD_CACHE_MAX_ENTRIES=1000
 export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
+export OPENROUTER_MODEL_PLANT=openai/gpt-4o-mini
+export OPENROUTER_MODEL_CHAT=openai/gpt-4o-mini
 export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
+export OPENROUTER_WATERING_CACHE_TTL_MINUTES=720
+export OPENROUTER_CHAT_CACHE_TTL_MINUTES=10080
+export OPENROUTER_CACHE_MAX_ENTRIES=5000
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
+export OPENWEATHER_CACHE_MAX_ENTRIES=500
+export OPENWEATHER_RAIN_MAX_KEYS=500
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
 export HTTP_CLIENT_READ_TIMEOUT_MS=15000
@@ -34,12 +42,20 @@ export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_BOT_USERNAME`
 - `BOT_UPDATE_THREADS` (кол-во параллельных обработчиков обновлений, по умолчанию `4`)
+- `BOT_LIST_CARD_CACHE_MAX_ENTRIES` (лимит in-memory кэша карточек `/list`, по умолчанию `1000`)
 
 Опциональные (рекомендуются):
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_MODEL` (пример: `openai/gpt-4o-mini`)
+- `OPENROUTER_MODEL_PLANT` (модель для автопоиска/советов; если пусто — берется `OPENROUTER_MODEL`)
+- `OPENROUTER_MODEL_CHAT` (модель для свободных вопросов в чате; если пусто — берется `OPENROUTER_MODEL_PLANT`/`OPENROUTER_MODEL`)
 - `OPENROUTER_CARE_CACHE_TTL_MINUTES` (TTL кэша советов по циклу/добавкам, по умолчанию `10080`)
+- `OPENROUTER_WATERING_CACHE_TTL_MINUTES` (TTL кэша профиля полива, по умолчанию `720`)
+- `OPENROUTER_CHAT_CACHE_TTL_MINUTES` (TTL кэша AI-ответов на вопросы, по умолчанию `10080`)
+- `OPENROUTER_CACHE_MAX_ENTRIES` (глобальный лимит записей OpenRouter-кэша в SQLite, по умолчанию `5000`)
 - `OPENWEATHER_API_KEY`
+- `OPENWEATHER_CACHE_MAX_ENTRIES` (лимит in-memory кэша погоды, по умолчанию `500`)
+- `OPENWEATHER_RAIN_MAX_KEYS` (лимит ключей in-memory истории осадков, по умолчанию `500`)
 - `PERENUAL_API_KEY`
 
 Сетевые таймауты HTTP-клиента (мс):
@@ -58,6 +74,7 @@ export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 - `/recalc` — полностью обновить расписание полива и пересчитать рекомендации по всем растениям
 - `/clearcache` — очистить накопленные кэши (поиск растений, OpenRouter, погода)
 - `/cancel` — отменить текущий ввод
+- `Любой текст без команды` — вопрос по садоводству (ответ через OpenRouter с кэшированием)
 
 ## Docker (NAS)
 
@@ -65,10 +82,18 @@ export HTTP_CLIENT_READ_TIMEOUT_MS=15000
 export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
 export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
 export BOT_UPDATE_THREADS=4
+export BOT_LIST_CARD_CACHE_MAX_ENTRIES=1000
 export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
 export OPENROUTER_MODEL=openai/gpt-4o-mini
+export OPENROUTER_MODEL_PLANT=openai/gpt-4o-mini
+export OPENROUTER_MODEL_CHAT=openai/gpt-4o-mini
 export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
+export OPENROUTER_WATERING_CACHE_TTL_MINUTES=720
+export OPENROUTER_CHAT_CACHE_TTL_MINUTES=10080
+export OPENROUTER_CACHE_MAX_ENTRIES=5000
 export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
+export OPENWEATHER_CACHE_MAX_ENTRIES=500
+export OPENWEATHER_RAIN_MAX_KEYS=500
 export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
 export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
 export HTTP_CLIENT_READ_TIMEOUT_MS=15000
@@ -80,7 +105,7 @@ docker compose up -d
 
 Можно также скопировать `.env.example` в `.env` и заполнить, тогда `docker compose` подхватит переменные автоматически.
 
-Для локальной сборки из исходников используй `docker-compose.dev.yml`:
+Для локальной сборки из исходников использовать `docker-compose.dev.yml`:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build
@@ -93,6 +118,8 @@ docker compose -f docker-compose.dev.yml up -d --build
 Примечание по автопоиску: сначала запрос в OpenRouter, затем цепочка `словарь -> MyMemory ru->en -> транслитерация -> iNaturalist aliases`.
 Если Perenual недоступен или достигнут лимит, бот использует fallback через GBIF и эвристику.
 Для экономии лимитов API включен TTL-кэш поиска в SQLite (`perenual.cache-ttl-minutes`, по умолчанию 10080 = 7 дней).
+
+OpenRouter-кэш (подбор интервала, care/watering, чат-ответы) теперь хранится в SQLite (`openrouter_cache`), а не в RAM.
 
 ### OpenRouter prompt and response contract
 
