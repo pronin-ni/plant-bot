@@ -10,6 +10,9 @@ spring:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         format_sql: false
     open-in-view: false
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
 
 bot:
   token: ${TELEGRAM_BOT_TOKEN:}
@@ -64,6 +67,8 @@ scheduler:
   daily-cron: "0 0 9 * * *"
 
 telegram:
+  bot:
+    enabled: ${TELEGRAM_BOT_ENABLED:true}
   auth:
     max-age-seconds: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:86400}
 

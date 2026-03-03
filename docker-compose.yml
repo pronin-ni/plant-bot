@@ -15,6 +15,7 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME}"
+      TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-true}"
       BOT_UPDATE_THREADS: "${BOT_UPDATE_THREADS:-4}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
@@ -31,6 +32,43 @@ services:
       HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
       HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
       TZ: "Europe/Moscow"
+    volumes:
+      - plantbot-data:/app/data
+
+
+  plant-miniapp:
+    profiles: ["miniapp-only"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/pronin-ni/plant-bot:latest
+    container_name: plant-miniapp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      TELEGRAM_BOT_ENABLED: "false"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
+      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
+      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
+      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
+      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
+      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
+      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
+      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
+      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
+      TZ: "Europe/Moscow"
+    ports:
+      - "${MINIAPP_PORT:-8080}:8080"
     volumes:
       - plantbot-data:/app/data
 

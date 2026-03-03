@@ -10,14 +10,80 @@
 ```bash
 cp .env.example .env
 ```
-2. Заполнить минимум:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_BOT_USERNAME`
-- `APP_PUBLIC_BASE_URL` (внешний URL, например `https://plant.example.com`)
-3. Запустить:
+
+2. Выбрать режим запуска.
+
+Полный режим (бот + API + Mini App):
+- заполнить `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `APP_PUBLIC_BASE_URL`
+- запустить:
 ```bash
-docker compose build
-docker compose up -d
+docker compose up -d --build
+```
+
+Miniapp-only режим (API + Mini App, без запуска Telegram-бота):
+- в `.env` можно оставить Telegram токен/username пустыми
+- важно: `TELEGRAM_BOT_ENABLED=false`
+- запустить профиль:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+```
+
+## Miniapp-only: что это и зачем
+
+`miniapp-only` — это режим, где поднимаются только:
+- backend API (`/api/...`)
+- Telegram Mini App (`/mini-app/...`)
+
+И **не поднимается Telegram LongPolling bot** (регистрация в Bot API отключена).
+
+Когда использовать:
+- локальная/стендовая проверка фронта и REST API без реального bot token;
+- деплой Mini App отдельно от Telegram-бота;
+- диагностика API/верстки, когда бот временно не нужен.
+
+Что меняется технически:
+- `TELEGRAM_BOT_ENABLED=false`
+- бин `TelegramConfig` не инициализируется, и приложение не падает на регистрации бота.
+
+Ограничения режима:
+- чат-бот в Telegram (команды `/start`, `/add` и т.д.) не работает;
+- Mini App работает штатно, но API по-прежнему требует `X-Telegram-Init-Data` для защищенных endpoint'ов.
+
+### Настройка miniapp-only
+
+1. Создать `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Указать минимум:
+```env
+TELEGRAM_BOT_ENABLED=false
+APP_PUBLIC_BASE_URL=https://your-domain.example
+WEB_CORS_ALLOWED_ORIGINS=https://your-domain.example
+```
+
+3. Запуск:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+```
+
+4. Проверка:
+```bash
+curl -fsS https://your-domain.example/actuator/health
+# ожидается: {"status":"UP"}
+```
+
+### Как вернуться в полный режим
+
+```env
+TELEGRAM_BOT_ENABLED=true
+TELEGRAM_BOT_TOKEN=<real_token>
+TELEGRAM_BOT_USERNAME=<real_username>
+```
+
+```bash
+docker compose up -d --build plant-bot
 ```
 
 ## URL
@@ -32,7 +98,6 @@ docker compose up -d
 ## Portainer Stack (copy/paste)
 
 ```yaml
-version: "3.9"
 services:
   plant-bot:
     build:
@@ -50,6 +115,7 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME}"
+      TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-true}"
       BOT_UPDATE_THREADS: "${BOT_UPDATE_THREADS:-4}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
@@ -66,6 +132,43 @@ services:
       TZ: "Europe/Moscow"
       HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
       HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
+    volumes:
+      - plantbot-data:/app/data
+
+  # Профиль для Mini App без Telegram-бота
+  plant-miniapp:
+    profiles: ["miniapp-only"]
+    build:
+      context: /path/to/plant-bot
+      dockerfile: Dockerfile
+    image: ghcr.io/pronin-ni/plant-bot:latest
+    container_name: plant-miniapp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      TELEGRAM_BOT_ENABLED: "false"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
+      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
+      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
+      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
+      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
+      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
+      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
+      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      TZ: "Europe/Moscow"
+      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
+      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
+    ports:
+      - "${MINIAPP_PORT:-8080}:8080"
     volumes:
       - plantbot-data:/app/data
 
@@ -107,4 +210,24 @@ volumes:
 cd plant-care-mini-app
 npm install
 npm run dev
+```
+
+
+## Проверка перед продом
+
+```bash
+# backend
+./gradlew clean build -x test
+
+# frontend
+cd plant-care-mini-app && npm install && npm run build
+
+# docker config
+docker compose config
+```
+
+Smoke-check для miniapp-only:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+curl -fsS http://localhost:8080/actuator/health
 ```
