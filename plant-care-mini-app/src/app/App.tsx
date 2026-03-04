@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { Leaf } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -54,6 +55,7 @@ export function App() {
 
   const { isAuthorized, isReady, username } = useAuthStore();
   const activeTab = useUiStore((s) => s.activeTab);
+  const hasAutoAuthAttemptRef = useRef(false);
 
   const validateMutation = useMutation({
     mutationFn: validateTelegramAuth,
@@ -66,6 +68,14 @@ export function App() {
       hapticImpact('medium');
     }
   });
+
+  useEffect(() => {
+    if (!isReady || isAuthorized || hasAutoAuthAttemptRef.current) {
+      return;
+    }
+    hasAutoAuthAttemptRef.current = true;
+    validateMutation.mutate();
+  }, [isReady, isAuthorized, validateMutation.mutate]);
 
   return (
     <main className="app-shell">
