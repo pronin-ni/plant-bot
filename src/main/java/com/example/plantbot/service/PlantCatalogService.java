@@ -2,6 +2,7 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.domain.PlantLookupCache;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.PlantLookupCacheRepository;
 import com.example.plantbot.util.PlantLookupResult;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -202,6 +203,10 @@ public class PlantCatalogService {
   private volatile long perenualBackoffUntilMillis = 0L;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
+    return suggestIntervalDays(null, plantName);
+  }
+
+  public Optional<PlantLookupResult> suggestIntervalDays(User user, String plantName) {
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
       log.warn("Plant lookup skipped: empty query or missing PERENUAL_API_KEY");
       return Optional.empty();
@@ -224,7 +229,7 @@ public class PlantCatalogService {
     List<String> queries = buildQueryCandidates(normalizedInput);
     log.info("Plant lookup started. input='{}', candidates={}", plantName, queries);
 
-    Optional<PlantLookupResult> aiSuggestion = openRouterPlantAdvisorService.suggestIntervalDays(plantName);
+    Optional<PlantLookupResult> aiSuggestion = openRouterPlantAdvisorService.suggestIntervalDays(user, plantName);
     if (aiSuggestion.isPresent()) {
       putCached(normalizedInput, aiSuggestion);
       PlantLookupResult r = aiSuggestion.get();

@@ -22,12 +22,14 @@ bot:
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}
+  local-key-path: ./data/openrouter-master.key
   model: ${OPENROUTER_MODEL:}
   model-plant: ${OPENROUTER_MODEL_PLANT:}
   model-photo-identify: ${OPENROUTER_MODEL_PHOTO_IDENTIFY:}
   model-photo-diagnose: ${OPENROUTER_MODEL_PHOTO_DIAGNOSE:}
   model-chat: ${OPENROUTER_MODEL_CHAT:}
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+  models-url: ${OPENROUTER_MODELS_URL:https://openrouter.ai/api/v1/models}
   site-url: ${OPENROUTER_SITE_URL:}
   app-name: ${OPENROUTER_APP_NAME:plant-bot}
   care-cache-ttl-minutes: ${OPENROUTER_CARE_CACHE_TTL_MINUTES:10080}

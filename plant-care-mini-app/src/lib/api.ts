@@ -8,7 +8,9 @@ import type {
   PlantStatsDto,
   OpenRouterIdentifyResult,
   OpenRouterDiagnoseResult,
-  AchievementsDto
+  AchievementsDto,
+  OpenRouterModelsDto,
+  OpenRouterPreferencesDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -198,4 +200,25 @@ export async function getAchievements(): Promise<AchievementsDto> {
 
 export async function checkAchievements(): Promise<AchievementsDto> {
   return apiFetch<AchievementsDto>('/api/user/achievements/check', { method: 'POST' });
+}
+
+export async function getOpenRouterModels(): Promise<OpenRouterModelsDto> {
+  return apiFetch<OpenRouterModelsDto>('/api/openrouter/models', { method: 'GET' });
+}
+
+export async function getOpenRouterPreferences(): Promise<OpenRouterPreferencesDto> {
+  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences', { method: 'GET' });
+}
+
+export async function saveOpenRouterPreferences(payload: OpenRouterPreferencesDto): Promise<OpenRouterPreferencesDto> {
+  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function clearOpenRouterApiKey(): Promise<OpenRouterPreferencesDto> {
+  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences/api-key', {
+    method: 'DELETE'
+  });
 }

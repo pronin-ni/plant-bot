@@ -31,7 +31,7 @@ public class OpenRouterAiController {
     if (user.getId() == null) {
       throw new IllegalStateException("Unauthorized user context");
     }
-    return openRouterVisionService.identifyPlant(request == null ? null : request.imageBase64());
+    return openRouterVisionService.identifyPlant(user, request == null ? null : request.imageBase64());
   }
 
   @PostMapping("/diagnose-openrouter")
@@ -44,6 +44,7 @@ public class OpenRouterAiController {
       throw new IllegalStateException("Unauthorized user context");
     }
     return openRouterVisionService.diagnosePlant(
+        user,
         request == null ? null : request.imageBase64(),
         request == null ? null : request.plantName()
     );

@@ -2,6 +2,7 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.controller.dto.OpenRouterDiagnoseResponse;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyResponse;
+import com.example.plantbot.domain.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -33,9 +34,7 @@ public class OpenRouterVisionService {
 
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
-
-  @Value("${openrouter.api-key:}")
-  private String apiKey;
+  private final OpenRouterUserSettingsService openRouterUserSettingsService;
 
   @Value("${openrouter.model-plant:}")
   private String plantModel;
@@ -59,9 +58,13 @@ public class OpenRouterVisionService {
   private String appName;
 
   public OpenRouterIdentifyResponse identifyPlant(String imageBase64) {
+    return identifyPlant(null, imageBase64);
+  }
+
+  public OpenRouterIdentifyResponse identifyPlant(User user, String imageBase64) {
     validateImage(imageBase64);
-    String modelToUse = resolveIdentifyModel();
-    JsonNode payload = callOpenRouter(modelToUse, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
+    String modelToUse = resolveIdentifyModel(user);
+    JsonNode payload = callOpenRouter(user, modelToUse, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -99,13 +102,17 @@ public class OpenRouterVisionService {
   }
 
   public OpenRouterDiagnoseResponse diagnosePlant(String imageBase64, String plantName) {
+    return diagnosePlant(null, imageBase64, plantName);
+  }
+
+  public OpenRouterDiagnoseResponse diagnosePlant(User user, String imageBase64, String plantName) {
     validateImage(imageBase64);
     if (plantName == null || plantName.isBlank()) {
       throw new ResponseStatusException(BAD_REQUEST, "plantName обязателен");
     }
 
-    String modelToUse = resolveDiagnoseModel();
-    JsonNode payload = callOpenRouter(modelToUse, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName), imageBase64);
+    String modelToUse = resolveDiagnoseModel(user);
+    JsonNode payload = callOpenRouter(user, modelToUse, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName), imageBase64);
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -145,6 +152,11 @@ public class OpenRouterVisionService {
   }
 
   private JsonNode callOpenRouter(String model, String systemPrompt, String userPrompt, String imageBase64) {
+    return callOpenRouter(null, model, systemPrompt, userPrompt, imageBase64);
+  }
+
+  private JsonNode callOpenRouter(User user, String model, String systemPrompt, String userPrompt, String imageBase64) {
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (apiKey == null || apiKey.isBlank()) {
       throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter API key не настроен");
     }
@@ -244,7 +256,10 @@ public class OpenRouterVisionService {
     return Math.max(min, Math.min(max, value));
   }
 
-  private String resolveIdentifyModel() {
+  private String resolveIdentifyModel(User user) {
+    if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
+      return user.getOpenrouterModelPhotoIdentify();
+    }
     if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
       return photoIdentifyModel;
     }
@@ -257,7 +272,13 @@ public class OpenRouterVisionService {
     return "google/gemini-flash-1.5";
   }
 
-  private String resolveDiagnoseModel() {
+  private String resolveDiagnoseModel(User user) {
+    if (user != null && user.getOpenrouterModelPhotoDiagnose() != null && !user.getOpenrouterModelPhotoDiagnose().isBlank()) {
+      return user.getOpenrouterModelPhotoDiagnose();
+    }
+    if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
+      return user.getOpenrouterModelPhotoIdentify();
+    }
     if (photoDiagnoseModel != null && !photoDiagnoseModel.isBlank()) {
       return photoDiagnoseModel;
     }

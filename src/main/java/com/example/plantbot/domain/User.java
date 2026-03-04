@@ -31,6 +31,11 @@ public class User {
   private Double cityLat;
   private Double cityLon;
   private Boolean calendarSyncEnabled = false;
+  private String openrouterModelPlant;
+  private String openrouterModelChat;
+  private String openrouterModelPhotoIdentify;
+  private String openrouterModelPhotoDiagnose;
+  private String openrouterApiKeyEncrypted;
   @Column(name = "calendar_token")
   private String calendarToken = UUID.randomUUID().toString();
 

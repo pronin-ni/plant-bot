@@ -95,3 +95,25 @@ export interface AchievementsDto {
   total: number;
   items: AchievementItem[];
 }
+
+export interface OpenRouterModelOption {
+  id: string;
+  name: string;
+  contextLength?: number | null;
+  inputPrice?: string | null;
+  outputPrice?: string | null;
+  free: boolean;
+}
+
+export interface OpenRouterModelsDto {
+  models: OpenRouterModelOption[];
+}
+
+export interface OpenRouterPreferencesDto {
+  plantModel?: string | null;
+  chatModel?: string | null;
+  photoIdentifyModel?: string | null;
+  photoDiagnoseModel?: string | null;
+  hasApiKey?: boolean;
+  apiKey?: string | null;
+}

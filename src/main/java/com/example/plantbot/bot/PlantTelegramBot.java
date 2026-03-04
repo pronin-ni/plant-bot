@@ -272,7 +272,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     switch (state.getStep()) {
       case ADD_NAME -> {
         state.setName(text);
-        if (applyAutoInterval(state, message.getChatId())) {
+        if (applyAutoInterval(user, state, message.getChatId())) {
           state.setStep(ConversationState.Step.ADD_INTERVAL_DECISION);
         } else {
           askPlacement(state, message.getChatId());
@@ -336,7 +336,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       case SET_CITY_CHOOSE -> sendTextWithCancel(message.getChatId(), "Выбери город кнопкой ниже или отмени действие.");
       case RECALC_WAIT_CITY, RECALC_WAIT_CITY_CHOOSE, RECALC_OUTDOOR_SOIL, RECALC_OUTDOOR_SUN, RECALC_OUTDOOR_MULCH ->
           sendText(message.getChatId(), "Сценарий уточняющих шагов отключен. Используй /recalc для полного обновления расписания.");
-      case NONE -> handleFreeQuestion(message.getChatId(), text);
+      case NONE -> handleFreeQuestion(user, message.getChatId(), text);
       default -> sendText(message.getChatId(), "Чтобы начать, используй /add");
     }
   }
@@ -634,8 +634,8 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     sendTextWithCancel(chatId, "🪴 Введи название растения.\nЯ попробую автоматически подобрать интервал полива.");
   }
 
-  private boolean applyAutoInterval(ConversationState state, Long chatId) {
-    Optional<PlantLookupResult> suggestion = plantCatalogService.suggestIntervalDays(state.getName());
+  private boolean applyAutoInterval(User user, ConversationState state, Long chatId) {
+    Optional<PlantLookupResult> suggestion = plantCatalogService.suggestIntervalDays(user, state.getName());
     if (suggestion.isEmpty()) {
       sendText(chatId, "Автопоиск интервала не сработал. Попрошу ввести интервал вручную на следующем шаге.");
       log.info("Auto interval not found for '{}'", state.getName());
@@ -1431,9 +1431,9 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     }
   }
 
-  private void handleFreeQuestion(Long chatId, String text) {
+  private void handleFreeQuestion(User user, Long chatId, String text) {
     Integer loadingMessageId = sendLoadingMessage(chatId, "🤖 Готовлю ответ по садоводству...");
-    Optional<String> answer = openRouterPlantAdvisorService.answerGardeningQuestion(text);
+    Optional<String> answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, text);
     if (answer.isPresent()) {
       if (!tryEditMessage(chatId, loadingMessageId, answer.get(), null)) {
         sendText(chatId, answer.get());

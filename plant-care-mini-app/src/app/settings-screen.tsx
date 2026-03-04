@@ -5,6 +5,7 @@ import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smart
 import { Button } from '@/components/ui/button';
 import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
 import { BackupRestore } from '@/app/Settings/BackupRestore';
+import { OpenRouterModelSettings } from '@/app/Settings/OpenRouterModelSettings';
 import { AchievementsView } from '@/app/Achievements/AchievementsView';
 import { getCalendarSync, getLearning, getStats, updateCalendarSync, updateCity } from '@/lib/api';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
@@ -120,6 +121,7 @@ export function SettingsScreen() {
 
 
       <HomeAssistantSetup />
+      <OpenRouterModelSettings />
       <BackupRestore />
       <AchievementsView />
 
