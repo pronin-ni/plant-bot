@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface PlantRepository extends JpaRepository<Plant, Long> {
   List<Plant> findByUser(User user);
+
+  List<Plant> findByUserAndNameContainingIgnoreCase(User user, String name);
 }

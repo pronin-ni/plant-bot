@@ -4,6 +4,7 @@ import com.example.plantbot.bot.PlantTelegramBot;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -15,6 +16,7 @@ import java.util.List;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "telegram.bot", name = "enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class TelegramConfig {
   private final PlantTelegramBot plantTelegramBot;
@@ -24,10 +26,12 @@ public class TelegramConfig {
     String token = plantTelegramBot.getBotToken();
     String username = plantTelegramBot.getBotUsername();
     if (token == null || token.isBlank()) {
-      throw new IllegalStateException("TELEGRAM_BOT_TOKEN is empty");
+      log.warn("TELEGRAM_BOT_TOKEN is empty; Telegram bot registration skipped");
+      return;
     }
     if (username == null || username.isBlank()) {
-      throw new IllegalStateException("TELEGRAM_BOT_USERNAME is empty");
+      log.warn("TELEGRAM_BOT_USERNAME is empty; Telegram bot registration skipped");
+      return;
     }
     try {
       TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);

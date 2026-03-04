@@ -1,159 +1,309 @@
-# Plant Telegram Bot
+# Plant Bot + Telegram Mini App
 
-Интеллектуальный Telegram-бот для ухода за домашними растениями.
+Проект запускает в **одном контейнере**:
+- Spring Boot backend (`/api/...`)
+- Telegram Mini App (`/mini-app/...`)
 
-## Запуск
+## Быстрый старт (Docker)
 
-1. Установить Java 17+.
-2. Создать бота через BotFather и получить токен.
-3. Получить ключ OpenWeather (опционально, для адаптации по погоде).
-4. Получить ключ Perenual (для автоподбора базового интервала по названию растения).
-5. Запустить:
+1. Создать `.env` из шаблона:
+```bash
+cp .env.example .env
+```
+
+2. Выбрать режим запуска.
+
+Полный режим (бот + API + Mini App):
+- заполнить `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `APP_PUBLIC_BASE_URL`
+- запустить:
+```bash
+docker compose up -d --build
+```
+
+Miniapp-only режим (API + Mini App, без запуска Telegram-бота):
+- в `.env` можно оставить Telegram токен/username пустыми
+- важно: `TELEGRAM_BOT_ENABLED=false`
+- запустить профиль:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+```
+
+## Miniapp-only: что это и зачем
+
+`miniapp-only` — это режим, где поднимаются только:
+- backend API (`/api/...`)
+- Telegram Mini App (`/mini-app/...`)
+
+И **не поднимается Telegram LongPolling bot** (регистрация в Bot API отключена).
+
+Когда использовать:
+- локальная/стендовая проверка фронта и REST API без реального bot token;
+- деплой Mini App отдельно от Telegram-бота;
+- диагностика API/верстки, когда бот временно не нужен.
+
+Что меняется технически:
+- `TELEGRAM_BOT_ENABLED=false`
+- бин `TelegramConfig` не инициализируется, и приложение не падает на регистрации бота.
+
+Ограничения режима:
+- чат-бот в Telegram (команды `/start`, `/add` и т.д.) не работает;
+- Mini App работает штатно, но API по-прежнему требует `X-Telegram-Init-Data` для защищенных endpoint'ов.
+
+### Настройка miniapp-only
+
+1. Создать `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Указать минимум:
+```env
+TELEGRAM_BOT_ENABLED=false
+APP_PUBLIC_BASE_URL=https://your-domain.example
+WEB_CORS_ALLOWED_ORIGINS=https://your-domain.example
+```
+
+3. Запуск:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+```
+
+4. Проверка:
+```bash
+curl -fsS https://your-domain.example/actuator/health
+# ожидается: {"status":"UP"}
+```
+
+### Как вернуться в полный режим
+
+```env
+TELEGRAM_BOT_ENABLED=true
+TELEGRAM_BOT_TOKEN=<real_token>
+TELEGRAM_BOT_USERNAME=<real_username>
+```
 
 ```bash
-export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
-export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
-export BOT_UPDATE_THREADS=4
-export BOT_LIST_CARD_CACHE_MAX_ENTRIES=1000
-export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
-export OPENROUTER_MODEL=openai/gpt-4o-mini
-export OPENROUTER_MODEL_PLANT=openai/gpt-4o-mini
-export OPENROUTER_MODEL_CHAT=openai/gpt-4o-mini
-export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
-export OPENROUTER_WATERING_CACHE_TTL_MINUTES=720
-export OPENROUTER_CHAT_CACHE_TTL_MINUTES=10080
-export OPENROUTER_CACHE_MAX_ENTRIES=5000
-export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
-export OPENWEATHER_CACHE_MAX_ENTRIES=500
-export OPENWEATHER_RAIN_MAX_KEYS=500
-export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
-export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
-export HTTP_CLIENT_READ_TIMEOUT_MS=15000
-
-./scripts/ensure-gradle-wrapper.sh
-./gradlew bootRun
+docker compose up -d --build plant-bot
 ```
 
-База данных SQLite будет создана в `./data/plantbot.db`.
+## URL
 
-## Переменные окружения
+- API: `https://<domain>/api/...`
+- Mini App: `https://<domain>/mini-app/`
+- Healthcheck: `https://<domain>/actuator/health`
 
-Обязательные:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_BOT_USERNAME`
-- `BOT_UPDATE_THREADS` (кол-во параллельных обработчиков обновлений, по умолчанию `4`)
-- `BOT_LIST_CARD_CACHE_MAX_ENTRIES` (лимит in-memory кэша карточек `/list`, по умолчанию `1000`)
+В BotFather для WebApp указывать:
+`https://<domain>/mini-app/`
 
-Опциональные (рекомендуются):
-- `OPENROUTER_API_KEY`
-- `OPENROUTER_MODEL` (пример: `openai/gpt-4o-mini`)
-- `OPENROUTER_MODEL_PLANT` (модель для автопоиска/советов; если пусто — берется `OPENROUTER_MODEL`)
-- `OPENROUTER_MODEL_CHAT` (модель для свободных вопросов в чате; если пусто — берется `OPENROUTER_MODEL_PLANT`/`OPENROUTER_MODEL`)
-- `OPENROUTER_CARE_CACHE_TTL_MINUTES` (TTL кэша советов по циклу/добавкам, по умолчанию `10080`)
-- `OPENROUTER_WATERING_CACHE_TTL_MINUTES` (TTL кэша профиля полива, по умолчанию `720`)
-- `OPENROUTER_CHAT_CACHE_TTL_MINUTES` (TTL кэша AI-ответов на вопросы, по умолчанию `10080`)
-- `OPENROUTER_CACHE_MAX_ENTRIES` (глобальный лимит записей OpenRouter-кэша в SQLite, по умолчанию `5000`)
-- `OPENWEATHER_API_KEY`
-- `OPENWEATHER_CACHE_MAX_ENTRIES` (лимит in-memory кэша погоды, по умолчанию `500`)
-- `OPENWEATHER_RAIN_MAX_KEYS` (лимит ключей in-memory истории осадков, по умолчанию `500`)
-- `PERENUAL_API_KEY`
+## Portainer Stack (copy/paste)
 
-Сетевые таймауты HTTP-клиента (мс):
-- `HTTP_CLIENT_CONNECT_TIMEOUT_MS` (по умолчанию `5000`)
-- `HTTP_CLIENT_READ_TIMEOUT_MS` (по умолчанию `15000`)
+```yaml
+services:
+  plant-bot:
+    build:
+      context: /path/to/plant-bot
+      dockerfile: Dockerfile
+    image: ghcr.io/pronin-ni/plant-bot:latest
+    container_name: plant-bot
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME}"
+      TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-true}"
+      BOT_UPDATE_THREADS: "${BOT_UPDATE_THREADS:-4}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
+      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
+      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
+      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
+      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
+      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
+      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
+      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
+      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
+      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      TZ: "Europe/Moscow"
+      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
+      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
+    volumes:
+      - plantbot-data:/app/data
 
-## Команды
+  # Профиль для Mini App без Telegram-бота
+  plant-miniapp:
+    profiles: ["miniapp-only"]
+    build:
+      context: /path/to/plant-bot
+      dockerfile: Dockerfile
+    image: ghcr.io/pronin-ni/plant-bot:latest
+    container_name: plant-miniapp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      TELEGRAM_BOT_ENABLED: "false"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
+      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
+      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
+      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
+      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
+      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
+      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
+      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
+      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
+      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
+      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      TZ: "Europe/Moscow"
+      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
+      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
+    ports:
+      - "${MINIAPP_PORT:-8080}:8080"
+    volumes:
+      - plantbot-data:/app/data
 
-- `/add` — добавить растение (автопоиск интервала и типа + подтверждение: оставить/изменить, поддерживает ввод названия на русском)
-- `/list` — список растений (дата следующего полива, рекомендованный объём воды, цикл и добавки)
-- `/delete` — удалить растение
-- `/calendar` — календарь поливов на текущий и следующий месяц
-- `/stats` — статистика
-- `/learning` — как бот корректирует интервал
-- `/setcity` — установить город для погоды
-- `/recalc` — полностью обновить расписание полива и пересчитать рекомендации по всем растениям
-- `/clearcache` — очистить накопленные кэши (поиск растений, OpenRouter, погода)
-- `/cancel` — отменить текущий ввод
-- `Любой текст без команды` — вопрос по садоводству (ответ через OpenRouter с кэшированием)
+volumes:
+  plantbot-data:
+```
 
-## Docker (NAS)
+## Основные REST API (Mini App)
+
+- `POST /api/auth/validate`
+- `GET /api/plants`
+- `GET /api/plants/{id}`
+- `POST /api/plants`
+- `DELETE /api/plants/{id}`
+- `PUT /api/plants/{id}/water`
+- `POST /api/plants/{id}/photo`
+- `GET /api/plants/search?q=...`
+- `GET /api/calendar`
+- `GET /api/stats`
+- `GET /api/learning`
+- `POST /api/users/city`
+
+
+## Home Assistant интеграция
+
+Что поддерживается:
+- безопасное подключение Home Assistant (`/api/home-assistant/config`)
+- токен хранится только на backend в зашифрованном виде (AES-GCM), на frontend не возвращается
+- автообнаружение комнат (Area) и сенсоров `temperature_*`, `humidity_*`, `soil_moisture_*`, `illuminance_*`
+- ручной выбор `entity_id` для температуры, влажности, влажности почвы, освещенности
+- почасовой polling Home Assistant c random offset, timeout 10s, retries=3
+- fallback на базовый график, если HA недоступен > 6 часов
+- Telegram уведомление пользователю при длительной недоступности HA
+- мягкая автокоррекция интервала полива (не больше ±35%)
+- отключение автокоррекции для конкретного растения
+- история корректировок и история условий за 7 дней
+
+Новые API:
+- `POST /api/home-assistant/config`
+- `GET /api/home-assistant/rooms-and-sensors`
+- `PUT /api/plants/{plantId}/room`
+- `GET /api/plants/{plantId}/conditions`
+- `GET /api/plants/{plantId}/history-conditions?days=7`
+
+HA полностью опционален:
+- пользователь указывает URL и токен прямо в Mini App (`Settings -> Home Assistant`);
+- если HA не подключён, расчеты идут по базовой логике без HA;
+- отдельные переменные для HA в `.env` не нужны.
+
+Безопасность токена HA:
+- токен не отдаётся на фронтенд;
+- backend хранит его в зашифрованном виде;
+- ключ шифрования создаётся автоматически локально в `./data/ha-master.key`.
+
+Frontend (Mini App):
+- `Settings -> Home Assistant` — подключение по URL + Token
+- `Add Plant` и `Plant Detail` — выбор комнаты/сенсоров и автокоррекции
+- `Plant Card` и `Plant Detail` — виджет условий
+- `Plant Detail` — график температуры/влажности за 7 дней + предупреждение по освещенности
+
+## OpenRouter: модели для фото (identify/diagnose)
+
+Для фото-запросов используются отдельные переменные:
+- `OPENROUTER_MODEL_PHOTO_IDENTIFY` — модель для `POST /api/plant/identify-openrouter`
+- `OPENROUTER_MODEL_PHOTO_DIAGNOSE` — модель для `POST /api/plant/diagnose-openrouter`
+
+Рекомендуемые значения:
+- identify (быстро/дешево): `google/gemini-flash-1.5` или `qwen/qwen-vl-max`
+- diagnose (точнее): `google/gemini-1.5-pro` или `anthropic/claude-3.5-sonnet`
+
+Fallback-логика на backend:
+- identify: `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
+- diagnose: `OPENROUTER_MODEL_PHOTO_DIAGNOSE` -> `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
+
+Важно:
+- фронтенд никогда не ходит в OpenRouter напрямую;
+- фото всегда отправляется на backend, и уже backend делает OpenRouter `/chat/completions` с `content: [text, image_url]`.
+
+## Опциональная синхронизация с Google/Apple календарём
+
+Поддерживается подписка на динамический ICS-feed:
+- `GET /api/calendar/sync` — получить статус и ссылки
+- `POST /api/calendar/sync` — включить/выключить sync
+- `GET /api/calendar/ics/{token}` — ICS календарь (подписка)
+
+Как работает:
+- пользователь включает sync в настройках Mini App;
+- получает `webcal://...`/`https://...` ссылку;
+- импортирует в Google/Apple/другой календарь;
+- при добавлении/изменении растений события обновляются через подписку на feed.
+
+## Локальная разработка Mini App
 
 ```bash
-export TELEGRAM_BOT_TOKEN=YOUR_TOKEN
-export TELEGRAM_BOT_USERNAME=YOUR_BOT_USERNAME
-export BOT_UPDATE_THREADS=4
-export BOT_LIST_CARD_CACHE_MAX_ENTRIES=1000
-export OPENROUTER_API_KEY=YOUR_OPENROUTER_KEY
-export OPENROUTER_MODEL=openai/gpt-4o-mini
-export OPENROUTER_MODEL_PLANT=openai/gpt-4o-mini
-export OPENROUTER_MODEL_CHAT=openai/gpt-4o-mini
-export OPENROUTER_CARE_CACHE_TTL_MINUTES=10080
-export OPENROUTER_WATERING_CACHE_TTL_MINUTES=720
-export OPENROUTER_CHAT_CACHE_TTL_MINUTES=10080
-export OPENROUTER_CACHE_MAX_ENTRIES=5000
-export OPENWEATHER_API_KEY=YOUR_OPENWEATHER_KEY
-export OPENWEATHER_CACHE_MAX_ENTRIES=500
-export OPENWEATHER_RAIN_MAX_KEYS=500
-export PERENUAL_API_KEY=YOUR_PERENUAL_KEY
-export HTTP_CLIENT_CONNECT_TIMEOUT_MS=5000
-export HTTP_CLIENT_READ_TIMEOUT_MS=15000
-
-docker compose up -d
+cd plant-care-mini-app
+npm install
+npm run dev
 ```
 
-База хранится в named volume `plantbot-data`, поэтому данные сохраняются между перезапусками контейнера.
 
-Можно также скопировать `.env.example` в `.env` и заполнить, тогда `docker compose` подхватит переменные автоматически.
-
-Для локальной сборки из исходников использовать `docker-compose.dev.yml`:
+## Проверка перед продом
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build
+# backend
+./gradlew clean build -x test
+
+# frontend
+cd plant-care-mini-app && npm install && npm run build
+
+# docker config
+docker compose config
 ```
 
-## GHCR (образ из GitHub)
-
-После пуша в `main` GitHub Actions опубликует образ в GHCR: `ghcr.io/pronin-ni/plant-bot:latest`
-
-Примечание по автопоиску: сначала запрос в OpenRouter, затем цепочка `словарь -> MyMemory ru->en -> транслитерация -> iNaturalist aliases`.
-Если Perenual недоступен или достигнут лимит, бот использует fallback через GBIF и эвристику.
-Для экономии лимитов API включен TTL-кэш поиска в SQLite (`perenual.cache-ttl-minutes`, по умолчанию 10080 = 7 дней).
-
-OpenRouter-кэш (подбор интервала, care/watering, чат-ответы) теперь хранится в SQLite (`openrouter_cache`), а не в RAM.
-
-### OpenRouter prompt and response contract
-
-System prompt:
-
-```text
-You are a plant-care assistant.
-Task: estimate watering interval in days for ONE houseplant name.
-Return ONLY valid JSON (no markdown, no prose) with this exact schema:
-{
-  "normalized_name": "string",
-  "interval_days": 1,
-  "type_hint": "SUCCULENT|TROPICAL|FERN|DEFAULT",
-  "confidence": 0.0
-}
-Rules:
-- interval_days must be integer in [1..30]
-- confidence must be number in [0..1]
-- if uncertain, choose DEFAULT and a conservative interval_days
+Smoke-check для miniapp-only:
+```bash
+docker compose --profile miniapp-only up -d --build plant-miniapp
+curl -fsS http://localhost:8080/actuator/health
 ```
 
-User prompt example:
 
-```text
-Plant name: Гибискус
+## Локальный запуск без Telegram токена
+
+Для разработки Mini App/REST без Telegram initData:
+
+```bash
+TELEGRAM_BOT_ENABLED=false APP_DEV_AUTH_ENABLED=true ./gradlew bootRun
 ```
 
-Expected response example:
+В этом режиме используется fallback-пользователь из переменных:
 
-```json
-{
-  "normalized_name": "Hibiscus",
-  "interval_days": 5,
-  "type_hint": "TROPICAL",
-  "confidence": 0.78
-}
-```
+- `APP_DEV_TELEGRAM_ID`
+- `APP_DEV_USERNAME`
+
+Использовать только для локальной разработки.

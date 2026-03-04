@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -38,6 +40,30 @@ public class UserService {
   }
 
   public User save(User user) {
+    if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
+      user.setCalendarToken(UUID.randomUUID().toString());
+    }
+    return userRepository.save(user);
+  }
+
+  public User getOrCreateByTelegramData(Long telegramId, String username, String firstName, String lastName) {
+    User user = userRepository.findByTelegramId(telegramId).orElseGet(() -> {
+      User created = new User();
+      created.setTelegramId(telegramId);
+      return created;
+    });
+    if (username != null) {
+      user.setUsername(username);
+    }
+    if (firstName != null) {
+      user.setFirstName(firstName);
+    }
+    if (lastName != null) {
+      user.setLastName(lastName);
+    }
+    if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
+      user.setCalendarToken(UUID.randomUUID().toString());
+    }
     return userRepository.save(user);
   }
 }

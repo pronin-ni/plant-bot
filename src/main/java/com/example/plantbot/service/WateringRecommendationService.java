@@ -9,6 +9,8 @@ import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
+import com.example.plantbot.service.ha.HomeAssistantIntegrationService;
+import com.example.plantbot.service.ha.IntervalAdjustmentResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class WateringRecommendationService {
   private final WeatherService weatherService;
   private final LearningService learningService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
+  private final HomeAssistantIntegrationService haIntegrationService;
 
   public WateringRecommendation recommend(Plant plant, User user) {
     Optional<WeatherData> weather = weatherService.getCurrent(user.getCity(), user.getCityLat(), user.getCityLon());
@@ -63,6 +66,15 @@ public class WateringRecommendationService {
       waterLiters = roundTwoDecimals(waterLiters * p.waterFactor());
     }
     interval = clampIntervalByConfidence(base, interval, smoothedOpt.isPresent());
+
+    IntervalAdjustmentResult haAdjustment = haIntegrationService.applyHaAdjustment(plant, user, interval);
+    if (haAdjustment.applied()) {
+      interval = clamp(haAdjustment.intervalDays(), 1.0, 60.0);
+      haIntegrationService.logAdjustment(plant, base, haAdjustment);
+      log.info("HA adjustment applied: plantId={} name='{}' delta={}%, reason={}",
+          plant.getId(), plant.getName(), roundTwoDecimals(haAdjustment.deltaPercent()), haAdjustment.reason());
+    }
+
     waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
     waterLiters = safeNonZeroLiters(waterLiters, plant);
     return new WateringRecommendation(interval, waterLiters);
@@ -90,6 +102,17 @@ public class WateringRecommendationService {
     waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
     waterLiters = safeNonZeroLiters(waterLiters, plant);
     return new WateringRecommendation(interval, waterLiters);
+  }
+
+  public WateringRecommendation recommendQuick(Plant plant, User user) {
+    WateringRecommendation baseQuick = recommendQuick(plant);
+    IntervalAdjustmentResult haAdjustment = haIntegrationService.applyHaAdjustment(plant, user, baseQuick.intervalDays());
+    if (haAdjustment.applied()) {
+      double adjustedInterval = clamp(haAdjustment.intervalDays(), 1.0, 60.0);
+      haIntegrationService.logAdjustment(plant, baseQuick.intervalDays(), haAdjustment);
+      return new WateringRecommendation(adjustedInterval, baseQuick.waterLiters());
+    }
+    return baseQuick;
   }
 
   public LearningInfo learningInfo(Plant plant, User user) {

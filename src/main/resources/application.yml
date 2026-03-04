@@ -10,6 +10,9 @@ spring:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         format_sql: false
     open-in-view: false
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
 
 bot:
   token: ${TELEGRAM_BOT_TOKEN:}
@@ -19,10 +22,14 @@ bot:
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}
+  local-key-path: ./data/openrouter-master.key
   model: ${OPENROUTER_MODEL:}
   model-plant: ${OPENROUTER_MODEL_PLANT:}
+  model-photo-identify: ${OPENROUTER_MODEL_PHOTO_IDENTIFY:}
+  model-photo-diagnose: ${OPENROUTER_MODEL_PHOTO_DIAGNOSE:}
   model-chat: ${OPENROUTER_MODEL_CHAT:}
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1/chat/completions}
+  models-url: ${OPENROUTER_MODELS_URL:https://openrouter.ai/api/v1/models}
   site-url: ${OPENROUTER_SITE_URL:}
   app-name: ${OPENROUTER_APP_NAME:plant-bot}
   care-cache-ttl-minutes: ${OPENROUTER_CARE_CACHE_TTL_MINUTES:10080}
@@ -63,10 +70,30 @@ http:
 scheduler:
   daily-cron: "0 0 9 * * *"
 
+telegram:
+  bot:
+    enabled: ${TELEGRAM_BOT_ENABLED:true}
+  auth:
+    max-age-seconds: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:86400}
+
+web:
+  cors:
+    allowed-origins: ${WEB_CORS_ALLOWED_ORIGINS:*}
+
 app:
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
   learning:
     last-n: 5
     alpha: 0.5
+  dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
+  dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
+  dev-username: ${APP_DEV_USERNAME:dev_user}
+
+home-assistant:
+  local-key-path: ./data/ha-master.key
+  http-timeout-ms: 10000
+  retry-count: 3
+  poll-random-offset-max-seconds: 300
 
 management:
   endpoints:

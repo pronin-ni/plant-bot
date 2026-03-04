@@ -7,6 +7,7 @@ import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.util.WateringRecommendation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
+@ConditionalOnProperty(prefix = "telegram.bot", name = "enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class NotificationScheduler {
   private final PlantRepository plantRepository;

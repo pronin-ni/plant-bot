@@ -4,6 +4,7 @@ import com.example.plantbot.domain.OpenRouterCacheEntry;
 import com.example.plantbot.repository.OpenRouterCacheRepository;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.User;
 import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.PlantLookupResult;
@@ -42,9 +43,7 @@ public class OpenRouterPlantAdvisorService {
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final OpenRouterCacheRepository openRouterCacheRepository;
-
-  @Value("${openrouter.api-key:}")
-  private String apiKey;
+  private final OpenRouterUserSettingsService openRouterUserSettingsService;
 
   @Value("${openrouter.model:}")
   private String model;
@@ -77,12 +76,17 @@ public class OpenRouterPlantAdvisorService {
   private int cacheMaxEntries;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
-    String modelToUse = resolvePlantModel();
+    return suggestIntervalDays(null, plantName);
+  }
+
+  public Optional<PlantLookupResult> suggestIntervalDays(User user, String plantName) {
+    String modelToUse = resolvePlantModel(user);
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
     try {
-      JsonNode body = postMessages(modelToUse, List.of(
+      JsonNode body = postMessages(apiKey, modelToUse, List.of(
           Map.of("role", "system", "content", intervalSystemPrompt()),
           Map.of("role", "user", "content", userPrompt(plantName))
       ));
@@ -126,7 +130,9 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays) {
-    String modelToUse = resolvePlantModel();
+    User user = plant == null ? null : plant.getUser();
+    String modelToUse = resolvePlantModel(user);
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plant == null || plant.getName() == null || plant.getName().isBlank()) {
       return Optional.empty();
     }
@@ -141,7 +147,7 @@ public class OpenRouterPlantAdvisorService {
     }
 
     try {
-      JsonNode body = postMessages(modelToUse, List.of(
+      JsonNode body = postMessages(apiKey, modelToUse, List.of(
           Map.of("role", "system", "content", careAdviceSystemPrompt()),
           Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
       ));
@@ -205,7 +211,9 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
-    String modelToUse = resolvePlantModel();
+    User user = plant == null ? null : plant.getUser();
+    String modelToUse = resolvePlantModel(user);
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plant == null || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
@@ -215,7 +223,7 @@ public class OpenRouterPlantAdvisorService {
       return cached;
     }
     try {
-      JsonNode body = postMessages(modelToUse, List.of(
+      JsonNode body = postMessages(apiKey, modelToUse, List.of(
           Map.of("role", "system", "content", wateringProfileSystemPrompt()),
           Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
       ));
@@ -248,7 +256,12 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<String> answerGardeningQuestion(String question) {
-    String modelToUse = resolveChatModel();
+    return answerGardeningQuestion(null, question);
+  }
+
+  public Optional<String> answerGardeningQuestion(User user, String question) {
+    String modelToUse = resolveChatModel(user);
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
@@ -262,7 +275,7 @@ public class OpenRouterPlantAdvisorService {
     }
 
     try {
-      JsonNode body = postMessages(modelToUse, List.of(
+      JsonNode body = postMessages(apiKey, modelToUse, List.of(
           Map.of("role", "system", "content", gardeningChatSystemPrompt()),
           Map.of("role", "user", "content", normalizedQuestion)
       ));
@@ -287,7 +300,7 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
-  private JsonNode postMessages(String modelName, List<Map<String, Object>> messages) {
+  private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(apiKey);
@@ -496,7 +509,10 @@ public class OpenRouterPlantAdvisorService {
     return NS_CHAT + "|" + modelKey + "|" + normalizedQuestion;
   }
 
-  private String resolvePlantModel() {
+  private String resolvePlantModel(User user) {
+    if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
+      return user.getOpenrouterModelPlant().trim();
+    }
     if (plantModel != null && !plantModel.isBlank()) {
       return plantModel.trim();
     }
@@ -506,11 +522,14 @@ public class OpenRouterPlantAdvisorService {
     return "";
   }
 
-  private String resolveChatModel() {
+  private String resolveChatModel(User user) {
+    if (user != null && user.getOpenrouterModelChat() != null && !user.getOpenrouterModelChat().isBlank()) {
+      return user.getOpenrouterModelChat().trim();
+    }
     if (chatModel != null && !chatModel.isBlank()) {
       return chatModel.trim();
     }
-    return resolvePlantModel();
+    return resolvePlantModel(user);
   }
 
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {

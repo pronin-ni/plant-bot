@@ -8,6 +8,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "users")
@@ -29,6 +30,14 @@ public class User {
   private String cityDisplayName;
   private Double cityLat;
   private Double cityLon;
+  private Boolean calendarSyncEnabled = false;
+  private String openrouterModelPlant;
+  private String openrouterModelChat;
+  private String openrouterModelPhotoIdentify;
+  private String openrouterModelPhotoDiagnose;
+  private String openrouterApiKeyEncrypted;
+  @Column(name = "calendar_token")
+  private String calendarToken = UUID.randomUUID().toString();
 
   private Instant createdAt = Instant.now();
 
