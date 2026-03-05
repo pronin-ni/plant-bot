@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Sprout } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -7,8 +7,10 @@ import { PlantCard } from '@/components/common/plant-card';
 import { Button } from '@/components/ui/button';
 import { getPlants, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
-import { useUiStore } from '@/lib/store';
+import { useAuthStore, useUiStore } from '@/lib/store';
 import type { PlantDto } from '@/types/api';
+
+type SortMode = 'created_desc' | 'alpha' | 'next_watering';
 
 function startOfDay(date: Date): Date {
   const copy = new Date(date);
@@ -62,9 +64,47 @@ function getNextWateringText(plant: PlantDto): string {
   return `Полив через ${daysLeft} дн. (${formatDateRu(next)})`;
 }
 
+function sortPlants(plants: PlantDto[], mode: SortMode): PlantDto[] {
+  const copy = [...plants];
+  if (mode === 'alpha') {
+    copy.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    return copy;
+  }
+  if (mode === 'next_watering') {
+    copy.sort((a, b) => getNextWateringDate(a).getTime() - getNextWateringDate(b).getTime());
+    return copy;
+  }
+  copy.sort((a, b) => {
+    const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    if (bt !== at) {
+      return bt - at;
+    }
+    return (b.id ?? 0) - (a.id ?? 0);
+  });
+  return copy;
+}
+
 export function HomeScreen() {
   const queryClient = useQueryClient();
   const openPlantDetail = useUiStore((s) => s.openPlantDetail);
+  const telegramUserId = useAuthStore((s) => s.telegramUserId);
+
+  const sortStorageKey = useMemo(
+    () => `plantbot.home.sort.${telegramUserId ?? 'anonymous'}`,
+    [telegramUserId]
+  );
+
+  const [sortMode, setSortMode] = useState<SortMode>('created_desc');
+
+  useEffect(() => {
+    const saved = localStorage.getItem(sortStorageKey) as SortMode | null;
+    if (saved === 'created_desc' || saved === 'alpha' || saved === 'next_watering') {
+      setSortMode(saved);
+      return;
+    }
+    setSortMode('created_desc');
+  }, [sortStorageKey]);
 
   const plantsQuery = useQuery({
     queryKey: ['plants'],
@@ -74,7 +114,6 @@ export function HomeScreen() {
   const waterMutation = useMutation({
     mutationFn: (plantId: number) => waterPlant(plantId),
     onSuccess: () => {
-      // Более сильный отклик при подтвержденном действии полива.
       hapticNotify('success');
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
@@ -83,7 +122,7 @@ export function HomeScreen() {
     }
   });
 
-  const plants = useMemo(() => plantsQuery.data ?? [], [plantsQuery.data]);
+  const plants = useMemo(() => sortPlants(plantsQuery.data ?? [], sortMode), [plantsQuery.data, sortMode]);
 
   if (plantsQuery.isLoading) {
     return (
@@ -128,20 +167,36 @@ export function HomeScreen() {
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-ios-caption text-ios-subtext">Всего растений: {plants.length}</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9 px-3 text-ios-subtext"
-          onClick={() => {
-            hapticImpact('light');
-            void plantsQuery.refetch();
-          }}
-        >
-          <RefreshCw className="mr-1 h-4 w-4" />
-          Обновить
-        </Button>
+        <div className="flex items-center gap-2">
+          <select
+            value={sortMode}
+            onChange={(event) => {
+              const next = event.target.value as SortMode;
+              setSortMode(next);
+              localStorage.setItem(sortStorageKey, next);
+              hapticImpact('light');
+            }}
+            className="h-9 rounded-ios-button border border-ios-border/70 bg-white/70 px-2 text-[12px] outline-none backdrop-blur-ios dark:bg-zinc-900/60"
+          >
+            <option value="created_desc">Сначала новые</option>
+            <option value="alpha">По алфавиту</option>
+            <option value="next_watering">Скоро поливать</option>
+          </select>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 px-3 text-ios-subtext"
+            onClick={() => {
+              hapticImpact('light');
+              void plantsQuery.refetch();
+            }}
+          >
+            <RefreshCw className="mr-1 h-4 w-4" />
+            Обновить
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

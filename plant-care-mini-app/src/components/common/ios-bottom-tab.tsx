@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
-import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings } from 'lucide-react';
+import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings, ShieldCheck } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { hapticSelectionChanged } from '@/lib/telegram';
-import { useUiStore } from '@/lib/store';
+import { useAuthStore, useUiStore } from '@/lib/store';
 import type { AppTabKey } from '@/types/navigation';
 
 interface TabItem {
@@ -17,16 +17,19 @@ const TABS: TabItem[] = [
   { key: 'calendar', title: 'Календарь', icon: CalendarDays },
   { key: 'add', title: 'Добавить', icon: PlusCircle },
   { key: 'ai', title: 'AI', icon: MessageCircle },
+  { key: 'admin', title: 'Админ', icon: ShieldCheck },
   { key: 'settings', title: 'Настройки', icon: Settings }
 ];
 
 export function IOSBottomTab() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const tabs = isAdmin ? TABS : TABS.filter((tab) => tab.key !== 'admin');
 
   return (
     <nav className="ios-tabbar">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.key;
         return (

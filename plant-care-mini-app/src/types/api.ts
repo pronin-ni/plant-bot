@@ -4,6 +4,7 @@ export interface AuthValidationResponse {
   username?: string;
   firstName?: string;
   city?: string;
+  isAdmin?: boolean;
 }
 
 export interface PlantDto {
@@ -23,6 +24,7 @@ export interface PlantDto {
   recommendedWaterMl?: number;
   type?: string;
   photoUrl?: string;
+  createdAt?: string;
 }
 
 export interface CalendarEventDto {
@@ -133,4 +135,66 @@ export interface PlantCareAdviceDto {
   soilComposition: string[];
   note?: string;
   source?: string;
+}
+
+
+export interface AdminOverviewDto {
+  totalUsers: number;
+  totalPlants: number;
+  usersWithPlants: number;
+  indoorPlants: number;
+  outdoorPlants: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
+}
+
+export interface AdminUserItemDto {
+  id: number;
+  telegramId: number;
+  username?: string;
+  firstName?: string;
+  city?: string;
+  createdAt?: string;
+  plantCount: number;
+}
+
+export interface AdminUsersDto {
+  items: AdminUserItemDto[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+export interface AdminPlantItemDto {
+  id: number;
+  name: string;
+  userId?: number;
+  telegramId?: number;
+  username?: string;
+  placement?: string;
+  type?: string;
+  baseIntervalDays?: number;
+  lastWateredDate?: string;
+  nextWateringDate?: string;
+  createdAt?: string;
+}
+
+export interface AdminPlantsDto {
+  items: AdminPlantItemDto[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+export interface AdminStatsItemDto {
+  key: string;
+  value: number;
+}
+
+export interface AdminStatsDto {
+  topCities: AdminStatsItemDto[];
+  topPlantTypes: AdminStatsItemDto[];
+  overduePlants: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
 }

@@ -77,12 +77,15 @@ public class MiniAppController {
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
 
+  @org.springframework.beans.factory.annotation.Value("${app.admin.telegram-id:0}")
+  private Long adminTelegramId;
+
   @PostMapping("/auth/validate")
   public AuthValidateResponse validateAuth(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
   ) {
     User user = telegramInitDataService.validateAndResolveUser(initData);
-    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName());
+    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
 
   @GetMapping("/plants")
@@ -337,7 +340,7 @@ public class MiniAppController {
     user.setCity(request.city().trim());
     user.setCityDisplayName(request.city().trim());
     user = userService.save(user);
-    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName());
+    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
 
   @GetMapping("/calendar/sync")
@@ -433,7 +436,8 @@ public class MiniAppController {
         next,
         ml,
         plant.getType(),
-        plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant)
+        plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant),
+        plant.getCreatedAt()
     );
   }
 
@@ -508,6 +512,10 @@ public class MiniAppController {
     String https = base + "/api/calendar/ics/" + user.getCalendarToken();
     String webcal = https.replaceFirst("^https?://", "webcal://");
     return new CalendarSyncResponse(Boolean.TRUE.equals(user.getCalendarSyncEnabled()), webcal, https);
+  }
+
+  private boolean isAdmin(User user) {
+    return user != null && adminTelegramId != null && adminTelegramId > 0 && adminTelegramId.equals(user.getTelegramId());
   }
 
   private String utcNowStamp() {

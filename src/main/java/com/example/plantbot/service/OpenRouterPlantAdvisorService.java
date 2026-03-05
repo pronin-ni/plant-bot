@@ -260,44 +260,50 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<String> answerGardeningQuestion(User user, String question) {
-    String modelToUse = resolveChatModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+    if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
 
     String normalizedQuestion = question.trim();
-    String cacheKey = buildChatCacheKey(modelToUse, normalizedQuestion);
-    Optional<String> cached = getChatAnswerCache(cacheKey);
-    if (cached != null) {
-      log.info("OpenRouter chat cache hit. question='{}', hasAnswer={}", preview(normalizedQuestion), cached.isPresent());
-      return cached;
+    for (String modelToUse : resolveChatModelCandidates(user)) {
+      String cacheKey = buildChatCacheKey(modelToUse, normalizedQuestion);
+      Optional<String> cached = getChatAnswerCache(cacheKey);
+      if (cached != null) {
+        log.info("OpenRouter chat cache hit. model='{}', question='{}', hasAnswer={}",
+            modelToUse, preview(normalizedQuestion), cached.isPresent());
+        if (cached.isPresent()) {
+          return cached;
+        }
+        continue;
+      }
+
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", gardeningChatSystemPrompt()),
+            Map.of("role", "user", "content", normalizedQuestion)
+        ));
+        if (body == null) {
+          putChatAnswerCache(cacheKey, Optional.empty());
+          continue;
+        }
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          putChatAnswerCache(cacheKey, Optional.empty());
+          continue;
+        }
+        String answer = content.trim();
+        putChatAnswerCache(cacheKey, Optional.of(answer));
+        log.info("OpenRouter chat success. model='{}', question='{}', answerPreview='{}'",
+            modelToUse, preview(normalizedQuestion), preview(answer));
+        return Optional.of(answer);
+      } catch (Exception ex) {
+        putChatAnswerCache(cacheKey, Optional.empty());
+        log.warn("OpenRouter chat failed. model='{}', question='{}': {}", modelToUse, preview(normalizedQuestion), ex.getMessage());
+      }
     }
 
-    try {
-      JsonNode body = postMessages(apiKey, modelToUse, List.of(
-          Map.of("role", "system", "content", gardeningChatSystemPrompt()),
-          Map.of("role", "user", "content", normalizedQuestion)
-      ));
-      if (body == null) {
-        putChatAnswerCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-      String content = extractContent(body);
-      if (content.isEmpty()) {
-        putChatAnswerCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-      String answer = content.trim();
-      putChatAnswerCache(cacheKey, Optional.of(answer));
-      log.info("OpenRouter chat success. model='{}', question='{}', answerPreview='{}'",
-          modelToUse, preview(normalizedQuestion), preview(answer));
-      return Optional.of(answer);
-    } catch (Exception ex) {
-      putChatAnswerCache(cacheKey, Optional.empty());
-      log.warn("OpenRouter chat failed for '{}': {}", preview(normalizedQuestion), ex.getMessage());
-      return Optional.empty();
-    }
+    return Optional.empty();
   }
 
   private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
@@ -530,6 +536,37 @@ public class OpenRouterPlantAdvisorService {
       return chatModel.trim();
     }
     return resolvePlantModel(user);
+  }
+
+  private List<String> resolveChatModelCandidates(User user) {
+    List<String> models = new ArrayList<>();
+    if (user != null && user.getOpenrouterModelChat() != null && !user.getOpenrouterModelChat().isBlank()) {
+      models.add(user.getOpenrouterModelChat().trim());
+    }
+    if (chatModel != null && !chatModel.isBlank()) {
+      models.add(chatModel.trim());
+    }
+    if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
+      models.add(user.getOpenrouterModelPlant().trim());
+    }
+    if (plantModel != null && !plantModel.isBlank()) {
+      models.add(plantModel.trim());
+    }
+    if (model != null && !model.isBlank()) {
+      models.add(model.trim());
+    }
+
+    List<String> dedup = new ArrayList<>();
+    for (String candidate : models) {
+      if (candidate == null || candidate.isBlank()) {
+        continue;
+      }
+      boolean exists = dedup.stream().anyMatch(item -> item.equalsIgnoreCase(candidate));
+      if (!exists) {
+        dedup.add(candidate);
+      }
+    }
+    return dedup;
   }
 
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {

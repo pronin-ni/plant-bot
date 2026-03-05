@@ -7,7 +7,8 @@ interface AuthState {
   telegramUserId?: number;
   username?: string;
   city?: string;
-  setAuth: (payload: { telegramUserId?: number; username?: string; city?: string; isAuthorized: boolean }) => void;
+  isAdmin: boolean;
+  setAuth: (payload: { telegramUserId?: number; username?: string; city?: string; isAdmin?: boolean; isAuthorized: boolean }) => void;
   setReady: (value: boolean) => void;
 }
 
@@ -17,8 +18,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   telegramUserId: undefined,
   username: undefined,
   city: undefined,
-  setAuth: ({ telegramUserId, username, city, isAuthorized }) =>
-    set({ telegramUserId, username, city, isAuthorized }),
+  isAdmin: false,
+  setAuth: ({ telegramUserId, username, city, isAdmin, isAuthorized }) =>
+    set({ telegramUserId, username, city, isAdmin: Boolean(isAdmin), isAuthorized }),
   setReady: (value) => set({ isReady: value })
 }));
 

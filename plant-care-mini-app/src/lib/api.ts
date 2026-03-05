@@ -12,7 +12,12 @@ import type {
   OpenRouterModelsDto,
   OpenRouterPreferencesDto,
   ChatAskResponse,
-  PlantCareAdviceDto
+  PlantCareAdviceDto,
+  AdminOverviewDto,
+  AdminUsersDto,
+  AdminPlantsDto,
+  AdminPlantItemDto,
+  AdminStatsDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -236,4 +241,33 @@ export async function askAssistant(question: string): Promise<ChatAskResponse> {
 
 export async function getPlantCareAdvice(id: number): Promise<PlantCareAdviceDto> {
   return apiFetch<PlantCareAdviceDto>(`/api/plants/${id}/care-advice`, { method: 'GET' });
+}
+
+
+export async function getAdminOverview(): Promise<AdminOverviewDto> {
+  return apiFetch<AdminOverviewDto>('/api/admin/overview', { method: 'GET' });
+}
+
+export async function getAdminUsers(page = 0, size = 20, q = ''): Promise<AdminUsersDto> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q.trim()) {
+    params.set('q', q.trim());
+  }
+  return apiFetch<AdminUsersDto>(`/api/admin/users?${params.toString()}`, { method: 'GET' });
+}
+
+export async function getAdminPlants(page = 0, size = 20, q = ''): Promise<AdminPlantsDto> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q.trim()) {
+    params.set('q', q.trim());
+  }
+  return apiFetch<AdminPlantsDto>(`/api/admin/plants?${params.toString()}`, { method: 'GET' });
+}
+
+export async function getAdminUserPlants(userId: number): Promise<AdminPlantItemDto[]> {
+  return apiFetch<AdminPlantItemDto[]>(`/api/admin/users/${userId}/plants`, { method: 'GET' });
+}
+
+export async function getAdminStats(): Promise<AdminStatsDto> {
+  return apiFetch<AdminStatsDto>('/api/admin/stats', { method: 'GET' });
 }

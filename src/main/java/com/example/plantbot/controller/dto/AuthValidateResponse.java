@@ -4,5 +4,6 @@ public record AuthValidateResponse(boolean ok,
                                    String userId,
                                    String username,
                                    String firstName,
-                                   String city) {
+                                   String city,
+                                   boolean isAdmin) {
 }

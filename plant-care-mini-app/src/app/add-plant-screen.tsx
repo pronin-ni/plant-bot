@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react';
+import { Check, ChevronLeft, Plus, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { RoomAndSensorSelector } from '@/components/RoomAndSensorSelector';
@@ -15,13 +14,16 @@ type PlantType = 'DEFAULT' | 'TROPICAL' | 'FERN' | 'SUCCULENT' | 'CONIFER';
 type OutdoorSoilType = 'SANDY' | 'LOAMY' | 'CLAY';
 type SunExposure = 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE';
 
-type StepKey =
-  | 'name'
-  | 'placement'
-  | 'indoor'
-  | 'outdoor'
-  | 'type'
-  | 'summary';
+type StepKey = 'name' | 'placement' | 'indoor' | 'outdoor' | 'type' | 'summary';
+
+const STEP_META: Record<StepKey, { title: string; hint: string }> = {
+  name: { title: 'Шаг 1. Название растения', hint: 'Введите вручную или используйте AI по фото.' },
+  placement: { title: 'Шаг 2. Размещение', hint: 'Выберите: домашнее или уличное растение.' },
+  indoor: { title: 'Шаг 3. Параметры домашнего', hint: 'Укажите объём горшка и интервал полива.' },
+  outdoor: { title: 'Шаг 3. Параметры уличного', hint: 'Укажите площадь, почву, свет и сезонность.' },
+  type: { title: 'Шаг 4. Тип растения', hint: 'Тип влияет на рекомендации по воде.' },
+  summary: { title: 'Шаг 5. Подтверждение', hint: 'Проверьте данные и сохраните растение.' }
+};
 
 export function AddPlantScreen() {
   const queryClient = useQueryClient();
@@ -43,6 +45,7 @@ export function AddPlantScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const [createdPlantId, setCreatedPlantId] = useState<number | null>(null);
   const [aiHint, setAiHint] = useState<string | null>(null);
+  const [identifiedName, setIdentifiedName] = useState<string | null>(null);
 
   const steps = useMemo<StepKey[]>(() => {
     return placement === 'OUTDOOR'
@@ -90,6 +93,19 @@ export function AddPlantScreen() {
     && Number(baseIntervalDays) > 0
     && (placement === 'OUTDOOR' ? Number(outdoorAreaM2) > 0 : Number(potVolumeLiters) > 0);
 
+  const canGoNext = (() => {
+    if (currentStep === 'name') {
+      return name.trim().length > 1;
+    }
+    if (currentStep === 'indoor') {
+      return Number(potVolumeLiters) > 0 && Number(baseIntervalDays) > 0;
+    }
+    if (currentStep === 'outdoor') {
+      return Number(outdoorAreaM2) > 0 && Number(baseIntervalDays) > 0;
+    }
+    return true;
+  })();
+
   const onNext = () => {
     hapticImpact('light');
     setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
@@ -101,8 +117,10 @@ export function AddPlantScreen() {
   };
 
   const applyIdentify = (result: OpenRouterIdentifyResult) => {
-    if (result.russianName && !name.trim()) {
-      setName(result.russianName);
+    if (result.russianName && result.russianName.trim()) {
+      const russian = result.russianName.trim();
+      setName(russian);
+      setIdentifiedName(russian);
     }
     if (result.wateringIntervalDays > 0) {
       setBaseIntervalDays(String(result.wateringIntervalDays));
@@ -119,37 +137,29 @@ export function AddPlantScreen() {
     <section className="space-y-3">
       <PlantPhotoCapture onIdentified={applyIdentify} />
       {aiHint ? <p className="text-xs text-ios-subtext">{aiHint}</p> : null}
-      <div className="ios-blur-card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-ios-caption text-ios-subtext">Шаг {stepIndex + 1} из {steps.length}</p>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="rounded-ios-button border border-ios-border/60 p-2"
-              onClick={onPrev}
-              disabled={stepIndex === 0}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              className="rounded-ios-button border border-ios-border/60 p-2"
-              onClick={onNext}
-              disabled={stepIndex === steps.length - 1}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
 
-        <motion.div
-          key={currentStep}
-          initial={{ opacity: 0, x: 22 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -12 }}
-          transition={{ type: 'spring', stiffness: 340, damping: 28, mass: 1 }}
-          className="space-y-4"
-        >
+      {identifiedName && currentStep === 'name' ? (
+        <div className="ios-blur-card p-3">
+          <p className="text-sm text-ios-subtext">AI определил: <b>{identifiedName}</b></p>
+          <Button
+            className="mt-2 w-full"
+            onClick={() => {
+              hapticImpact('medium');
+              onNext();
+            }}
+          >
+            <Check className="mr-2 h-4 w-4" />
+            Да, продолжить
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="ios-blur-card p-4">
+        <p className="text-ios-caption text-ios-subtext">Шаг {stepIndex + 1} из {steps.length}</p>
+        <h3 className="mt-1 text-ios-title-2">{STEP_META[currentStep].title}</h3>
+        <p className="mt-1 text-ios-caption text-ios-subtext">{STEP_META[currentStep].hint}</p>
+
+        <div className="mt-4 space-y-4">
           {currentStep === 'name' ? (
             <div>
               <label className="mb-1 block text-ios-caption text-ios-subtext">Название растения</label>
@@ -181,12 +191,9 @@ export function AddPlantScreen() {
           ) : null}
 
           {currentStep === 'placement' ? (
-            <div>
-              <label className="mb-2 block text-ios-caption text-ios-subtext">Размещение</label>
-              <div className="grid grid-cols-2 gap-2">
-                <ToggleButton active={placement === 'INDOOR'} onClick={() => setPlacement('INDOOR')} label="Домашнее" />
-                <ToggleButton active={placement === 'OUTDOOR'} onClick={() => setPlacement('OUTDOOR')} label="Уличное" />
-              </div>
+            <div className="grid grid-cols-2 gap-2">
+              <ToggleButton active={placement === 'INDOOR'} onClick={() => setPlacement('INDOOR')} label="Домашнее" />
+              <ToggleButton active={placement === 'OUTDOOR'} onClick={() => setPlacement('OUTDOOR')} label="Уличное" />
             </div>
           ) : null}
 
@@ -313,23 +320,33 @@ export function AddPlantScreen() {
               )}
             </div>
           ) : null}
-        </motion.div>
-      </div>
+        </div>
 
-      <Button
-        className="h-12 w-full"
-        disabled={!canSubmit || createMutation.isPending}
-        onClick={() => {
-          hapticImpact('medium');
-          createMutation.mutate();
-        }}
-      >
-        <Plus className="mr-2 h-4 w-4" />
-        {createMutation.isPending ? 'Добавляем...' : 'Добавить растение'}
-      </Button>
+        <div className="mt-5 flex gap-2">
+          <Button variant="secondary" className="w-1/2" onClick={onPrev} disabled={stepIndex === 0}>
+            <ChevronLeft className="mr-1 h-4 w-4" /> Назад
+          </Button>
+          {currentStep !== 'summary' ? (
+            <Button className="w-1/2" onClick={onNext} disabled={!canGoNext}>
+              Далее
+            </Button>
+          ) : (
+            <Button
+              className="w-1/2"
+              disabled={!canSubmit || createMutation.isPending}
+              onClick={() => {
+                hapticImpact('medium');
+                createMutation.mutate();
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {createMutation.isPending ? 'Добавляем...' : 'Добавить'}
+            </Button>
+          )}
+        </div>
+      </div>
     </section>
   );
-
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

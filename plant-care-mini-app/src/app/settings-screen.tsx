@@ -7,12 +7,14 @@ import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
 import { BackupRestore } from '@/app/Settings/BackupRestore';
 import { OpenRouterModelSettings } from '@/app/Settings/OpenRouterModelSettings';
 import { AchievementsView } from '@/app/Achievements/AchievementsView';
-import { getCalendarSync, getLearning, getStats, updateCalendarSync, updateCity } from '@/lib/api';
+import { getCalendarSync, getLearning, getStats, updateCalendarSync, updateCity, validateTelegramAuth } from '@/lib/api';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
 import { useAuthStore } from '@/lib/store';
 
 export function SettingsScreen() {
   const username = useAuthStore((s) => s.username);
+  const isReady = useAuthStore((s) => s.isReady);
+  const isAuthorized = useAuthStore((s) => s.isAuthorized);
   const savedCity = useAuthStore((s) => s.city);
   const [city, setCity] = useState(savedCity ?? '');
 
@@ -27,9 +29,25 @@ export function SettingsScreen() {
         isAuthorized: true,
         telegramUserId: useAuthStore.getState().telegramUserId,
         username: useAuthStore.getState().username,
-        city: value
+        city: value,
+        isAdmin: useAuthStore.getState().isAdmin
       });
       setCity(value);
+      hapticNotify('success');
+    },
+    onError: () => hapticNotify('error')
+  });
+
+  const validateAuthMutation = useMutation({
+    mutationFn: validateTelegramAuth,
+    onSuccess: (payload) => {
+      useAuthStore.getState().setAuth({
+        isAuthorized: payload.ok,
+        telegramUserId: Number(payload.userId),
+        username: payload.username,
+        city: payload.city,
+        isAdmin: payload.isAdmin
+      });
       hapticNotify('success');
     },
     onError: () => hapticNotify('error')
@@ -105,6 +123,27 @@ export function SettingsScreen() {
 
   return (
     <section className="space-y-3">
+      <div className="ios-blur-card p-4">
+        <p className="text-ios-title-2">Статус авторизации</p>
+        <p className="mt-1 text-ios-body text-ios-subtext">
+          {isReady ? 'Telegram WebApp инициализирован.' : 'Инициализация Telegram WebApp...'}
+        </p>
+        <p className="mt-1 text-ios-caption text-ios-subtext">
+          {isAuthorized ? `Подтверждено для @${username ?? 'пользователь'}` : 'Пока не подтверждено на сервере'}
+        </p>
+        <Button
+          variant="secondary"
+          className="mt-2 w-full"
+          disabled={validateAuthMutation.isPending}
+          onClick={() => {
+            hapticImpact('light');
+            validateAuthMutation.mutate();
+          }}
+        >
+          {validateAuthMutation.isPending ? 'Проверяем...' : 'Перепроверить авторизацию'}
+        </Button>
+      </div>
+
       <div className="ios-blur-card p-4">
         <p className="text-ios-caption text-ios-subtext">Пользователь</p>
         <p className="mt-1 text-ios-title-2">@{username ?? 'не указан'}</p>

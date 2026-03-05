@@ -25,6 +25,9 @@ export function CalendarScreen() {
     onError: () => hapticNotify('error')
   });
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   return (
     <motion.section
       className="space-y-3"
@@ -65,10 +68,14 @@ export function CalendarScreen() {
       {calendarQuery.isError ? <p className="py-6 text-center text-red-500">Не удалось загрузить календарь.</p> : null}
 
       <div className="space-y-2">
-        {(calendarQuery.data ?? []).map((event) => (
+        {(calendarQuery.data ?? []).map((event) => {
+          const eventDate = new Date(event.date);
+          eventDate.setHours(0, 0, 0, 0);
+          const isToday = eventDate.getTime() === todayStart.getTime();
+          return (
           <motion.div
             key={`${event.date}-${event.plantId}`}
-            className="ios-blur-card relative overflow-hidden p-4"
+            className={`ios-blur-card relative overflow-hidden p-4 ${isToday ? 'ring-2 ring-ios-accent/60' : ''}`}
             drag="x"
             dragConstraints={{ left: 0, right: 220 }}
             dragElastic={0.08}
@@ -89,9 +96,11 @@ export function CalendarScreen() {
                 Полив: {new Date(event.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
               </p>
               <p className="mt-1 text-[11px] text-ios-subtext">Свайпни вправо, чтобы отметить полив</p>
+              {isToday ? <p className="mt-1 text-[11px] font-semibold text-ios-accent">Нужно полить сегодня</p> : null}
             </div>
           </motion.div>
-        ))}
+        );
+        })}
       </div>
     </motion.section>
   );

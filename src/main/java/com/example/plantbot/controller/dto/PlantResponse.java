@@ -5,6 +5,7 @@ import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.SunExposure;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 public record PlantResponse(Long id,
@@ -22,5 +23,6 @@ public record PlantResponse(Long id,
                             LocalDate nextWateringDate,
                             Integer recommendedWaterMl,
                             PlantType type,
-                            String photoUrl) {
+                            String photoUrl,
+                            Instant createdAt) {
 }
