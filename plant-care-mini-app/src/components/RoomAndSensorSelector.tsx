@@ -57,6 +57,10 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
 
   const roomOptions = roomsSensorsQuery.data?.rooms ?? [];
 
+  if (roomsSensorsQuery.data && !roomsSensorsQuery.data.connected) {
+    return null;
+  }
+
   const saveBinding = () => {
     const payload: PlantRoomBindingRequest = {
       areaId: selectedRoomId || undefined,

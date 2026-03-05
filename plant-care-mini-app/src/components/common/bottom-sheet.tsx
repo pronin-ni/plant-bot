@@ -37,7 +37,9 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
             transition={{ type: 'spring', stiffness: 350, damping: 29, mass: 1 }}
           >
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-ios-border/70" />
-            {children}
+            <div className="max-h-[78dvh] overflow-y-auto pr-1">
+              {children}
+            </div>
           </motion.div>
         </>
       ) : null}

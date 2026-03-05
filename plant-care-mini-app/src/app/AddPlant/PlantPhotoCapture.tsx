@@ -6,7 +6,6 @@ import { identifyPlantOpenRouter } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import type { OpenRouterIdentifyResult } from '@/types/api';
 
-import { Button } from '@/components/ui/button';
 
 export function PlantPhotoCapture({
   onIdentified
@@ -49,23 +48,24 @@ export function PlantPhotoCapture({
         )}
       </div>
 
-      <label className="block">
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              void onFile(file);
-            }
-          }}
-        />
-        <Button type="button" className="w-full">
+      <input
+        id="plant-photo-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            void onFile(file);
+          }
+        }}
+      />
+      <label htmlFor="plant-photo-input" className="block">
+        <span className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button bg-ios-accent px-5 text-ios-body font-medium text-white shadow-ios">
           <Camera className="mr-2 h-4 w-4" />
           {identifyMutation.isPending ? 'Распознаём...' : 'Сфотографировать / выбрать'}
-        </Button>
+        </span>
       </label>
 
       {identifyMutation.data ? (

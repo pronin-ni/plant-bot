@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { CalendarDays, Leaf, PlusCircle, Settings } from 'lucide-react';
+import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { hapticSelectionChanged } from '@/lib/telegram';
@@ -16,6 +16,7 @@ const TABS: TabItem[] = [
   { key: 'home', title: 'Растения', icon: Leaf },
   { key: 'calendar', title: 'Календарь', icon: CalendarDays },
   { key: 'add', title: 'Добавить', icon: PlusCircle },
+  { key: 'ai', title: 'AI', icon: MessageCircle },
   { key: 'settings', title: 'Настройки', icon: Settings }
 ];
 

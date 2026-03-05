@@ -38,6 +38,12 @@ openrouter:
   cache-max-entries: ${OPENROUTER_CACHE_MAX_ENTRIES:5000}
   backoff-minutes: 60
 
+openmeteo:
+  enabled: ${OPENMETEO_ENABLED:true}
+  base-url: ${OPENMETEO_BASE_URL:https://api.open-meteo.com/v1/forecast}
+  geocode-base-url: ${OPENMETEO_GEOCODE_BASE_URL:https://geocoding-api.open-meteo.com/v1/search}
+  geocode-reverse-base-url: ${OPENMETEO_GEOCODE_REVERSE_BASE_URL:https://geocoding-api.open-meteo.com/v1/reverse}
+
 openweather:
   api-key: ${OPENWEATHER_API_KEY:}
   base-url: https://api.openweathermap.org/data/2.5/weather

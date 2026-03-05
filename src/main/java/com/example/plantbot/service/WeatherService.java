@@ -39,10 +39,22 @@ public class WeatherService {
   private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
   private final Map<String, List<RainSample>> rainHistory = new ConcurrentHashMap<>();
 
-  @Value("${openweather.api-key}")
+  @Value("${openmeteo.enabled:true}")
+  private boolean openMeteoEnabled;
+
+  @Value("${openmeteo.base-url:https://api.open-meteo.com/v1/forecast}")
+  private String openMeteoBaseUrl;
+
+  @Value("${openmeteo.geocode-base-url:https://geocoding-api.open-meteo.com/v1/search}")
+  private String openMeteoGeoBaseUrl;
+
+  @Value("${openmeteo.geocode-reverse-base-url:https://geocoding-api.open-meteo.com/v1/reverse}")
+  private String openMeteoGeoReverseBaseUrl;
+
+  @Value("${openweather.api-key:}")
   private String apiKey;
 
-  @Value("${openweather.base-url}")
+  @Value("${openweather.base-url:https://api.openweathermap.org/data/2.5/weather}")
   private String baseUrl;
 
   @Value("${openweather.geo-base-url:https://api.openweathermap.org/geo/1.0/direct}")
@@ -51,7 +63,7 @@ public class WeatherService {
   @Value("${openweather.geo-reverse-base-url:https://api.openweathermap.org/geo/1.0/reverse}")
   private String geoReverseBaseUrl;
 
-  @Value("${openweather.units}")
+  @Value("${openweather.units:metric}")
   private String units;
 
   @Value("${openweather.cache-ttl-minutes:15}")
@@ -64,24 +76,35 @@ public class WeatherService {
   private int rainMaxKeys;
 
   public Optional<WeatherData> getCurrent(String city, Double lat, Double lon) {
-    if (apiKey == null || apiKey.isBlank()) {
-      return Optional.empty();
-    }
-
     String key = cacheKey(city, lat, lon);
     CachedWeather cached = cache.get(key);
     if (cached != null && cached.expiresAt().isAfter(Instant.now())) {
       return Optional.of(cached.data());
     }
 
-    Optional<WeatherData> fromCoords = requestWeatherByCoords(lat, lon);
-    if (fromCoords.isPresent()) {
-      return storeWeather(key, fromCoords.get());
+    // 1) Бесплатный источник без API-ключа (приоритетный)
+    if (openMeteoEnabled) {
+      Optional<WeatherData> meteoByCoords = requestOpenMeteoByCoords(lat, lon, city);
+      if (meteoByCoords.isPresent()) {
+        return storeWeather(key, meteoByCoords.get());
+      }
+      Optional<WeatherData> meteoByCity = requestOpenMeteoByCityCandidates(city);
+      if (meteoByCity.isPresent()) {
+        return storeWeather(key, meteoByCity.get());
+      }
     }
 
-    Optional<WeatherData> fromCity = requestWeatherByCityCandidates(city);
-    if (fromCity.isPresent()) {
-      return storeWeather(key, fromCity.get());
+    // 2) Optional fallback на OpenWeather
+    if (hasOpenWeatherKey()) {
+      Optional<WeatherData> fromCoords = requestOpenWeatherByCoords(lat, lon);
+      if (fromCoords.isPresent()) {
+        return storeWeather(key, fromCoords.get());
+      }
+
+      Optional<WeatherData> fromCity = requestOpenWeatherByCityCandidates(city);
+      if (fromCity.isPresent()) {
+        return storeWeather(key, fromCity.get());
+      }
     }
 
     log.warn("Weather request failed for city='{}' lat={} lon={}", city, lat, lon);
@@ -113,64 +136,51 @@ public class WeatherService {
   }
 
   public List<CityOption> resolveCityOptions(String query, int limit) {
-    if (query == null || query.isBlank() || apiKey == null || apiKey.isBlank()) {
+    if (query == null || query.isBlank()) {
       return List.of();
     }
     int max = Math.max(1, Math.min(8, limit));
     Set<String> candidates = new LinkedHashSet<>(cityCandidates(query));
     List<CityOption> result = new ArrayList<>();
-    for (String candidate : candidates) {
-      if (result.size() >= max) {
-        break;
+
+    if (openMeteoEnabled) {
+      for (String candidate : candidates) {
+        if (result.size() >= max) {
+          break;
+        }
+        result.addAll(fetchOpenMeteoGeoCandidates(candidate, max - result.size()));
       }
-      result.addAll(fetchGeoCandidates(candidate, max - result.size()));
     }
 
-    // deduplicate by rounded lat/lon
-    Set<String> seen = new LinkedHashSet<>();
-    List<CityOption> unique = new ArrayList<>();
-    for (CityOption option : result) {
-      String id = String.format(Locale.ROOT, "%.4f:%.4f", option.lat(), option.lon());
-      if (seen.add(id)) {
-        unique.add(option);
-      }
-      if (unique.size() >= max) {
-        break;
+    if (result.size() < max && hasOpenWeatherKey()) {
+      for (String candidate : candidates) {
+        if (result.size() >= max) {
+          break;
+        }
+        result.addAll(fetchOpenWeatherGeoCandidates(candidate, max - result.size()));
       }
     }
-    return unique;
+
+    return deduplicateCityOptions(result, max);
   }
 
   public Optional<CityOption> resolveCityByCoordinates(Double lat, Double lon) {
-    if (lat == null || lon == null || apiKey == null || apiKey.isBlank()) {
+    if (lat == null || lon == null) {
       return Optional.empty();
     }
-    try {
-      String url = String.format(Locale.ROOT, "%s?lat=%.6f&lon=%.6f&limit=1&appid=%s",
-          geoReverseBaseUrl, lat, lon, apiKey);
-      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
-      if (response == null || !response.isArray() || response.isEmpty()) {
-        return Optional.empty();
+
+    if (openMeteoEnabled) {
+      Optional<CityOption> byOpenMeteo = reverseGeocodeOpenMeteo(lat, lon);
+      if (byOpenMeteo.isPresent()) {
+        return byOpenMeteo;
       }
-      JsonNode node = response.get(0);
-      String name = node.path("name").asText("").trim();
-      String state = node.path("state").asText("").trim();
-      String country = node.path("country").asText("").trim();
-      if (name.isEmpty()) {
-        return Optional.empty();
-      }
-      String display = name;
-      if (!state.isEmpty()) {
-        display += ", " + state;
-      }
-      if (!country.isEmpty()) {
-        display += ", " + country;
-      }
-      return Optional.of(new CityOption(display, lat, lon, country));
-    } catch (Exception ex) {
-      log.warn("Reverse geocoding failed for lat={} lon={}: {}", lat, lon, ex.getMessage());
-      return Optional.empty();
     }
+
+    if (hasOpenWeatherKey()) {
+      return reverseGeocodeOpenWeather(lat, lon);
+    }
+
+    return Optional.empty();
   }
 
   private Optional<WeatherData> storeWeather(String key, WeatherData data) {
@@ -181,22 +191,74 @@ public class WeatherService {
     return Optional.of(data);
   }
 
-  private Optional<WeatherData> requestWeatherByCoords(Double lat, Double lon) {
+  private boolean hasOpenWeatherKey() {
+    return apiKey != null && !apiKey.isBlank();
+  }
+
+  private Optional<WeatherData> requestOpenMeteoByCoords(Double lat, Double lon, String debug) {
     if (lat == null || lon == null) {
       return Optional.empty();
     }
-    String url = String.format(Locale.ROOT, "%s?lat=%.6f&lon=%.6f&appid=%s&units=%s", baseUrl, lat, lon, apiKey, units);
-    return executeWeatherRequest(url, "lat/lon");
+    String url = String.format(Locale.ROOT,
+        "%s?latitude=%.6f&longitude=%.6f&current=temperature_2m,relative_humidity_2m,precipitation&timezone=auto",
+        openMeteoBaseUrl, lat, lon);
+    return executeOpenMeteoRequest(url, "open-meteo coords " + (debug == null ? "" : debug));
   }
 
-  private Optional<WeatherData> requestWeatherByCityCandidates(String city) {
+  private Optional<WeatherData> requestOpenMeteoByCityCandidates(String city) {
     if (city == null || city.isBlank()) {
+      return Optional.empty();
+    }
+    for (String candidate : cityCandidates(city)) {
+      List<CityOption> options = fetchOpenMeteoGeoCandidates(candidate, 1);
+      if (options.isEmpty()) {
+        continue;
+      }
+      CityOption first = options.get(0);
+      Optional<WeatherData> weather = requestOpenMeteoByCoords(first.lat(), first.lon(), candidate);
+      if (weather.isPresent()) {
+        return weather;
+      }
+    }
+    return Optional.empty();
+  }
+
+  private Optional<WeatherData> executeOpenMeteoRequest(String url, String debugName) {
+    try {
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode current = response == null ? null : response.path("current");
+      if (current == null || current.isMissingNode()) {
+        return Optional.empty();
+      }
+      double temp = current.path("temperature_2m").asDouble(Double.NaN);
+      double humidity = current.path("relative_humidity_2m").asDouble(Double.NaN);
+      double rain = current.path("precipitation").asDouble(0.0);
+      if (Double.isNaN(temp) || Double.isNaN(humidity)) {
+        return Optional.empty();
+      }
+      return Optional.of(new WeatherData(temp, humidity, Math.max(0.0, rain)));
+    } catch (Exception ex) {
+      log.debug("Open-Meteo request error for '{}': {}", debugName, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private Optional<WeatherData> requestOpenWeatherByCoords(Double lat, Double lon) {
+    if (lat == null || lon == null || !hasOpenWeatherKey()) {
+      return Optional.empty();
+    }
+    String url = String.format(Locale.ROOT, "%s?lat=%.6f&lon=%.6f&appid=%s&units=%s", baseUrl, lat, lon, apiKey, units);
+    return executeOpenWeatherRequest(url, "lat/lon");
+  }
+
+  private Optional<WeatherData> requestOpenWeatherByCityCandidates(String city) {
+    if (city == null || city.isBlank() || !hasOpenWeatherKey()) {
       return Optional.empty();
     }
     for (String candidate : cityCandidates(city)) {
       String encoded = URLEncoder.encode(candidate, StandardCharsets.UTF_8);
       String url = String.format("%s?q=%s&appid=%s&units=%s", baseUrl, encoded, apiKey, units);
-      Optional<WeatherData> data = executeWeatherRequest(url, candidate);
+      Optional<WeatherData> data = executeOpenWeatherRequest(url, candidate);
       if (data.isPresent()) {
         return data;
       }
@@ -204,7 +266,7 @@ public class WeatherService {
     return Optional.empty();
   }
 
-  private Optional<WeatherData> executeWeatherRequest(String url, String debugName) {
+  private Optional<WeatherData> executeOpenWeatherRequest(String url, String debugName) {
     try {
       JsonNode response = restTemplate.getForObject(url, JsonNode.class);
       if (response == null || response.get("main") == null) {
@@ -217,16 +279,54 @@ public class WeatherService {
       return Optional.of(new WeatherData(temp, humidity, rain + snow));
     } catch (HttpStatusCodeException ex) {
       if (ex.getStatusCode().value() >= 500) {
-        log.warn("Weather API server error for '{}': {}", debugName, ex.getStatusCode());
+        log.warn("OpenWeather server error for '{}': {}", debugName, ex.getStatusCode());
       }
       return Optional.empty();
     } catch (Exception ex) {
-      log.warn("Weather request error for '{}': {}", debugName, ex.getMessage());
+      log.debug("OpenWeather request error for '{}': {}", debugName, ex.getMessage());
       return Optional.empty();
     }
   }
 
-  private List<CityOption> fetchGeoCandidates(String cityQuery, int limit) {
+  private List<CityOption> fetchOpenMeteoGeoCandidates(String cityQuery, int limit) {
+    try {
+      String encoded = URLEncoder.encode(cityQuery, StandardCharsets.UTF_8);
+      String url = String.format("%s?name=%s&count=%d&language=ru&format=json", openMeteoGeoBaseUrl, encoded, limit);
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode results = response == null ? null : response.path("results");
+      if (results == null || !results.isArray()) {
+        return List.of();
+      }
+      List<CityOption> list = new ArrayList<>();
+      for (JsonNode node : results) {
+        String name = node.path("name").asText("").trim();
+        String admin1 = node.path("admin1").asText("").trim();
+        String countryCode = node.path("country_code").asText("").trim();
+        double lat = node.path("latitude").asDouble(Double.NaN);
+        double lon = node.path("longitude").asDouble(Double.NaN);
+        if (name.isEmpty() || Double.isNaN(lat) || Double.isNaN(lon)) {
+          continue;
+        }
+        String display = name;
+        if (!admin1.isEmpty()) {
+          display += ", " + admin1;
+        }
+        if (!countryCode.isEmpty()) {
+          display += ", " + countryCode;
+        }
+        list.add(new CityOption(display, lat, lon, countryCode));
+      }
+      return list;
+    } catch (Exception ex) {
+      log.debug("Open-Meteo geocoding failed for '{}': {}", cityQuery, ex.getMessage());
+      return List.of();
+    }
+  }
+
+  private List<CityOption> fetchOpenWeatherGeoCandidates(String cityQuery, int limit) {
+    if (!hasOpenWeatherKey()) {
+      return List.of();
+    }
     try {
       String encoded = URLEncoder.encode(cityQuery, StandardCharsets.UTF_8);
       String url = String.format("%s?q=%s&limit=%d&appid=%s", geoBaseUrl, encoded, limit, apiKey);
@@ -255,9 +355,87 @@ public class WeatherService {
       }
       return list;
     } catch (Exception ex) {
-      log.warn("City geocoding failed for '{}': {}", cityQuery, ex.getMessage());
+      log.debug("OpenWeather geocoding failed for '{}': {}", cityQuery, ex.getMessage());
       return List.of();
     }
+  }
+
+  private Optional<CityOption> reverseGeocodeOpenMeteo(Double lat, Double lon) {
+    try {
+      String url = String.format(Locale.ROOT,
+          "%s?latitude=%.6f&longitude=%.6f&language=ru&format=json",
+          openMeteoGeoReverseBaseUrl, lat, lon);
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode results = response == null ? null : response.path("results");
+      if (results == null || !results.isArray() || results.isEmpty()) {
+        return Optional.empty();
+      }
+      JsonNode node = results.get(0);
+      String name = node.path("name").asText("").trim();
+      String admin1 = node.path("admin1").asText("").trim();
+      String countryCode = node.path("country_code").asText("").trim();
+      if (name.isEmpty()) {
+        return Optional.empty();
+      }
+      String display = name;
+      if (!admin1.isEmpty()) {
+        display += ", " + admin1;
+      }
+      if (!countryCode.isEmpty()) {
+        display += ", " + countryCode;
+      }
+      return Optional.of(new CityOption(display, lat, lon, countryCode));
+    } catch (Exception ex) {
+      log.debug("Open-Meteo reverse geocoding failed for lat={} lon={}: {}", lat, lon, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private Optional<CityOption> reverseGeocodeOpenWeather(Double lat, Double lon) {
+    if (!hasOpenWeatherKey()) {
+      return Optional.empty();
+    }
+    try {
+      String url = String.format(Locale.ROOT, "%s?lat=%.6f&lon=%.6f&limit=1&appid=%s",
+          geoReverseBaseUrl, lat, lon, apiKey);
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      if (response == null || !response.isArray() || response.isEmpty()) {
+        return Optional.empty();
+      }
+      JsonNode node = response.get(0);
+      String name = node.path("name").asText("").trim();
+      String state = node.path("state").asText("").trim();
+      String country = node.path("country").asText("").trim();
+      if (name.isEmpty()) {
+        return Optional.empty();
+      }
+      String display = name;
+      if (!state.isEmpty()) {
+        display += ", " + state;
+      }
+      if (!country.isEmpty()) {
+        display += ", " + country;
+      }
+      return Optional.of(new CityOption(display, lat, lon, country));
+    } catch (Exception ex) {
+      log.debug("OpenWeather reverse geocoding failed for lat={} lon={}: {}", lat, lon, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private List<CityOption> deduplicateCityOptions(List<CityOption> options, int limit) {
+    Set<String> seen = new LinkedHashSet<>();
+    List<CityOption> unique = new ArrayList<>();
+    for (CityOption option : options) {
+      String id = String.format(Locale.ROOT, "%.4f:%.4f", option.lat(), option.lon());
+      if (seen.add(id)) {
+        unique.add(option);
+      }
+      if (unique.size() >= limit) {
+        break;
+      }
+    }
+    return unique;
   }
 
   private List<String> cityCandidates(String city) {

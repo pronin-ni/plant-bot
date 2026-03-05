@@ -4,7 +4,6 @@ import { useState } from 'react';
 
 import { diagnosePlantOpenRouter } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
-import { Button } from '@/components/ui/button';
 
 export function DiagnosisTool({ plantName }: { plantName: string }) {
   const [preview, setPreview] = useState<string | null>(null);
@@ -30,28 +29,34 @@ export function DiagnosisTool({ plantName }: { plantName: string }) {
         )}
       </div>
 
-      <label>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) {
-              return;
-            }
-            hapticImpact('light');
-            void toDataUrl(file).then((dataUrl) => {
-              setPreview(dataUrl);
-              diagnoseMutation.mutate(dataUrl);
-            });
-          }}
-        />
-        <Button className="w-full" variant="secondary">
+      <input
+        id="diagnosis-photo-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) {
+            return;
+          }
+          hapticImpact('light');
+          void toDataUrl(file).then((dataUrl) => {
+            setPreview(dataUrl);
+            diagnoseMutation.mutate(dataUrl);
+          });
+        }}
+      />
+      <label htmlFor="diagnosis-photo-input" className="block">
+        <span className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50">
           {diagnoseMutation.isPending ? 'Диагностируем...' : 'Проверить лист'}
-        </Button>
+        </span>
       </label>
+
+
+      {diagnoseMutation.isError ? (
+        <p className="text-[12px] text-red-500">Не удалось выполнить диагностику. Проверьте ключ OpenRouter, модель и лимиты.</p>
+      ) : null}
 
       {diagnoseMutation.data ? (
         <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 text-sm dark:bg-zinc-900/40">

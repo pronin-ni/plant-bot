@@ -10,7 +10,9 @@ import type {
   OpenRouterDiagnoseResult,
   AchievementsDto,
   OpenRouterModelsDto,
-  OpenRouterPreferencesDto
+  OpenRouterPreferencesDto,
+  ChatAskResponse,
+  PlantCareAdviceDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -221,4 +223,17 @@ export async function clearOpenRouterApiKey(): Promise<OpenRouterPreferencesDto>
   return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences/api-key', {
     method: 'DELETE'
   });
+}
+
+
+export async function askAssistant(question: string): Promise<ChatAskResponse> {
+  return apiFetch<ChatAskResponse>('/api/assistant/chat', {
+    method: 'POST',
+    body: JSON.stringify({ question })
+  });
+}
+
+
+export async function getPlantCareAdvice(id: number): Promise<PlantCareAdviceDto> {
+  return apiFetch<PlantCareAdviceDto>(`/api/plants/${id}/care-advice`, { method: 'GET' });
 }

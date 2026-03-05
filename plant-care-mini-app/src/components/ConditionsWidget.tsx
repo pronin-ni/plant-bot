@@ -11,15 +11,16 @@ export function ConditionsWidget({ plantId, compact = false }: { plantId: number
     refetchInterval: 60_000
   });
 
-  if (query.isLoading) {
-    return <div className="ios-blur-card p-3 text-ios-caption text-ios-subtext">Загружаем условия из Home Assistant...</div>;
-  }
-
-  if (query.isError || !query.data) {
-    return <div className="ios-blur-card p-3 text-ios-caption text-ios-subtext">Условия недоступны</div>;
+  if (query.isLoading || query.isError || !query.data) {
+    return null;
   }
 
   const conditions = query.data;
+  const hasAnyValue = conditions.sampledAt || conditions.temperatureC != null || conditions.humidityPercent != null
+    || conditions.soilMoisturePercent != null || conditions.illuminanceLux != null || !!conditions.source;
+  if (!hasAnyValue) {
+    return null;
+  }
   const className = compact ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-2';
 
   return (

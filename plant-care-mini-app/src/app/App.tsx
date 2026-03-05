@@ -10,6 +10,7 @@ import { PlantDetailSheet } from '@/app/plant-detail-sheet';
 import { AddPlantScreen } from '@/app/add-plant-screen';
 import { CalendarScreen } from '@/app/calendar-screen';
 import { SettingsScreen } from '@/app/settings-screen';
+import { AiScreen } from '@/app/ai-screen';
 import { validateTelegramAuth } from '@/lib/api';
 import { hapticImpact, useTelegramThemeSync } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
@@ -38,6 +39,13 @@ function TabTitle({ tab }: { tab: AppTabKey }) {
           <p className="mt-2 text-ios-body text-ios-subtext">Новый мастер добавления растений в стиле iOS sheet.</p>
         </div>
       );
+    case 'ai':
+      return (
+        <div className="mb-5 mt-1">
+          <h1 className="text-ios-large-title text-ios-text">AI-ассистент</h1>
+          <p className="mt-2 text-ios-body text-ios-subtext">Вопросы по садоводству и уходу за растениями.</p>
+        </div>
+      );
     case 'settings':
       return (
         <div className="mb-5 mt-1">
@@ -63,7 +71,8 @@ export function App() {
       useAuthStore.getState().setAuth({
         isAuthorized: payload.ok,
         telegramUserId: Number(payload.userId),
-        username: payload.username
+        username: payload.username,
+        city: payload.city
       });
       hapticImpact('medium');
     }
@@ -129,6 +138,10 @@ export function App() {
 
           {activeTab === 'add' ? (
             <AddPlantScreen />
+          ) : null}
+
+          {activeTab === 'ai' ? (
+            <AiScreen />
           ) : null}
 
           {activeTab === 'settings' ? (

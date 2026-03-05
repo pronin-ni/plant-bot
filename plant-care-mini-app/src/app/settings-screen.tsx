@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone } from 'lucide-react';
 
@@ -13,11 +13,25 @@ import { useAuthStore } from '@/lib/store';
 
 export function SettingsScreen() {
   const username = useAuthStore((s) => s.username);
-  const [city, setCity] = useState('');
+  const savedCity = useAuthStore((s) => s.city);
+  const [city, setCity] = useState(savedCity ?? '');
+
+  useEffect(() => {
+    setCity(savedCity ?? '');
+  }, [savedCity]);
 
   const cityMutation = useMutation({
     mutationFn: (value: string) => updateCity(value),
-    onSuccess: () => hapticNotify('success'),
+    onSuccess: (_payload, value) => {
+      useAuthStore.getState().setAuth({
+        isAuthorized: true,
+        telegramUserId: useAuthStore.getState().telegramUserId,
+        username: useAuthStore.getState().username,
+        city: value
+      });
+      setCity(value);
+      hapticNotify('success');
+    },
     onError: () => hapticNotify('error')
   });
 

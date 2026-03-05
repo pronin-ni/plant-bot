@@ -3,6 +3,7 @@ export interface AuthValidationResponse {
   userId: string;
   username?: string;
   firstName?: string;
+  city?: string;
 }
 
 export interface PlantDto {
@@ -116,4 +117,20 @@ export interface OpenRouterPreferencesDto {
   photoDiagnoseModel?: string | null;
   hasApiKey?: boolean;
   apiKey?: string | null;
+}
+
+
+export interface ChatAskResponse {
+  ok: boolean;
+  answer: string;
+}
+
+
+export interface PlantCareAdviceDto {
+  wateringCycleDays: number;
+  additives: string[];
+  soilType?: string;
+  soilComposition: string[];
+  note?: string;
+  source?: string;
 }

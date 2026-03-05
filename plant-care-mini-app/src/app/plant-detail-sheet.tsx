@@ -12,7 +12,7 @@ import { GrowthGallery } from '@/app/PlantDetail/GrowthGallery';
 import { DiagnosisTool } from '@/app/PlantDetail/DiagnosisTool';
 import { ProgressRing } from '@/components/common/progress-ring';
 import { Button } from '@/components/ui/button';
-import { deletePlant, getPlantById, uploadPlantPhoto, waterPlant } from '@/lib/api';
+import { deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useUiStore } from '@/lib/store';
 import type { PlantDto } from '@/types/api';
@@ -45,12 +45,20 @@ export function PlantDetailSheet() {
     enabled: selectedPlantId !== null
   });
 
+  const careAdviceQuery = useQuery({
+    queryKey: ['plant-care-advice', selectedPlantId],
+    queryFn: () => getPlantCareAdvice(selectedPlantId as number),
+    enabled: selectedPlantId !== null
+  });
+
   const waterMutation = useMutation({
     mutationFn: (id: number) => waterPlant(id),
     onSuccess: () => {
       hapticNotify('success');
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
+      void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
     },
     onError: () => {
       hapticNotify('error');
@@ -62,6 +70,7 @@ export function PlantDetailSheet() {
     onSuccess: () => {
       hapticNotify('success');
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
     onError: () => hapticNotify('error')
@@ -141,6 +150,25 @@ export function PlantDetailSheet() {
           </div>
 
           <SmartReminderCard plant={plant} />
+
+          <div className="ios-blur-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-ios-body font-semibold">Рекомендации AI</p>
+              <p className="text-[11px] text-ios-subtext">{careAdviceQuery.data?.source ?? '—'}</p>
+            </div>
+            {careAdviceQuery.isLoading ? (
+              <p className="text-ios-caption text-ios-subtext">Подбираем рекомендации...</p>
+            ) : null}
+            {careAdviceQuery.data ? (
+              <div className="space-y-2 text-sm">
+                <p><b>Цикл полива:</b> {careAdviceQuery.data.wateringCycleDays} дн.</p>
+                <p><b>Тип грунта:</b> {careAdviceQuery.data.soilType || 'Не указано'}</p>
+                <p><b>Состав грунта:</b> {careAdviceQuery.data.soilComposition?.length ? careAdviceQuery.data.soilComposition.join(', ') : 'Не указано'}</p>
+                <p><b>Добавки:</b> {careAdviceQuery.data.additives?.length ? careAdviceQuery.data.additives.join(', ') : 'Не требуется'}</p>
+                {careAdviceQuery.data.note ? <p className="text-ios-subtext">{careAdviceQuery.data.note}</p> : null}
+              </div>
+            ) : null}
+          </div>
 
           <div className="grid grid-cols-3 gap-2">
             <InfoPill icon={Droplets} label="Объём" value={`${plant.recommendedWaterMl ?? 0} мл`} />

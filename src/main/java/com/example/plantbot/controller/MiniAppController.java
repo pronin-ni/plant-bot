@@ -5,8 +5,11 @@ import com.example.plantbot.controller.dto.CalendarEventResponse;
 import com.example.plantbot.controller.dto.CalendarSyncRequest;
 import com.example.plantbot.controller.dto.CalendarSyncResponse;
 import com.example.plantbot.controller.dto.CityUpdateRequest;
+import com.example.plantbot.controller.dto.ChatAskRequest;
+import com.example.plantbot.controller.dto.ChatAskResponse;
 import com.example.plantbot.controller.dto.CreatePlantRequest;
 import com.example.plantbot.controller.dto.PhotoUploadResponse;
+import com.example.plantbot.controller.dto.PlantCareAdviceResponse;
 import com.example.plantbot.controller.dto.PlantLearningResponse;
 import com.example.plantbot.controller.dto.PlantPhotoRequest;
 import com.example.plantbot.controller.dto.PlantResponse;
@@ -18,12 +21,14 @@ import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.PhotoUrlSignerService;
+import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.TelegramInitDataService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.util.LearningInfo;
+import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.WateringRecommendation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -67,6 +72,7 @@ public class MiniAppController {
   private final UserService userService;
   private final UserRepository userRepository;
   private final PhotoUrlSignerService photoUrlSignerService;
+  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
@@ -76,7 +82,7 @@ public class MiniAppController {
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
   ) {
     User user = telegramInitDataService.validateAndResolveUser(initData);
-    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName());
+    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName());
   }
 
   @GetMapping("/plants")
@@ -231,6 +237,34 @@ public class MiniAppController {
     plantService.delete(plant);
   }
 
+  @GetMapping("/plants/{id}/care-advice")
+  public PlantCareAdviceResponse getCareAdvice(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      @PathVariable("id") Long plantId
+  ) {
+    User user = telegramInitDataService.validateAndResolveUser(initData);
+    Plant plant = requireOwnedPlant(user, plantId);
+    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
+    PlantCareAdvice advice = openRouterPlantAdvisorService
+        .suggestCareAdvice(plant, rec.intervalDays())
+        .orElse(new PlantCareAdvice(
+            Math.max(1, (int) Math.round(rec.intervalDays())),
+            List.of(),
+            "Не указано",
+            List.of(),
+            "Нет дополнительных рекомендаций",
+            "Heuristic"
+        ));
+    return new PlantCareAdviceResponse(
+        advice.wateringCycleDays(),
+        advice.additives(),
+        advice.soilType(),
+        advice.soilComposition(),
+        advice.note(),
+        advice.source()
+    );
+  }
+
   @GetMapping("/stats")
   public List<PlantStatsResponse> getStats(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
@@ -272,6 +306,25 @@ public class MiniAppController {
     }).toList();
   }
 
+  @PostMapping("/assistant/chat")
+  public ChatAskResponse askAssistant(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      @RequestBody ChatAskRequest request
+  ) {
+    User user = telegramInitDataService.validateAndResolveUser(initData);
+    if (request == null || request.question() == null || request.question().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "question обязателен");
+    }
+
+    String question = request.question().trim();
+    var answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, question);
+    if (answer.isEmpty()) {
+      return new ChatAskResponse(false,
+          "Не удалось получить ответ от OpenRouter. Проверь ключ/модель и лимиты. Если используешь free-модель, включи Free model publication в настройках OpenRouter.");
+    }
+    return new ChatAskResponse(true, answer.get());
+  }
+
   @PostMapping("/users/city")
   public AuthValidateResponse updateCity(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
@@ -284,7 +337,7 @@ public class MiniAppController {
     user.setCity(request.city().trim());
     user.setCityDisplayName(request.city().trim());
     user = userService.save(user);
-    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName());
+    return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName());
   }
 
   @GetMapping("/calendar/sync")
@@ -432,7 +485,13 @@ public class MiniAppController {
     for (Plant plant : plants) {
       WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
       int step = Math.max(1, (int) Math.floor(rec.intervalDays()));
-      LocalDate next = plant.getLastWateredDate().plusDays(step);
+      LocalDate due = plant.getLastWateredDate().plusDays(step);
+      LocalDate next = due;
+
+      if (!due.isAfter(start) && !start.isAfter(end)) {
+        events.add(new CalendarEventResponse(start, plant.getId(), plant.getName()));
+      }
+
       while (!next.isAfter(end)) {
         if (!next.isBefore(start)) {
           events.add(new CalendarEventResponse(next, plant.getId(), plant.getName()));
