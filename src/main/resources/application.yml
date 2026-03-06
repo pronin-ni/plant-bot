@@ -36,6 +36,7 @@ openrouter:
   watering-cache-ttl-minutes: ${OPENROUTER_WATERING_CACHE_TTL_MINUTES:720}
   chat-cache-ttl-minutes: ${OPENROUTER_CHAT_CACHE_TTL_MINUTES:10080}
   cache-max-entries: ${OPENROUTER_CACHE_MAX_ENTRIES:5000}
+  chat-fallback-enabled: ${OPENROUTER_CHAT_FALLBACK_ENABLED:false}
   backoff-minutes: 60
 
 openmeteo:

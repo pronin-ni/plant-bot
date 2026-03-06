@@ -1433,10 +1433,11 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   private void handleFreeQuestion(User user, Long chatId, String text) {
     Integer loadingMessageId = sendLoadingMessage(chatId, "🤖 Готовлю ответ по садоводству...");
-    Optional<String> answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, text);
+    Optional<OpenRouterPlantAdvisorService.ChatAnswer> answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, text);
     if (answer.isPresent()) {
-      if (!tryEditMessage(chatId, loadingMessageId, answer.get(), null)) {
-        sendText(chatId, answer.get());
+      String response = answer.get().answer();
+      if (!tryEditMessage(chatId, loadingMessageId, response, null)) {
+        sendText(chatId, response);
       }
       return;
     }

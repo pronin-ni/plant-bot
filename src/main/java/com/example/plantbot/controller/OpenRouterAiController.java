@@ -46,7 +46,8 @@ public class OpenRouterAiController {
     return openRouterVisionService.diagnosePlant(
         user,
         request == null ? null : request.imageBase64(),
-        request == null ? null : request.plantName()
+        request == null ? null : request.plantName(),
+        request == null ? null : request.plantContext()
     );
   }
 }

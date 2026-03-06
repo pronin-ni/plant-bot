@@ -5,8 +5,9 @@ import { Check, ChevronLeft, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RoomAndSensorSelector } from '@/components/RoomAndSensorSelector';
 import { PlantPhotoCapture } from '@/app/AddPlant/PlantPhotoCapture';
-import { createPlant, searchPlants } from '@/lib/api';
+import { createPlant, searchPlants, suggestPlantProfile } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { useUiStore } from '@/lib/store';
 import type { OpenRouterIdentifyResult } from '@/types/api';
 
 type Placement = 'INDOOR' | 'OUTDOOR';
@@ -19,14 +20,24 @@ type StepKey = 'name' | 'placement' | 'indoor' | 'outdoor' | 'type' | 'summary';
 const STEP_META: Record<StepKey, { title: string; hint: string }> = {
   name: { title: 'Шаг 1. Название растения', hint: 'Введите вручную или используйте AI по фото.' },
   placement: { title: 'Шаг 2. Размещение', hint: 'Выберите: домашнее или уличное растение.' },
-  indoor: { title: 'Шаг 3. Параметры домашнего', hint: 'Укажите объём горшка и интервал полива.' },
+  indoor: { title: 'Шаг 3. Параметры домашнего', hint: 'Укажите объём горшка. Интервал и тип подберём автоматически.' },
   outdoor: { title: 'Шаг 3. Параметры уличного', hint: 'Укажите площадь, почву, свет и сезонность.' },
-  type: { title: 'Шаг 4. Тип растения', hint: 'Тип влияет на рекомендации по воде.' },
+  type: { title: 'Шаг 4. Проверка параметров', hint: 'Покажем, что определили автоматически.' },
   summary: { title: 'Шаг 5. Подтверждение', hint: 'Проверьте данные и сохраните растение.' }
+};
+
+const TYPE_LABELS: Record<PlantType, string> = {
+  DEFAULT: 'Обычное',
+  TROPICAL: 'Тропическое',
+  FERN: 'Папоротник',
+  SUCCULENT: 'Суккулент',
+  CONIFER: 'Хвойное'
 };
 
 export function AddPlantScreen() {
   const queryClient = useQueryClient();
+  const openPlantDetail = useUiStore((s) => s.openPlantDetail);
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
 
   const [name, setName] = useState('');
   const [potVolumeLiters, setPotVolumeLiters] = useState('2');
@@ -46,6 +57,8 @@ export function AddPlantScreen() {
   const [createdPlantId, setCreatedPlantId] = useState<number | null>(null);
   const [aiHint, setAiHint] = useState<string | null>(null);
   const [identifiedName, setIdentifiedName] = useState<string | null>(null);
+  const [profileSource, setProfileSource] = useState<string | null>(null);
+  const [manualProfileEdit, setManualProfileEdit] = useState(false);
 
   const steps = useMemo<StepKey[]>(() => {
     return placement === 'OUTDOOR'
@@ -75,6 +88,8 @@ export function AddPlantScreen() {
       setCreatedPlantId(createdPlant.id);
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      setActiveTab('home');
+      openPlantDetail(createdPlant.id);
     },
     onError: () => {
       hapticNotify('error');
@@ -85,6 +100,19 @@ export function AddPlantScreen() {
     mutationFn: (q: string) => searchPlants(q),
     onSuccess: (data) => {
       setSearchHint(data.slice(0, 4).map((plant) => plant.name));
+    }
+  });
+
+  const suggestProfileMutation = useMutation({
+    mutationFn: (plantName: string) => suggestPlantProfile(plantName),
+    onSuccess: (suggested) => {
+      if (suggested.intervalDays > 0) {
+        setBaseIntervalDays(String(suggested.intervalDays));
+      }
+      if (suggested.type && ['DEFAULT', 'TROPICAL', 'FERN', 'SUCCULENT', 'CONIFER'].includes(suggested.type)) {
+        setType(suggested.type as PlantType);
+      }
+      setProfileSource(suggested.source ?? null);
     }
   });
 
@@ -101,13 +129,16 @@ export function AddPlantScreen() {
       return Number(potVolumeLiters) > 0 && Number(baseIntervalDays) > 0;
     }
     if (currentStep === 'outdoor') {
-      return Number(outdoorAreaM2) > 0 && Number(baseIntervalDays) > 0;
+      return Number(outdoorAreaM2) > 0;
     }
     return true;
   })();
 
   const onNext = () => {
     hapticImpact('light');
+    if (currentStep === 'name' && name.trim().length > 1 && !suggestProfileMutation.isPending) {
+      suggestProfileMutation.mutate(name.trim());
+    }
     setStepIndex((prev) => Math.min(prev + 1, steps.length - 1));
   };
 
@@ -124,6 +155,9 @@ export function AddPlantScreen() {
     }
     if (result.wateringIntervalDays > 0) {
       setBaseIntervalDays(String(result.wateringIntervalDays));
+    }
+    if (result.russianName && !suggestProfileMutation.isPending) {
+      suggestProfileMutation.mutate(result.russianName);
     }
     const latin = result.latinName ? ` (${result.latinName})` : '';
     if (result.confidence < 60) {
@@ -198,21 +232,13 @@ export function AddPlantScreen() {
           ) : null}
 
           {currentStep === 'indoor' ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <Field label="Объём горшка (л)">
                 <input
                   value={potVolumeLiters}
                   onChange={(event) => setPotVolumeLiters(event.target.value)}
                   type="number"
                   step="0.1"
-                  className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
-                />
-              </Field>
-              <Field label="Интервал (дни)">
-                <input
-                  value={baseIntervalDays}
-                  onChange={(event) => setBaseIntervalDays(event.target.value)}
-                  type="number"
                   className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
                 />
               </Field>
@@ -228,14 +254,6 @@ export function AddPlantScreen() {
                     onChange={(event) => setOutdoorAreaM2(event.target.value)}
                     type="number"
                     step="0.1"
-                    className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
-                  />
-                </Field>
-                <Field label="Интервал (дни)">
-                  <input
-                    value={baseIntervalDays}
-                    onChange={(event) => setBaseIntervalDays(event.target.value)}
-                    type="number"
                     className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
                   />
                 </Field>
@@ -281,19 +299,42 @@ export function AddPlantScreen() {
           ) : null}
 
           {currentStep === 'type' ? (
-            <Field label="Тип растения">
-              <SelectGroup
-                value={type}
-                onChange={(value) => setType(value as PlantType)}
-                options={[
-                  { value: 'DEFAULT', label: 'Обычное' },
-                  { value: 'TROPICAL', label: 'Тропическое' },
-                  { value: 'FERN', label: 'Папоротник' },
-                  { value: 'SUCCULENT', label: 'Суккулент' },
-                  { value: 'CONIFER', label: 'Хвойное' }
-                ]}
-              />
-            </Field>
+            <div className="space-y-3">
+              <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/50">
+                <p><b>Определённый интервал:</b> {baseIntervalDays} дн.</p>
+                <p><b>Определённый тип:</b> {TYPE_LABELS[type]}</p>
+                <p className="mt-1 text-xs text-ios-subtext">Источник: {profileSource ?? 'AI/эвристика'}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" onClick={() => setManualProfileEdit(false)}>Принять</Button>
+                <Button variant="secondary" onClick={() => setManualProfileEdit(true)}>Редактировать</Button>
+              </div>
+              {manualProfileEdit ? (
+                <div className="space-y-3">
+                  <Field label="Интервал (дни)">
+                    <input
+                      value={baseIntervalDays}
+                      onChange={(event) => setBaseIntervalDays(event.target.value)}
+                      type="number"
+                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
+                    />
+                  </Field>
+                  <Field label="Тип растения">
+                    <SelectGroup
+                      value={type}
+                      onChange={(value) => setType(value as PlantType)}
+                      options={[
+                        { value: 'DEFAULT', label: 'Обычное' },
+                        { value: 'TROPICAL', label: 'Тропическое' },
+                        { value: 'FERN', label: 'Папоротник' },
+                        { value: 'SUCCULENT', label: 'Суккулент' },
+                        { value: 'CONIFER', label: 'Хвойное' }
+                      ]}
+                    />
+                  </Field>
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           {currentStep === 'summary' ? (
@@ -304,13 +345,13 @@ export function AddPlantScreen() {
               {placement === 'OUTDOOR' ? (
                 <>
                   <p><b>Площадь:</b> {outdoorAreaM2} м²</p>
-                  <p><b>Почва:</b> {outdoorSoilType}</p>
-                  <p><b>Солнце:</b> {sunExposure}</p>
+                  <p><b>Почва:</b> {outdoorSoilType === 'SANDY' ? 'Песчаная' : outdoorSoilType === 'LOAMY' ? 'Суглинистая' : 'Глинистая'}</p>
+                  <p><b>Солнце:</b> {sunExposure === 'FULL_SUN' ? 'Полное солнце' : sunExposure === 'PARTIAL_SHADE' ? 'Полутень' : 'Тень'}</p>
                 </>
               ) : (
                 <p><b>Горшок:</b> {potVolumeLiters} л</p>
               )}
-              <p><b>Тип:</b> {type}</p>
+              <p><b>Тип:</b> {TYPE_LABELS[type]}</p>
               {createdPlantId ? (
                 <div className="pt-2">
                   <RoomAndSensorSelector plantId={createdPlantId} compact />
@@ -340,7 +381,7 @@ export function AddPlantScreen() {
               }}
             >
               <Plus className="mr-2 h-4 w-4" />
-              {createMutation.isPending ? 'Добавляем...' : 'Добавить'}
+              {createMutation.isPending ? 'Добавляем...' : 'Добавить и открыть карточку'}
             </Button>
           )}
         </div>

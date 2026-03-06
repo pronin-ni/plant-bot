@@ -72,6 +72,9 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.chat-cache-ttl-minutes:10080}")
   private int chatCacheTtlMinutes;
 
+  @Value("${openrouter.chat-fallback-enabled:false}")
+  private boolean chatFallbackEnabled;
+
   @Value("${openrouter.cache-max-entries:5000}")
   private int cacheMaxEntries;
 
@@ -255,11 +258,11 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
-  public Optional<String> answerGardeningQuestion(String question) {
+  public Optional<ChatAnswer> answerGardeningQuestion(String question) {
     return answerGardeningQuestion(null, question);
   }
 
-  public Optional<String> answerGardeningQuestion(User user, String question) {
+  public Optional<ChatAnswer> answerGardeningQuestion(User user, String question) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
@@ -273,7 +276,7 @@ public class OpenRouterPlantAdvisorService {
         log.info("OpenRouter chat cache hit. model='{}', question='{}', hasAnswer={}",
             modelToUse, preview(normalizedQuestion), cached.isPresent());
         if (cached.isPresent()) {
-          return cached;
+          return Optional.of(new ChatAnswer(cached.get(), modelToUse));
         }
         continue;
       }
@@ -296,7 +299,7 @@ public class OpenRouterPlantAdvisorService {
         putChatAnswerCache(cacheKey, Optional.of(answer));
         log.info("OpenRouter chat success. model='{}', question='{}', answerPreview='{}'",
             modelToUse, preview(normalizedQuestion), preview(answer));
-        return Optional.of(answer);
+        return Optional.of(new ChatAnswer(answer, modelToUse));
       } catch (Exception ex) {
         putChatAnswerCache(cacheKey, Optional.empty());
         log.warn("OpenRouter chat failed. model='{}', question='{}': {}", modelToUse, preview(normalizedQuestion), ex.getMessage());
@@ -517,34 +520,36 @@ public class OpenRouterPlantAdvisorService {
 
   private String resolvePlantModel(User user) {
     if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
-      return user.getOpenrouterModelPlant().trim();
+      return normalizeModelId(user.getOpenrouterModelPlant());
     }
     if (plantModel != null && !plantModel.isBlank()) {
-      return plantModel.trim();
+      return normalizeModelId(plantModel);
     }
     if (model != null && !model.isBlank()) {
-      return model.trim();
+      return normalizeModelId(model);
     }
     return "";
   }
 
   private String resolveChatModel(User user) {
     if (user != null && user.getOpenrouterModelChat() != null && !user.getOpenrouterModelChat().isBlank()) {
-      return user.getOpenrouterModelChat().trim();
+      return normalizeModelId(user.getOpenrouterModelChat());
     }
     if (chatModel != null && !chatModel.isBlank()) {
-      return chatModel.trim();
+      return normalizeModelId(chatModel);
     }
     return resolvePlantModel(user);
   }
 
   private List<String> resolveChatModelCandidates(User user) {
-    List<String> models = new ArrayList<>();
-    if (user != null && user.getOpenrouterModelChat() != null && !user.getOpenrouterModelChat().isBlank()) {
-      models.add(user.getOpenrouterModelChat().trim());
+    String primary = resolveChatModel(user);
+    if (!chatFallbackEnabled) {
+      return primary == null || primary.isBlank() ? List.of() : List.of(primary);
     }
-    if (chatModel != null && !chatModel.isBlank()) {
-      models.add(chatModel.trim());
+
+    List<String> models = new ArrayList<>();
+    if (primary != null && !primary.isBlank()) {
+      models.add(primary.trim());
     }
     if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
       models.add(user.getOpenrouterModelPlant().trim());
@@ -567,6 +572,22 @@ public class OpenRouterPlantAdvisorService {
       }
     }
     return dedup;
+  }
+
+  private String normalizeModelId(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return "";
+    }
+    String cleaned = raw.trim();
+    String[] commaParts = cleaned.split(",");
+    if (commaParts.length > 0) {
+      cleaned = commaParts[0].trim();
+    }
+    String[] parts = cleaned.split("\\s+");
+    if (parts.length > 0) {
+      cleaned = parts[0].trim();
+    }
+    return cleaned;
   }
 
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {
@@ -698,5 +719,8 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public record CacheClearStats(int careAdviceEntries, int wateringProfileEntries, int chatEntries) {
+  }
+
+  public record ChatAnswer(String answer, String model) {
   }
 }

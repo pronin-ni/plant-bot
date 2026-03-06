@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownAZ, ArrowDownWideNarrow, CalendarClock, RefreshCcw } from 'lucide-react';
 
-import { getAdminOverview, getAdminPlants, getAdminStats, getAdminUsers, getAdminUserPlants } from '@/lib/api';
+import { clearAdminCache, getAdminOverview, getAdminPlants, getAdminStats, getAdminUsers, getAdminUserPlants } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import type { AdminUserItemDto } from '@/types/api';
+import { hapticNotify } from '@/lib/telegram';
 
 export function AdminScreen() {
+  const queryClient = useQueryClient();
   const [q, setQ] = useState('');
   const [usersPage, setUsersPage] = useState(0);
   const [plantsPage, setPlantsPage] = useState(0);
@@ -22,6 +24,15 @@ export function AdminScreen() {
     queryKey: ['admin-user-plants', selectedUserId],
     queryFn: () => getAdminUserPlants(selectedUserId as number),
     enabled: selectedUserId !== null
+  });
+  const clearCacheMutation = useMutation({
+    mutationFn: clearAdminCache,
+    onSuccess: () => {
+      hapticNotify('success');
+      void queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: () => hapticNotify('error')
   });
 
   const selectedUser = useMemo(
@@ -96,6 +107,22 @@ export function AdminScreen() {
               <p key={`type-${row.key}`}>{row.key}: {row.value}</p>
             ))}
           </div>
+        </div>
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={clearCacheMutation.isPending}
+            onClick={() => clearCacheMutation.mutate()}
+          >
+            {clearCacheMutation.isPending ? 'Очищаем кэши...' : 'Очистить кэши (как /clearcache)'}
+          </Button>
+          {clearCacheMutation.data ? (
+            <p className="mt-2 text-xs text-ios-subtext">
+              Очищено: поиск {clearCacheMutation.data.plantLookupRows}, OpenRouter {clearCacheMutation.data.openRouterCareEntries}/
+              {clearCacheMutation.data.openRouterWateringEntries}/{clearCacheMutation.data.openRouterChatEntries}, погода {clearCacheMutation.data.weatherEntries}
+            </p>
+          ) : null}
         </div>
       </div>
 

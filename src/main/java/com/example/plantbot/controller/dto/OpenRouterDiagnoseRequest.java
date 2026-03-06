@@ -1,4 +1,4 @@
 package com.example.plantbot.controller.dto;
 
-public record OpenRouterDiagnoseRequest(String imageBase64, String plantName) {
+public record OpenRouterDiagnoseRequest(String imageBase64, String plantName, String plantContext) {
 }

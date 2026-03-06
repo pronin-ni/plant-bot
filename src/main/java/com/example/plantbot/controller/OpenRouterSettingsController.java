@@ -87,6 +87,15 @@ public class OpenRouterSettingsController {
     if (value == null || value.isBlank()) {
       return null;
     }
-    return value.trim();
+    String cleaned = value.trim();
+    String[] commaParts = cleaned.split(",");
+    if (commaParts.length > 0) {
+      cleaned = commaParts[0].trim();
+    }
+    String[] lineParts = cleaned.split("\\s+");
+    if (lineParts.length > 0) {
+      cleaned = lineParts[0].trim();
+    }
+    return cleaned.isBlank() ? null : cleaned;
   }
 }

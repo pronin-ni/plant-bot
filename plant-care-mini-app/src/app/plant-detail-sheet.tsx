@@ -18,11 +18,14 @@ import { useUiStore } from '@/lib/store';
 import type { PlantDto } from '@/types/api';
 
 function getProgress(plant: PlantDto): number {
-  const base = Math.max(1, plant.baseIntervalDays ?? 7);
   const last = new Date(plant.lastWateredDate);
+  const next = plant.nextWateringDate
+    ? new Date(plant.nextWateringDate)
+    : new Date(last.getTime() + Math.max(1, plant.baseIntervalDays ?? 7) * 86_400_000);
   const now = new Date();
-  const diff = Math.max(0, Math.floor((now.getTime() - last.getTime()) / 86_400_000));
-  return Math.max(0, Math.min(100, (diff / base) * 100));
+  const cycleDays = Math.max(1, Math.floor((next.getTime() - last.getTime()) / 86_400_000));
+  const elapsedDays = Math.max(0, Math.floor((now.getTime() - last.getTime()) / 86_400_000));
+  return Math.max(0, Math.min(100, (elapsedDays / cycleDays) * 100));
 }
 
 function nextWateringText(plant: PlantDto): string {
@@ -179,7 +182,7 @@ export function PlantDetailSheet() {
           <ConditionsWidget plantId={plant.id} />
           <ConditionsChart plantId={plant.id} />
           <RoomAndSensorSelector plantId={plant.id} compact />
-          <DiagnosisTool plantName={plant.name} />
+          <DiagnosisTool plant={plant} />
 
           <motion.div
             animate={waterMutation.isPending ? { scale: [1, 1.03, 1] } : { scale: 1 }}

@@ -45,9 +45,11 @@ function getNextWateringDate(plant: PlantDto): Date {
 
 function getProgress(plant: PlantDto): number {
   const last = getLastWateredDate(plant);
+  const next = getNextWateringDate(plant);
   const now = startOfDay(new Date());
-  const diffDays = Math.max(0, Math.floor((now.getTime() - last.getTime()) / 86_400_000));
-  const raw = (diffDays / getIntervalDays(plant)) * 100;
+  const cycleDays = Math.max(1, Math.floor((next.getTime() - last.getTime()) / 86_400_000));
+  const elapsedDays = Math.max(0, Math.floor((now.getTime() - last.getTime()) / 86_400_000));
+  const raw = (elapsedDays / cycleDays) * 100;
   return Math.max(0, Math.min(100, raw));
 }
 

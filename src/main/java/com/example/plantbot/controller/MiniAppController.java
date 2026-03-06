@@ -10,21 +10,26 @@ import com.example.plantbot.controller.dto.ChatAskResponse;
 import com.example.plantbot.controller.dto.CreatePlantRequest;
 import com.example.plantbot.controller.dto.PhotoUploadResponse;
 import com.example.plantbot.controller.dto.PlantCareAdviceResponse;
+import com.example.plantbot.controller.dto.PlantProfileSuggestionResponse;
 import com.example.plantbot.controller.dto.PlantLearningResponse;
 import com.example.plantbot.controller.dto.PlantPhotoRequest;
 import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.PlantStatsResponse;
+import com.example.plantbot.controller.dto.AssistantChatHistoryItemResponse;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.repository.AssistantChatHistoryRepository;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
+import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.TelegramInitDataService;
 import com.example.plantbot.service.UserService;
+import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.util.LearningInfo;
@@ -71,6 +76,9 @@ public class MiniAppController {
   private final WateringLogService wateringLogService;
   private final UserService userService;
   private final UserRepository userRepository;
+  private final AssistantChatHistoryRepository assistantChatHistoryRepository;
+  private final AssistantChatHistoryService assistantChatHistoryService;
+  private final PlantCatalogService plantCatalogService;
   private final PhotoUrlSignerService photoUrlSignerService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
@@ -323,9 +331,47 @@ public class MiniAppController {
     var answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, question);
     if (answer.isEmpty()) {
       return new ChatAskResponse(false,
-          "Не удалось получить ответ от OpenRouter. Проверь ключ/модель и лимиты. Если используешь free-модель, включи Free model publication в настройках OpenRouter.");
+          "Не удалось получить ответ от OpenRouter. Проверь ключ/модель и лимиты. Если используешь free-модель, включи Free model publication в настройках OpenRouter.",
+          null);
     }
-    return new ChatAskResponse(true, answer.get());
+    assistantChatHistoryService.saveAndTrim(user, question, answer.get().answer(), answer.get().model());
+    return new ChatAskResponse(true, answer.get().answer(), answer.get().model());
+  }
+
+  @GetMapping("/assistant/history")
+  public List<AssistantChatHistoryItemResponse> getAssistantHistory(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+  ) {
+    User user = telegramInitDataService.validateAndResolveUser(initData);
+    return assistantChatHistoryRepository.findTop10ByUserOrderByCreatedAtDesc(user).stream()
+        .map(item -> new AssistantChatHistoryItemResponse(
+            item.getId(),
+            item.getQuestion(),
+            item.getAnswer(),
+            item.getModel(),
+            item.getCreatedAt()
+        ))
+        .toList();
+  }
+
+  @GetMapping("/plants/suggest-profile")
+  public PlantProfileSuggestionResponse suggestPlantProfile(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      @RequestParam(name = "name") String name
+  ) {
+    User user = telegramInitDataService.validateAndResolveUser(initData);
+    if (name == null || name.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
+    }
+    var suggested = plantCatalogService.suggestIntervalDays(user, name.trim());
+    if (suggested.isEmpty()) {
+      return new PlantProfileSuggestionResponse(false, 7, PlantType.DEFAULT, "Heuristic");
+    }
+    var value = suggested.get();
+    int interval = Math.max(1, value.baseIntervalDays());
+    PlantType type = value.suggestedType() == null ? PlantType.DEFAULT : value.suggestedType();
+    String source = value.source() == null || value.source().isBlank() ? "Heuristic" : value.source();
+    return new PlantProfileSuggestionResponse(true, interval, type, source);
   }
 
   @PostMapping("/users/city")

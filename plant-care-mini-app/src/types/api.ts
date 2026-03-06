@@ -125,6 +125,7 @@ export interface OpenRouterPreferencesDto {
 export interface ChatAskResponse {
   ok: boolean;
   answer: string;
+  model?: string | null;
 }
 
 
@@ -197,4 +198,29 @@ export interface AdminStatsDto {
   overduePlants: number;
   activeUsers7d: number;
   activeUsers30d: number;
+}
+
+export interface AssistantHistoryItemDto {
+  id: number;
+  question: string;
+  answer: string;
+  model?: string | null;
+  createdAt: string;
+}
+
+export interface PlantProfileSuggestionDto {
+  found: boolean;
+  intervalDays: number;
+  type: string;
+  source?: string | null;
+}
+
+export interface AdminCacheClearDto {
+  plantLookupRows: number;
+  openRouterCareEntries: number;
+  openRouterWateringEntries: number;
+  openRouterChatEntries: number;
+  weatherEntries: number;
+  weatherRainKeys: number;
+  weatherRainSamples: number;
 }

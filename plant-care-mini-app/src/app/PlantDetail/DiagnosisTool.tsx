@@ -1,15 +1,22 @@
 import { Stethoscope } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { diagnosePlantOpenRouter } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import type { PlantDto } from '@/types/api';
 
-export function DiagnosisTool({ plantName }: { plantName: string }) {
+export function DiagnosisTool({ plant }: { plant: PlantDto }) {
   const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const diagnoseMutation = useMutation({
-    mutationFn: (imageBase64: string) => diagnosePlantOpenRouter(imageBase64, plantName),
+    mutationFn: (imageBase64: string) =>
+      diagnosePlantOpenRouter(
+        imageBase64,
+        plant.name,
+        `Тип=${plant.type ?? 'DEFAULT'}; Размещение=${plant.placement}; Интервал=${plant.baseIntervalDays ?? 7}; Последний полив=${plant.lastWateredDate}`
+      ),
     onSuccess: () => hapticNotify('success'),
     onError: () => hapticNotify('error')
   });
@@ -30,7 +37,7 @@ export function DiagnosisTool({ plantName }: { plantName: string }) {
       </div>
 
       <input
-        id="diagnosis-photo-input"
+        ref={inputRef}
         type="file"
         accept="image/*"
         capture="environment"
@@ -45,13 +52,16 @@ export function DiagnosisTool({ plantName }: { plantName: string }) {
             setPreview(dataUrl);
             diagnoseMutation.mutate(dataUrl);
           });
+          event.currentTarget.value = '';
         }}
       />
-      <label htmlFor="diagnosis-photo-input" className="block">
-        <span className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50">
-          {diagnoseMutation.isPending ? 'Диагностируем...' : 'Проверить лист'}
-        </span>
-      </label>
+      <button
+        type="button"
+        className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50"
+        onClick={() => inputRef.current?.click()}
+      >
+        {diagnoseMutation.isPending ? 'Диагностируем...' : 'Проверить лист'}
+      </button>
 
 
       {diagnoseMutation.isError ? (

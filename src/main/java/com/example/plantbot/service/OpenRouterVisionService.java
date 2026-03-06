@@ -102,17 +102,21 @@ public class OpenRouterVisionService {
   }
 
   public OpenRouterDiagnoseResponse diagnosePlant(String imageBase64, String plantName) {
-    return diagnosePlant(null, imageBase64, plantName);
+    return diagnosePlant(null, imageBase64, plantName, null);
   }
 
   public OpenRouterDiagnoseResponse diagnosePlant(User user, String imageBase64, String plantName) {
+    return diagnosePlant(user, imageBase64, plantName, null);
+  }
+
+  public OpenRouterDiagnoseResponse diagnosePlant(User user, String imageBase64, String plantName, String plantContext) {
     validateImage(imageBase64);
     if (plantName == null || plantName.isBlank()) {
       throw new ResponseStatusException(BAD_REQUEST, "plantName обязателен");
     }
 
     String modelToUse = resolveDiagnoseModel(user);
-    JsonNode payload = callOpenRouter(user, modelToUse, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName), imageBase64);
+    JsonNode payload = callOpenRouter(user, modelToUse, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -258,40 +262,56 @@ public class OpenRouterVisionService {
 
   private String resolveIdentifyModel(User user) {
     if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
-      return user.getOpenrouterModelPhotoIdentify();
+      return normalizeModelId(user.getOpenrouterModelPhotoIdentify());
     }
     if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
-      return photoIdentifyModel;
+      return normalizeModelId(photoIdentifyModel);
     }
     if (plantModel != null && !plantModel.isBlank()) {
-      return plantModel;
+      return normalizeModelId(plantModel);
     }
     if (fallbackModel != null && !fallbackModel.isBlank()) {
-      return fallbackModel;
+      return normalizeModelId(fallbackModel);
     }
     return "google/gemini-flash-1.5";
   }
 
   private String resolveDiagnoseModel(User user) {
     if (user != null && user.getOpenrouterModelPhotoDiagnose() != null && !user.getOpenrouterModelPhotoDiagnose().isBlank()) {
-      return user.getOpenrouterModelPhotoDiagnose();
+      return normalizeModelId(user.getOpenrouterModelPhotoDiagnose());
     }
     if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
-      return user.getOpenrouterModelPhotoIdentify();
+      return normalizeModelId(user.getOpenrouterModelPhotoIdentify());
     }
     if (photoDiagnoseModel != null && !photoDiagnoseModel.isBlank()) {
-      return photoDiagnoseModel;
+      return normalizeModelId(photoDiagnoseModel);
     }
     if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
-      return photoIdentifyModel;
+      return normalizeModelId(photoIdentifyModel);
     }
     if (plantModel != null && !plantModel.isBlank()) {
-      return plantModel;
+      return normalizeModelId(plantModel);
     }
     if (fallbackModel != null && !fallbackModel.isBlank()) {
-      return fallbackModel;
+      return normalizeModelId(fallbackModel);
     }
     return "google/gemini-flash-1.5";
+  }
+
+  private String normalizeModelId(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return "";
+    }
+    String cleaned = raw.trim();
+    String[] commaParts = cleaned.split(",");
+    if (commaParts.length > 0) {
+      cleaned = commaParts[0].trim();
+    }
+    String[] parts = cleaned.split("\\s+");
+    if (parts.length > 0) {
+      cleaned = parts[0].trim();
+    }
+    return cleaned;
   }
 
   private String textOrNull(JsonNode node, String field) {
@@ -345,7 +365,8 @@ public class OpenRouterVisionService {
         + "}";
   }
 
-  private String diagnoseUserPrompt(String plantName) {
-    return "Проанализируй фото. Растение — " + plantName + ". Опиши проблему и дай рекомендации по лечению.";
+  private String diagnoseUserPrompt(String plantName, String plantContext) {
+    String context = (plantContext == null || plantContext.isBlank()) ? "" : ("\nКонтекст растения: " + plantContext.trim());
+    return "Проанализируй фото. Растение — " + plantName + ". Опиши проблему и дай рекомендации по лечению." + context;
   }
 }

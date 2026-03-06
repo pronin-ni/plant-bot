@@ -17,7 +17,10 @@ import type {
   AdminUsersDto,
   AdminPlantsDto,
   AdminPlantItemDto,
-  AdminStatsDto
+  AdminStatsDto,
+  AssistantHistoryItemDto,
+  PlantProfileSuggestionDto,
+  AdminCacheClearDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -194,10 +197,14 @@ export async function identifyPlantOpenRouter(imageBase64: string): Promise<Open
   });
 }
 
-export async function diagnosePlantOpenRouter(imageBase64: string, plantName: string): Promise<OpenRouterDiagnoseResult> {
+export async function diagnosePlantOpenRouter(
+  imageBase64: string,
+  plantName: string,
+  plantContext?: string
+): Promise<OpenRouterDiagnoseResult> {
   return apiFetch<OpenRouterDiagnoseResult>('/api/plant/diagnose-openrouter', {
     method: 'POST',
-    body: JSON.stringify({ imageBase64, plantName })
+    body: JSON.stringify({ imageBase64, plantName, plantContext })
   });
 }
 
@@ -238,6 +245,10 @@ export async function askAssistant(question: string): Promise<ChatAskResponse> {
   });
 }
 
+export async function getAssistantHistory(): Promise<AssistantHistoryItemDto[]> {
+  return apiFetch<AssistantHistoryItemDto[]>('/api/assistant/history', { method: 'GET' });
+}
+
 
 export async function getPlantCareAdvice(id: number): Promise<PlantCareAdviceDto> {
   return apiFetch<PlantCareAdviceDto>(`/api/plants/${id}/care-advice`, { method: 'GET' });
@@ -270,4 +281,13 @@ export async function getAdminUserPlants(userId: number): Promise<AdminPlantItem
 
 export async function getAdminStats(): Promise<AdminStatsDto> {
   return apiFetch<AdminStatsDto>('/api/admin/stats', { method: 'GET' });
+}
+
+export async function clearAdminCache(): Promise<AdminCacheClearDto> {
+  return apiFetch<AdminCacheClearDto>('/api/admin/clear-cache', { method: 'POST' });
+}
+
+export async function suggestPlantProfile(name: string): Promise<PlantProfileSuggestionDto> {
+  const params = new URLSearchParams({ name });
+  return apiFetch<PlantProfileSuggestionDto>(`/api/plants/suggest-profile?${params.toString()}`, { method: 'GET' });
 }

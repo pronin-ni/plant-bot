@@ -3,17 +3,22 @@ package com.example.plantbot.controller;
 import com.example.plantbot.controller.dto.admin.AdminOverviewResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantsResponse;
+import com.example.plantbot.controller.dto.admin.AdminCacheClearResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
 import com.example.plantbot.controller.dto.admin.AdminUsersResponse;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.AdminService;
+import com.example.plantbot.service.OpenRouterPlantAdvisorService;
+import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.TelegramInitDataService;
+import com.example.plantbot.service.WeatherService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,6 +35,9 @@ public class AdminController {
   private final TelegramInitDataService telegramInitDataService;
   private final UserRepository userRepository;
   private final AdminService adminService;
+  private final PlantCatalogService plantCatalogService;
+  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
+  private final WeatherService weatherService;
 
   @org.springframework.beans.factory.annotation.Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
@@ -74,6 +82,34 @@ public class AdminController {
     User admin = requireAdmin(initData);
     log.info("Admin stats requested: telegramId={}", admin.getTelegramId());
     return adminService.stats();
+  }
+
+  @PostMapping("/clear-cache")
+  public AdminCacheClearResponse clearCache(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+  ) {
+    User admin = requireAdmin(initData);
+    int lookupRows = plantCatalogService.clearLookupCache();
+    OpenRouterPlantAdvisorService.CacheClearStats openRouterStats = openRouterPlantAdvisorService.clearCaches();
+    WeatherService.CacheClearStats weatherStats = weatherService.clearCaches();
+    log.info("Admin cache clear executed: telegramId={}, lookupRows={}, openRouter={}/{}/{}, weather={}/{}/{}",
+        admin.getTelegramId(),
+        lookupRows,
+        openRouterStats.careAdviceEntries(),
+        openRouterStats.wateringProfileEntries(),
+        openRouterStats.chatEntries(),
+        weatherStats.weatherEntries(),
+        weatherStats.rainKeys(),
+        weatherStats.rainSamples());
+    return new AdminCacheClearResponse(
+        lookupRows,
+        openRouterStats.careAdviceEntries(),
+        openRouterStats.wateringProfileEntries(),
+        openRouterStats.chatEntries(),
+        weatherStats.weatherEntries(),
+        weatherStats.rainKeys(),
+        weatherStats.rainSamples()
+    );
   }
 
   @GetMapping("/plants")
