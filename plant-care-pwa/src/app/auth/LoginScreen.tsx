@@ -36,7 +36,7 @@ export function LoginScreen() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showTelegramWidget, setShowTelegramWidget] = useState(false);
   const migrationInitData = useMemo(() => getMigrationInitDataFromUrl(), []);
-  const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME ?? '';
+  const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
 
   const loginMutation = useMutation({
     mutationFn: async (providerId: AuthProviderId) => {

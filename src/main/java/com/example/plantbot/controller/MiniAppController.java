@@ -52,7 +52,18 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Iterator;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -88,6 +99,15 @@ public class MiniAppController {
 
   @org.springframework.beans.factory.annotation.Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
+
+  @org.springframework.beans.factory.annotation.Value("${app.photo-upload.max-long-side-px:1600}")
+  private int photoMaxLongSidePx;
+
+  @org.springframework.beans.factory.annotation.Value("${app.photo-upload.jpeg-quality:0.82}")
+  private float photoJpegQuality;
+
+  @org.springframework.beans.factory.annotation.Value("${app.photo-upload.max-file-bytes:900000}")
+  private int photoMaxFileBytes;
 
   @PostMapping("/auth/validate")
   public AuthValidateResponse validateAuth(
@@ -513,18 +533,92 @@ public class MiniAppController {
         raw = raw.substring(raw.indexOf(',') + 1);
       }
       byte[] bytes = Base64.getDecoder().decode(raw);
+      byte[] processedBytes = compressPhoto(bytes);
 
       Path dir = Path.of("./data/photos/" + user.getTelegramId());
       Files.createDirectories(dir);
       String fileName = String.format(Locale.ROOT, "plant-%d-%d.jpg", plant.getId(), System.currentTimeMillis());
       Path file = dir.resolve(fileName);
-      Files.write(file, bytes);
+      Files.write(file, processedBytes);
       return user.getTelegramId() + "/" + fileName;
     } catch (IllegalArgumentException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "photoBase64 невалидный");
     } catch (IOException ex) {
       throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не удалось сохранить фото");
     }
+  }
+
+  private byte[] compressPhoto(byte[] originalBytes) {
+    try {
+      BufferedImage src = ImageIO.read(new ByteArrayInputStream(originalBytes));
+      if (src == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Не удалось прочитать изображение");
+      }
+
+      BufferedImage rgb = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_RGB);
+      Graphics2D g = rgb.createGraphics();
+      g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+      g.drawImage(src, 0, 0, null);
+      g.dispose();
+
+      BufferedImage scaled = scaleDown(rgb, Math.max(320, photoMaxLongSidePx));
+      float quality = Math.min(0.95f, Math.max(0.55f, photoJpegQuality));
+      byte[] jpeg = writeJpeg(scaled, quality);
+
+      int maxBytes = Math.max(200_000, photoMaxFileBytes);
+      while (jpeg.length > maxBytes && quality > 0.56f) {
+        quality -= 0.08f;
+        jpeg = writeJpeg(scaled, quality);
+      }
+      return jpeg;
+    } catch (ResponseStatusException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не удалось обработать фото");
+    }
+  }
+
+  private BufferedImage scaleDown(BufferedImage src, int maxLongSide) {
+    int width = src.getWidth();
+    int height = src.getHeight();
+    int longest = Math.max(width, height);
+    if (longest <= maxLongSide) {
+      return src;
+    }
+
+    double ratio = maxLongSide / (double) longest;
+    int targetW = Math.max(1, (int) Math.round(width * ratio));
+    int targetH = Math.max(1, (int) Math.round(height * ratio));
+
+    BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_RGB);
+    Graphics2D g = out.createGraphics();
+    g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+    g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    g.drawImage(src, 0, 0, targetW, targetH, null);
+    g.dispose();
+    return out;
+  }
+
+  private byte[] writeJpeg(BufferedImage image, float quality) throws IOException {
+    Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+    if (!writers.hasNext()) {
+      throw new IOException("JPEG writer is unavailable");
+    }
+    ImageWriter writer = writers.next();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+      writer.setOutput(ios);
+      ImageWriteParam params = writer.getDefaultWriteParam();
+      if (params.canWriteCompressed()) {
+        params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        params.setCompressionQuality(Math.min(0.98f, Math.max(0.5f, quality)));
+      }
+      writer.write(null, new IIOImage(image, null, null), params);
+    } finally {
+      writer.dispose();
+    }
+    return out.toByteArray();
   }
 
   private String buildPlantPhotoUrl(Plant plant) {

@@ -119,6 +119,14 @@ docker compose up -d --build plant-bot
 
 Отдельный «PWA токен» не нужен: PWA авторизуется через backend JWT.
 
+Ночной backup SQLite (встроен в backend):
+- `APP_BACKUP_ENABLED=true`
+- `APP_BACKUP_CRON="0 10 3 * * *"` (каждую ночь в 03:10)
+- `APP_BACKUP_ZONE=Europe/Moscow`
+- `APP_BACKUP_PATH=./data/backups`
+- `APP_BACKUP_RETENTION_DAYS=7`
+- `APP_BACKUP_FILE_PREFIX=plantbot-backup`
+
 ## Установка PWA на iPhone/Android
 
 При открытии `/pwa/` автоматически показывается карточка-инструкция с определением платформы:

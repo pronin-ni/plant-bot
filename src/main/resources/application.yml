@@ -95,6 +95,13 @@ app:
   features:
     mini-app-enabled: ${APP_FEATURE_MINI_APP_ENABLED:true}
     pwa-enabled: ${APP_FEATURE_PWA_ENABLED:true}
+  backup:
+    enabled: ${APP_BACKUP_ENABLED:true}
+    cron: ${APP_BACKUP_CRON:0 10 3 * * *}
+    zone: ${APP_BACKUP_ZONE:Europe/Moscow}
+    path: ${APP_BACKUP_PATH:./data/backups}
+    retention-days: ${APP_BACKUP_RETENTION_DAYS:7}
+    file-prefix: ${APP_BACKUP_FILE_PREFIX:plantbot-backup}
   security:
     jwt:
       secret: ${APP_SECURITY_JWT_SECRET:change-me-change-me-change-me-change-me}
