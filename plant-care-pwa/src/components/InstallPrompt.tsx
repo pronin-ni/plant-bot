@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { Button } from '@/components/ui/button';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
-import { isPwaStandalone, requestPwaInstall, subscribeInstallAvailability } from '@/lib/pwa';
+import { detectInstallPlatform, isPwaStandalone, requestPwaInstall, subscribeInstallAvailability } from '@/lib/pwa';
 
 export function InstallPrompt() {
   const [canInstall, setCanInstall] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const platform = useMemo(() => detectInstallPlatform(), []);
 
   useEffect(() => {
     if (isPwaStandalone()) {
@@ -21,9 +22,36 @@ export function InstallPrompt() {
     return subscribeInstallAvailability(setCanInstall);
   }, []);
 
-  if (!canInstall || dismissed) {
+  if (dismissed || isPwaStandalone()) {
     return null;
   }
+
+  const manualSteps = (() => {
+    if (platform === 'ios') {
+      return [
+        'Откройте меню «Поделиться» в Safari.',
+        'Выберите «На экран Домой».',
+        'Подтвердите установку кнопкой «Добавить».'
+      ];
+    }
+    if (platform === 'android') {
+      return [
+        'Откройте меню браузера (⋮).',
+        'Нажмите «Установить приложение» или «Добавить на главный экран».',
+        'Подтвердите установку.'
+      ];
+    }
+    return [
+      'Откройте сайт в Chrome/Edge/Safari.',
+      'В меню браузера выберите «Install app / Установить приложение».'
+    ];
+  })();
+
+  const title = platform === 'ios'
+    ? 'Установка PWA на iPhone'
+    : platform === 'android'
+      ? 'Установка PWA на Android'
+      : 'Установка PWA';
 
   return (
     <AnimatePresence>
@@ -35,7 +63,7 @@ export function InstallPrompt() {
         className="ios-blur-card mb-3 p-4"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-ios-body font-semibold">Установить как приложение</p>
+          <p className="text-ios-body font-semibold">{title}</p>
           <button
             type="button"
             aria-label="Закрыть"
@@ -52,26 +80,33 @@ export function InstallPrompt() {
         <p className="text-ios-caption text-ios-subtext">
           Установите PWA на главный экран: быстрее запуск, оффлайн-кеш и пуш-уведомления.
         </p>
-        <Button
-          className="mt-3 w-full"
-          disabled={installing}
-          onClick={async () => {
-            setInstalling(true);
-            hapticImpact('medium');
-            const outcome = await requestPwaInstall();
-            if (outcome === 'accepted') {
-              hapticNotify('success');
-            } else if (outcome === 'dismissed') {
-              hapticNotify('warning');
-            } else {
-              hapticNotify('error');
-            }
-            setInstalling(false);
-          }}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {installing ? 'Открываем диалог...' : 'Установить PWA'}
-        </Button>
+        <ol className="mt-2 list-decimal space-y-1 pl-4 text-[12px] text-ios-subtext">
+          {manualSteps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        {canInstall ? (
+          <Button
+            className="mt-3 w-full"
+            disabled={installing}
+            onClick={async () => {
+              setInstalling(true);
+              hapticImpact('medium');
+              const outcome = await requestPwaInstall();
+              if (outcome === 'accepted') {
+                hapticNotify('success');
+              } else if (outcome === 'dismissed') {
+                hapticNotify('warning');
+              } else {
+                hapticNotify('error');
+              }
+              setInstalling(false);
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {installing ? 'Открываем диалог...' : 'Установить PWA'}
+          </Button>
+        ) : null}
       </motion.section>
     </AnimatePresence>
   );

@@ -88,6 +88,9 @@ web:
     allowed-origins: ${WEB_CORS_ALLOWED_ORIGINS:*}
 
 app:
+  features:
+    mini-app-enabled: ${APP_FEATURE_MINI_APP_ENABLED:true}
+    pwa-enabled: ${APP_FEATURE_PWA_ENABLED:true}
   security:
     jwt:
       secret: ${APP_SECURITY_JWT_SECRET:change-me-change-me-change-me-change-me}

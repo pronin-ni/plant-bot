@@ -70,8 +70,8 @@ body {
   margin-top: auto;
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px;
+  gap: 4px;
+  padding: 6px;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
   border-radius: 22px;
   border: 1px solid color-mix(in srgb, rgb(var(--ios-border)) 56%, transparent);

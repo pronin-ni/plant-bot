@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH ?? '/',
+  base: process.env.VITE_BASE_PATH ?? '/pwa/',
   plugins: [
     react(),
     VitePWA({

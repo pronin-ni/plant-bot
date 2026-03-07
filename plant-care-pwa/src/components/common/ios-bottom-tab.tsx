@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
-import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings, ShieldCheck } from 'lucide-react';
+import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { hapticSelectionChanged } from '@/lib/telegram';
-import { useAuthStore, useUiStore } from '@/lib/store';
+import { useUiStore } from '@/lib/store';
 import type { AppTabKey } from '@/types/navigation';
 
 interface TabItem {
@@ -17,15 +17,13 @@ const TABS: TabItem[] = [
   { key: 'calendar', title: 'Календарь', icon: CalendarDays },
   { key: 'add', title: 'Добавить', icon: PlusCircle },
   { key: 'ai', title: 'AI', icon: MessageCircle },
-  { key: 'admin', title: 'Админ', icon: ShieldCheck },
   { key: 'settings', title: 'Настройки', icon: Settings }
 ];
 
 export function IOSBottomTab() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
-  const isAdmin = useAuthStore((s) => s.isAdmin);
-  const tabs = isAdmin ? TABS : TABS.filter((tab) => tab.key !== 'admin');
+  const tabs = TABS;
 
   return (
     <nav className="ios-tabbar">
@@ -41,7 +39,7 @@ export function IOSBottomTab() {
               hapticSelectionChanged();
             }}
             className={cn(
-              'relative flex min-w-[74px] flex-col items-center justify-center rounded-ios-tab px-2 py-2 text-ios-caption transition-colors',
+              'relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-2 text-[11px] transition-colors',
               isActive ? 'text-ios-accent' : 'text-ios-subtext'
             )}
             aria-label={tab.title}
@@ -60,7 +58,7 @@ export function IOSBottomTab() {
             >
               <Icon className="h-5 w-5" />
             </motion.span>
-            <span className="relative z-10 mt-1 leading-none">{tab.title}</span>
+            <span className="relative z-10 mt-1 leading-none whitespace-nowrap">{tab.title}</span>
           </button>
         );
       })}

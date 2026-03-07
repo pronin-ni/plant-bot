@@ -5,14 +5,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { IOSBottomTab } from '@/components/common/ios-bottom-tab';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { OfflineStatusBar } from '@/components/OfflineStatusBar';
-import { AdminGuard } from '@/components/AdminGuard';
 import { HomeScreen } from '@/app/home-screen';
 import { PlantDetailSheet } from '@/app/plant-detail-sheet';
 import { AddPlantScreen } from '@/app/add-plant-screen';
 import { CalendarScreen } from '@/app/calendar-screen';
 import { SettingsScreen } from '@/app/settings-screen';
 import { AiScreen } from '@/app/ai-screen';
-import { AdminScreen } from '@/app/admin-screen';
 import { LoginScreen } from '@/app/auth/LoginScreen';
 import { pwaMe } from '@/lib/api';
 import { hapticImpact, useTelegramThemeSync } from '@/lib/telegram';
@@ -56,13 +54,6 @@ function TabTitle({ tab }: { tab: AppTabKey }) {
           <p className="mt-2 text-ios-body text-ios-subtext">Параметры приложения, города и уведомлений.</p>
         </div>
       );
-    case 'admin':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">Админ</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">Системная статистика, пользователи и растения.</p>
-        </div>
-      );
     default:
       return null;
   }
@@ -72,9 +63,7 @@ export function App() {
   useTelegramThemeSync();
 
   const { isAuthorized, isReady } = useAuthStore();
-  const isAdmin = useAuthStore((s) => s.isAdmin);
   const activeTab = useUiStore((s) => s.activeTab);
-  const setActiveTab = useUiStore((s) => s.setActiveTab);
   const hasAutoAuthAttemptRef = useRef(false);
 
   const meMutation = useMutation({
@@ -105,12 +94,6 @@ export function App() {
       meMutation.mutate();
     }
   }, [isReady, meMutation.mutate]);
-
-  useEffect(() => {
-    if (activeTab === 'admin' && !isAdmin) {
-      setActiveTab('home');
-    }
-  }, [activeTab, isAdmin, setActiveTab]);
 
   if (!isAuthorized) {
     return (
@@ -155,11 +138,6 @@ export function App() {
             <SettingsScreen />
           ) : null}
 
-          {activeTab === 'admin' ? (
-            <AdminGuard>
-              <AdminScreen />
-            </AdminGuard>
-          ) : null}
         </motion.section>
       </AnimatePresence>
 

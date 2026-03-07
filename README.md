@@ -3,6 +3,12 @@
 Проект запускает в **одном контейнере**:
 - Spring Boot backend (`/api/...`)
 - Telegram Mini App (`/mini-app/...`)
+- PWA frontend (`/pwa/...`)
+
+Feature-toggle (runtime, без отключения backend API):
+- `TELEGRAM_BOT_ENABLED=true|false` — включить/выключить Telegram LongPolling бота.
+- `APP_FEATURE_MINI_APP_ENABLED=true|false` — включить/выключить web-роуты Mini App (`/mini-app/...`).
+- `APP_FEATURE_PWA_ENABLED=true|false` — включить/выключить web-роуты PWA (`/pwa/...`).
 
 ## Быстрый старт (Docker)
 
@@ -90,10 +96,36 @@ docker compose up -d --build plant-bot
 
 - API: `https://<domain>/api/...`
 - Mini App: `https://<domain>/mini-app/`
+- PWA: `https://<domain>/pwa/`
 - Healthcheck: `https://<domain>/actuator/health`
 
 В BotFather для WebApp указывать:
 `https://<domain>/mini-app/`
+
+## Переменные для бота + Mini App + PWA
+
+Минимум для production:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_BOT_USERNAME`
+- `OPENROUTER_API_KEY`
+- `APP_PUBLIC_BASE_URL` (например `https://plant.okgk.ru`)
+- `APP_SECURITY_JWT_SECRET` (длинный секрет, не дефолтное значение)
+
+Для сборки PWA в Docker (build args через `docker-compose.yml`):
+- `PWA_VITE_API_BASE_URL` (обычно пусто для same-origin)
+- `PWA_VITE_TELEGRAM_BOT_USERNAME` (username бота)
+- `PWA_VITE_PWA_URL` (например `https://plant.okgk.ru/pwa/`)
+- `PWA_VITE_BASE_PATH` (для reverse proxy, по умолчанию `/pwa/`)
+
+Отдельный «PWA токен» не нужен: PWA авторизуется через backend JWT.
+
+## Установка PWA на iPhone/Android
+
+При открытии `/pwa/` автоматически показывается карточка-инструкция с определением платформы:
+- iPhone (iOS Safari): шаги через «Поделиться» → «На экран Домой»
+- Android: шаги через меню браузера → «Установить приложение / Добавить на главный экран»
+
+Если браузер поддерживает `beforeinstallprompt`, дополнительно показывается кнопка «Установить PWA».
 
 ## Portainer Stack (copy/paste)
 
@@ -103,6 +135,10 @@ services:
     build:
       context: /path/to/plant-bot
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
+        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
+        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
     image: ghcr.io/pronin-ni/plant-bot:latest
     container_name: plant-bot
     restart: unless-stopped
@@ -131,6 +167,9 @@ services:
       TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
       WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
       APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      APP_SECURITY_JWT_SECRET: "${APP_SECURITY_JWT_SECRET}"
+      APP_SECURITY_JWT_TTL_SECONDS: "${APP_SECURITY_JWT_TTL_SECONDS:-2592000}"
+      APP_SECURITY_JWT_ISSUER: "${APP_SECURITY_JWT_ISSUER:-plant-care}"
       TZ: "Europe/Moscow"
       HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
       HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
@@ -143,6 +182,10 @@ services:
     build:
       context: /path/to/plant-bot
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
+        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
+        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
     image: ghcr.io/pronin-ni/plant-bot:latest
     container_name: plant-miniapp
     restart: unless-stopped
@@ -168,6 +211,9 @@ services:
       TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
       WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
       APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
+      APP_SECURITY_JWT_SECRET: "${APP_SECURITY_JWT_SECRET}"
+      APP_SECURITY_JWT_TTL_SECONDS: "${APP_SECURITY_JWT_TTL_SECONDS:-2592000}"
+      APP_SECURITY_JWT_ISSUER: "${APP_SECURITY_JWT_ISSUER:-plant-care}"
       TZ: "Europe/Moscow"
       HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
       HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"

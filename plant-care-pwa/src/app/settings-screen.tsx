@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone, BellRing, SmartphoneNfc } from 'lucide-react';
+import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone, BellRing, SmartphoneNfc, ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
 import { BackupRestore } from '@/app/Settings/BackupRestore';
 import { OpenRouterModelSettings } from '@/app/Settings/OpenRouterModelSettings';
 import { AchievementsView } from '@/app/Achievements/AchievementsView';
+import { AdminGuard } from '@/components/AdminGuard';
+import { AdminScreen } from '@/app/admin-screen';
 import {
   getCalendarSync,
   getLearning,
@@ -27,7 +29,9 @@ import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 
 export function SettingsScreen() {
   const savedCity = useAuthStore((s) => s.city);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [city, setCity] = useState(savedCity ?? '');
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const pwaUrl = useMemo(() => getConfiguredPwaUrl(), []);
 
   useEffect(() => {
@@ -419,6 +423,31 @@ export function SettingsScreen() {
           Проверить haptic
         </Button>
       </div>
+
+      {isAdmin ? (
+        <div className="ios-blur-card p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-ios-accent" />
+            <p className="text-ios-body font-medium">Администрирование</p>
+          </div>
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              hapticImpact('light');
+              setShowAdminPanel((prev) => !prev);
+            }}
+          >
+            {showAdminPanel ? 'Скрыть админ-панель' : 'Открыть админ-панель'}
+          </Button>
+        </div>
+      ) : null}
+
+      {isAdmin && showAdminPanel ? (
+        <AdminGuard>
+          <AdminScreen />
+        </AdminGuard>
+      ) : null}
     </section>
   );
 }

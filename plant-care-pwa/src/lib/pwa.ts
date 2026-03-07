@@ -75,6 +75,22 @@ export async function requestPwaInstall(): Promise<'accepted' | 'dismissed' | 'u
   return result.outcome;
 }
 
+export type InstallPlatform = 'ios' | 'android' | 'desktop' | 'unknown';
+
+export function detectInstallPlatform(): InstallPlatform {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    return 'ios';
+  }
+  if (/Android/i.test(ua)) {
+    return 'android';
+  }
+  if (/Macintosh|Windows|Linux/i.test(ua)) {
+    return 'desktop';
+  }
+  return 'unknown';
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
