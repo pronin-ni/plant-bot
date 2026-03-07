@@ -7,7 +7,7 @@ import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.util.WateringRecommendation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -15,12 +15,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
-@ConditionalOnProperty(prefix = "telegram.bot", name = "enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class NotificationScheduler {
   private final PlantRepository plantRepository;
   private final WateringRecommendationService recommendationService;
-  private final PlantTelegramBot bot;
+  private final ObjectProvider<PlantTelegramBot> botProvider;
+  private final WebPushNotificationService webPushNotificationService;
 
   @Value("${scheduler.daily-cron}")
   private String cron;
@@ -39,8 +39,10 @@ public class NotificationScheduler {
       boolean due = !today.isBefore(dueDate);
       boolean alreadyRemindedToday = today.equals(plant.getLastReminderDate());
       if (due && !alreadyRemindedToday) {
-        boolean sent = bot.sendWateringReminder(plant, rec);
-        if (sent) {
+        PlantTelegramBot bot = botProvider.getIfAvailable();
+        boolean telegramSent = bot != null && bot.sendWateringReminder(plant, rec);
+        boolean webPushSent = webPushNotificationService.sendWateringReminder(plant, rec);
+        if (telegramSent || webPushSent) {
           plant.setLastReminderDate(today);
           plantRepository.save(plant);
         }

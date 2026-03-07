@@ -7,7 +7,9 @@ import lombok.Setter;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -26,6 +28,7 @@ public class User {
   private String username;
   private String firstName;
   private String lastName;
+  private String email;
   private String city;
   private String cityDisplayName;
   private Double cityLat;
@@ -36,8 +39,20 @@ public class User {
   private String openrouterModelPhotoIdentify;
   private String openrouterModelPhotoDiagnose;
   private String openrouterApiKeyEncrypted;
+  private String migrationVariant;
+  private Integer tmaOpenCount = 0;
+  private Integer pwaOpenCount = 0;
+  private Instant migrationMigratedAt;
+  private Instant lastSeenTmaAt;
+  private Instant lastSeenPwaAt;
   @Column(name = "calendar_token")
   private String calendarToken = UUID.randomUUID().toString();
+
+  @ElementCollection(fetch = FetchType.EAGER)
+  @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
+  @Enumerated(EnumType.STRING)
+  @Column(name = "role", nullable = false)
+  private Set<UserRole> roles = new HashSet<>(Set.of(UserRole.ROLE_USER));
 
   private Instant createdAt = Instant.now();
 

@@ -88,6 +88,11 @@ web:
     allowed-origins: ${WEB_CORS_ALLOWED_ORIGINS:*}
 
 app:
+  security:
+    jwt:
+      secret: ${APP_SECURITY_JWT_SECRET:change-me-change-me-change-me-change-me}
+      ttl-seconds: ${APP_SECURITY_JWT_TTL_SECONDS:2592000}
+      issuer: ${APP_SECURITY_JWT_ISSUER:plant-care}
   admin:
     telegram-id: ${APP_ADMIN_TELEGRAM_ID:0}
     rate-limit:
@@ -100,6 +105,13 @@ app:
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
   dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
   dev-username: ${APP_DEV_USERNAME:dev_user}
+
+web-push:
+  enabled: ${WEB_PUSH_ENABLED:false}
+  subject: ${WEB_PUSH_SUBJECT:mailto:plant-bot@example.com}
+  vapid:
+    public-key: ${WEB_PUSH_VAPID_PUBLIC_KEY:}
+    private-key: ${WEB_PUSH_VAPID_PRIVATE_KEY:}
 
 home-assistant:
   local-key-path: ./data/ha-master.key
