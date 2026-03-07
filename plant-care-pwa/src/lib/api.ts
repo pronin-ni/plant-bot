@@ -32,6 +32,7 @@ import type {
   AdminCacheClearDto,
   PwaAuthDto,
   PwaAuthProvidersDto,
+  PwaTelegramWidgetPayloadDto,
   PwaUserDto,
   PwaPushPublicKeyDto,
   PwaPushStatusDto,
@@ -280,6 +281,13 @@ export async function pwaLoginTelegram(initData: string): Promise<PwaAuthDto> {
   return pwaAuthFetch<PwaAuthDto>('/api/pwa/auth/telegram', {
     method: 'POST',
     body: JSON.stringify({ initData })
+  });
+}
+
+export async function pwaLoginTelegramWidget(payload: PwaTelegramWidgetPayloadDto): Promise<PwaAuthDto> {
+  return pwaAuthFetch<PwaAuthDto>('/api/pwa/auth/telegram-widget', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 

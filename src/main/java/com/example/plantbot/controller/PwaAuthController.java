@@ -4,6 +4,7 @@ import com.example.plantbot.controller.dto.pwa.PwaAuthOAuthRequest;
 import com.example.plantbot.controller.dto.pwa.PwaAuthProviderResponse;
 import com.example.plantbot.controller.dto.pwa.PwaAuthResponse;
 import com.example.plantbot.controller.dto.pwa.PwaAuthTelegramRequest;
+import com.example.plantbot.controller.dto.pwa.PwaAuthTelegramWidgetRequest;
 import com.example.plantbot.controller.dto.pwa.PwaUserResponse;
 import com.example.plantbot.domain.AuthProviderType;
 import com.example.plantbot.repository.UserRepository;
@@ -36,6 +37,11 @@ public class PwaAuthController {
   public PwaAuthResponse telegramLogin(@RequestBody(required = false) PwaAuthTelegramRequest request) {
     String initData = request == null ? null : request.initData();
     return pwaAuthService.loginWithTelegram(initData);
+  }
+
+  @PostMapping("/telegram-widget")
+  public PwaAuthResponse telegramWidgetLogin(@RequestBody PwaAuthTelegramWidgetRequest request) {
+    return pwaAuthService.loginWithTelegramWidget(request);
   }
 
   @PostMapping("/oauth/{provider}")

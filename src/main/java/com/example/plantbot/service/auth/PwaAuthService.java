@@ -2,6 +2,7 @@ package com.example.plantbot.service.auth;
 
 import com.example.plantbot.controller.dto.pwa.PwaAuthOAuthRequest;
 import com.example.plantbot.controller.dto.pwa.PwaAuthResponse;
+import com.example.plantbot.controller.dto.pwa.PwaAuthTelegramWidgetRequest;
 import com.example.plantbot.controller.dto.pwa.PwaUserResponse;
 import com.example.plantbot.domain.AuthIdentity;
 import com.example.plantbot.domain.AuthProviderType;
@@ -19,6 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -40,9 +45,47 @@ public class PwaAuthService {
   @Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
 
+  @Value("${bot.token:}")
+  private String botToken;
+
+  @Value("${telegram.auth.max-age-seconds:86400}")
+  private long telegramAuthMaxAgeSeconds;
+
   @Transactional
   public PwaAuthResponse loginWithTelegram(String initData) {
     User user = telegramInitDataService.validateAndResolveUser(initData);
+    return finalizeTelegramLogin(user);
+  }
+
+  @Transactional
+  public PwaAuthResponse loginWithTelegramWidget(PwaAuthTelegramWidgetRequest request) {
+    if (request == null || request.id() == null || request.id() <= 0 || request.authDate() == null || request.hash() == null || request.hash().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный Telegram payload");
+    }
+    if (botToken == null || botToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен bot.token");
+    }
+    long age = Math.abs(Instant.now().getEpochSecond() - request.authDate());
+    if (age > Math.max(60, telegramAuthMaxAgeSeconds)) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Данные входа Telegram устарели");
+    }
+
+    String dataCheck = buildWidgetDataCheckString(request);
+    String expectedHash = computeTelegramWidgetHash(dataCheck);
+    if (!constantTimeEquals(expectedHash, request.hash().trim().toLowerCase(Locale.ROOT))) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Подпись Telegram Login Widget не прошла проверку");
+    }
+
+    User user = userService.getOrCreateByTelegramData(
+        request.id(),
+        blankToNull(request.username()),
+        blankToNull(request.firstName()),
+        blankToNull(request.lastName())
+    );
+    return finalizeTelegramLogin(user);
+  }
+
+  private PwaAuthResponse finalizeTelegramLogin(User user) {
     ensureUserDefaults(user);
     if (user.getTelegramId() != null && user.getTelegramId().equals(adminTelegramId)) {
       user.getRoles().add(UserRole.ROLE_ADMIN);
@@ -60,6 +103,67 @@ public class PwaAuthService {
         user.getTelegramId()
     ));
     return toAuthResponse(user);
+  }
+
+  private String buildWidgetDataCheckString(PwaAuthTelegramWidgetRequest request) {
+    java.util.Map<String, String> data = new java.util.TreeMap<>();
+    data.put("auth_date", String.valueOf(request.authDate()));
+    data.put("id", String.valueOf(request.id()));
+    if (request.firstName() != null && !request.firstName().isBlank()) {
+      data.put("first_name", request.firstName());
+    }
+    if (request.lastName() != null && !request.lastName().isBlank()) {
+      data.put("last_name", request.lastName());
+    }
+    if (request.username() != null && !request.username().isBlank()) {
+      data.put("username", request.username());
+    }
+    if (request.photoUrl() != null && !request.photoUrl().isBlank()) {
+      data.put("photo_url", request.photoUrl());
+    }
+    return data.entrySet().stream()
+        .map(entry -> entry.getKey() + "=" + entry.getValue())
+        .reduce((a, b) -> a + "\n" + b)
+        .orElse("");
+  }
+
+  private String computeTelegramWidgetHash(String dataCheckString) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] secret = digest.digest(botToken.getBytes(StandardCharsets.UTF_8));
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(secret, "HmacSHA256"));
+      byte[] signature = mac.doFinal(dataCheckString.getBytes(StandardCharsets.UTF_8));
+      return hex(signature);
+    } catch (Exception ex) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Ошибка проверки Telegram Login Widget");
+    }
+  }
+
+  private String hex(byte[] bytes) {
+    StringBuilder sb = new StringBuilder(bytes.length * 2);
+    for (byte b : bytes) {
+      sb.append(String.format("%02x", b));
+    }
+    return sb.toString();
+  }
+
+  private boolean constantTimeEquals(String a, String b) {
+    if (a == null || b == null || a.length() != b.length()) {
+      return false;
+    }
+    int result = 0;
+    for (int i = 0; i < a.length(); i++) {
+      result |= a.charAt(i) ^ b.charAt(i);
+    }
+    return result == 0;
+  }
+
+  private String blankToNull(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return value.trim();
   }
 
   @Transactional

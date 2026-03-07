@@ -3,8 +3,9 @@ import { useMutation } from '@tanstack/react-query';
 import { Leaf } from 'lucide-react';
 
 import { AuthProvidersList } from '@/components/auth/AuthProvidersList';
+import { TelegramWidgetLogin } from '@/components/auth/TelegramWidgetLogin';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
-import { pwaLoginTelegram } from '@/lib/api';
+import { pwaLoginTelegram, pwaLoginTelegramWidget } from '@/lib/api';
 import { hapticNotify } from '@/lib/telegram';
 import { useAuthStore } from '@/lib/store';
 
@@ -32,7 +33,10 @@ function clearMigrationInitDataFromUrl() {
 export function LoginScreen() {
   const [activeProvider, setActiveProvider] = useState<AuthProviderId | null>(null);
   const [migrationState, setMigrationState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [showTelegramWidget, setShowTelegramWidget] = useState(false);
   const migrationInitData = useMemo(() => getMigrationInitDataFromUrl(), []);
+  const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME ?? '';
 
   const loginMutation = useMutation({
     mutationFn: async (providerId: AuthProviderId) => {
@@ -41,6 +45,8 @@ export function LoginScreen() {
         throw new Error('Провайдер не найден');
       }
       setActiveProvider(providerId);
+      setLoginError(null);
+      setShowTelegramWidget(false);
       return provider.login();
     },
     onSuccess: (session) => {
@@ -57,9 +63,40 @@ export function LoginScreen() {
       hapticNotify('success');
       setActiveProvider(null);
     },
-    onError: () => {
+    onError: (error) => {
       hapticNotify('error');
+      const message = error instanceof Error ? error.message : 'Ошибка входа. Проверьте провайдер и настройки backend.';
+      if (message === 'TELEGRAM_WIDGET_REQUIRED') {
+        setShowTelegramWidget(true);
+        setLoginError(null);
+      } else {
+        setLoginError(message);
+      }
       setActiveProvider(null);
+    }
+  });
+
+  const telegramWidgetMutation = useMutation({
+    mutationFn: pwaLoginTelegramWidget,
+    onSuccess: (session) => {
+      useAuthStore.getState().setAuth({
+        isAuthorized: true,
+        accessToken: session.accessToken,
+        telegramUserId: session.user.telegramId,
+        username: session.user.username,
+        firstName: session.user.firstName,
+        email: session.user.email,
+        roles: session.user.roles,
+        isAdmin: session.user.roles.includes('ROLE_ADMIN')
+      });
+      setShowTelegramWidget(false);
+      setLoginError(null);
+      hapticNotify('success');
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Ошибка входа через Telegram Widget';
+      setLoginError(message);
+      hapticNotify('error');
     }
   });
 
@@ -117,9 +154,19 @@ export function LoginScreen() {
           loadingProvider={activeProvider}
           onLogin={(providerId) => loginMutation.mutate(providerId)}
         />
-        {loginMutation.isError ? (
+        {showTelegramWidget ? (
+          <div className="mt-3 rounded-ios-button border border-ios-border/60 bg-white/60 p-3">
+            <p className="text-xs text-ios-subtext">Подтвердите вход через Telegram:</p>
+            <TelegramWidgetLogin
+              botUsername={telegramBotUsername}
+              onAuth={(payload) => telegramWidgetMutation.mutate(payload)}
+              onError={(message) => setLoginError(message)}
+            />
+          </div>
+        ) : null}
+        {loginError ? (
           <p className="mt-3 text-xs text-red-500">
-            Ошибка входа. Проверьте провайдер и настройки backend.
+            {loginError}
           </p>
         ) : null}
       </div>

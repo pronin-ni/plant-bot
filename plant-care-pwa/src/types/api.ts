@@ -244,6 +244,16 @@ export interface PwaAuthProvidersDto {
   providers: string[];
 }
 
+export interface PwaTelegramWidgetPayloadDto {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  photoUrl?: string;
+  authDate: number;
+  hash: string;
+}
+
 export interface PwaPushPublicKeyDto {
   enabled: boolean;
   publicKey: string;
