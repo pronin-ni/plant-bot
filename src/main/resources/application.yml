@@ -1,7 +1,11 @@
 spring:
   datasource:
-    url: jdbc:sqlite:./data/plantbot.db
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/plantbot.db?busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL}
     driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:1}
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
   jpa:
     hibernate:
       ddl-auto: update
