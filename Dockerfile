@@ -1,17 +1,31 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-alpine AS frontend-build
-WORKDIR /frontend
+FROM node:20-alpine AS miniapp-build
+WORKDIR /frontend-mini
 COPY plant-care-mini-app/package.json ./
 RUN npm install
 COPY plant-care-mini-app ./
+RUN npm run build
+
+FROM node:20-alpine AS pwa-build
+ARG VITE_API_BASE_URL=
+ARG VITE_TELEGRAM_BOT_USERNAME=
+ARG VITE_PWA_URL=
+WORKDIR /frontend-pwa
+COPY plant-care-pwa/package.json ./
+RUN npm install
+COPY plant-care-pwa ./
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_TELEGRAM_BOT_USERNAME=${VITE_TELEGRAM_BOT_USERNAME}
+ENV VITE_PWA_URL=${VITE_PWA_URL}
 RUN npm run build
 
 FROM gradle:8.6-jdk17 AS build
 WORKDIR /app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY src ./src
-COPY --from=frontend-build /frontend/dist ./src/main/resources/static/mini-app
+COPY --from=miniapp-build /frontend-mini/dist ./src/main/resources/static/mini-app
+COPY --from=pwa-build /frontend-pwa/dist ./src/main/resources/static/pwa
 RUN gradle -q bootJar
 
 FROM eclipse-temurin:17-jre

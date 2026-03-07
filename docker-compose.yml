@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
+        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
+        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
     image: ghcr.io/pronin-ni/plant-bot:latest
     container_name: plant-bot
     restart: unless-stopped
@@ -48,6 +52,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
+        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
+        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
     image: ghcr.io/pronin-ni/plant-bot:latest
     container_name: plant-miniapp
     restart: unless-stopped
