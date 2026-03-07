@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone, BellRing } from 'lucide-react';
+import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone, BellRing, SmartphoneNfc } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
@@ -22,13 +22,13 @@ import {
 import { ensurePushSubscription, removePushSubscription } from '@/lib/pwa';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
 import { useAuthStore } from '@/lib/store';
+import { trackMigrationEvent } from '@/lib/analytics';
+import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 
 export function SettingsScreen() {
-  const username = useAuthStore((s) => s.username);
-  const isReady = useAuthStore((s) => s.isReady);
-  const isAuthorized = useAuthStore((s) => s.isAuthorized);
   const savedCity = useAuthStore((s) => s.city);
   const [city, setCity] = useState(savedCity ?? '');
+  const pwaUrl = useMemo(() => getConfiguredPwaUrl(), []);
 
   useEffect(() => {
     setCity(savedCity ?? '');
@@ -50,6 +50,8 @@ export function SettingsScreen() {
     onError: () => hapticNotify('error')
   });
 
+  // Используется для кнопки "Проверить авторизацию" (в будущем)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateAuthMutation = useMutation({
     mutationFn: validateTelegramAuth,
     onSuccess: (payload) => {
@@ -64,6 +66,17 @@ export function SettingsScreen() {
     },
     onError: () => hapticNotify('error')
   });
+
+  const migrateToPwa = async () => {
+    try {
+      await openPwaMigrationFlow();
+      trackMigrationEvent({ type: 'migration_started' });
+      hapticNotify('success');
+    } catch (error) {
+      hapticNotify('error');
+      console.error('Migration failed:', error);
+    }
+  };
 
   const statsQuery = useQuery({
     queryKey: ['stats'],
@@ -181,31 +194,28 @@ export function SettingsScreen() {
   return (
     <section className="space-y-3">
       <div className="ios-blur-card p-4">
-        <p className="text-ios-title-2">Статус авторизации</p>
-        <p className="mt-1 text-ios-body text-ios-subtext">
-          {isReady ? 'Telegram WebApp инициализирован.' : 'Инициализация Telegram WebApp...'}
+        <div className="mb-2 flex items-center gap-2">
+          <SmartphoneNfc className="h-4 w-4 text-ios-accent" />
+          <p className="text-ios-body font-medium">Переход в PWA</p>
+        </div>
+        <p className="text-ios-caption text-ios-subtext">
+          Откроется PWA в браузере и автоматически перенесёт текущую Telegram-сессию без потери данных.
         </p>
-        <p className="mt-1 text-ios-caption text-ios-subtext">
-          {isAuthorized ? `Подтверждено для @${username ?? 'пользователь'}` : 'Пока не подтверждено на сервере'}
-        </p>
+        {pwaUrl ? (
+          <p className="mt-2 break-all text-[11px] text-ios-subtext">{pwaUrl}</p>
+        ) : (
+          <p className="mt-2 text-[11px] text-red-500">
+            Не задан `VITE_PWA_URL`. Добавьте URL PWA в `.env` фронтенда mini app.
+          </p>
+        )}
         <Button
-          variant="secondary"
-          className="mt-2 w-full"
-          disabled={validateAuthMutation.isPending}
-          onClick={() => {
-            hapticImpact('light');
-            validateAuthMutation.mutate();
-          }}
+          className="mt-3 w-full"
+          disabled={!pwaUrl}
+          onClick={migrateToPwa}
         >
-          {validateAuthMutation.isPending ? 'Проверяем...' : 'Перепроверить авторизацию'}
+          Перейти в PWA
         </Button>
       </div>
-
-      <div className="ios-blur-card p-4">
-        <p className="text-ios-caption text-ios-subtext">Пользователь</p>
-        <p className="mt-1 text-ios-title-2">@{username ?? 'не указан'}</p>
-      </div>
-
       <div className="ios-blur-card space-y-3 p-4">
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-ios-accent" />
