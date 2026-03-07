@@ -4,13 +4,15 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/cn';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-ios-button text-ios-body font-medium transition-transform duration-150 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
+  'android-ripple relative inline-flex items-center justify-center overflow-hidden whitespace-nowrap rounded-ios-button text-ios-body font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] android:rounded-[18px]',
   {
     variants: {
       variant: {
-        default: 'bg-ios-accent text-white shadow-ios hover:brightness-95',
-        ghost: 'bg-white/40 text-ios-text backdrop-blur-ios',
-        secondary: 'bg-ios-card/80 text-ios-text border border-ios-border/60 backdrop-blur-ios'
+        // iOS-overrides: glass + vibrancy + мягкая глубина.
+        default: 'ios:bg-ios-accent ios:text-white ios:shadow-ios ios:hover:brightness-95 android:bg-[#4CAF50] android:text-white android:shadow-[0_2px_8px_rgba(76,175,80,0.35)] android:hover:brightness-95',
+        ghost: 'ios:bg-white/35 ios:text-ios-text ios:backdrop-blur-[24px] ios:border ios:border-white/35 android:bg-transparent android:text-ios-text android:border android:border-ios-border/70',
+        secondary: 'ios:bg-ios-card/55 ios:text-ios-text ios:border ios:border-ios-border/50 ios:backdrop-blur-[26px] ios:shadow-[0_4px_24px_rgba(0,0,0,0.08)] android:bg-[#E8F5E9] android:text-[#1B5E20] android:border android:border-[#C8E6C9] android:shadow-[0_1px_3px_rgba(0,0,0,0.15)]',
+        destructive: 'ios:bg-rose-500 ios:text-white ios:shadow-[0_10px_24px_rgba(244,63,94,0.24)] android:bg-[#D32F2F] android:text-white android:shadow-[0_2px_8px_rgba(211,47,47,0.35)]'
       },
       size: {
         default: 'h-12 px-5',
@@ -31,7 +33,13 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, ...props }, ref) => {
-    return <button className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+    return (
+      <button
+        ref={ref}
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    );
   }
 );
 Button.displayName = 'Button';

@@ -7,8 +7,6 @@ import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
 import { BackupRestore } from '@/app/Settings/BackupRestore';
 import { OpenRouterModelSettings } from '@/app/Settings/OpenRouterModelSettings';
 import { AchievementsView } from '@/app/Achievements/AchievementsView';
-import { AdminGuard } from '@/components/AdminGuard';
-import { AdminScreen } from '@/app/admin-screen';
 import {
   getCalendarSync,
   getLearning,
@@ -23,15 +21,15 @@ import {
 } from '@/lib/api';
 import { ensurePushSubscription, removePushSubscription } from '@/lib/pwa';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUiStore } from '@/lib/store';
 import { trackMigrationEvent } from '@/lib/analytics';
 import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 
 export function SettingsScreen() {
   const savedCity = useAuthStore((s) => s.city);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
   const [city, setCity] = useState(savedCity ?? '');
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const pwaUrl = useMemo(() => getConfiguredPwaUrl(), []);
 
   useEffect(() => {
@@ -435,19 +433,14 @@ export function SettingsScreen() {
             className="w-full"
             onClick={() => {
               hapticImpact('light');
-              setShowAdminPanel((prev) => !prev);
+              setActiveTab('admin');
             }}
           >
-            {showAdminPanel ? 'Скрыть админ-панель' : 'Открыть админ-панель'}
+            Открыть админ-панель
           </Button>
         </div>
       ) : null}
 
-      {isAdmin && showAdminPanel ? (
-        <AdminGuard>
-          <AdminScreen />
-        </AdminGuard>
-      ) : null}
     </section>
   );
 }

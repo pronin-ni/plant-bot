@@ -1,8 +1,9 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
-import { IOSBottomTab } from '@/components/common/ios-bottom-tab';
+import { PlatformBottomNav } from '@/components/adaptive/PlatformBottomNav';
+import { PlatformTopNav } from '@/components/adaptive/PlatformTopNav';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { OfflineStatusBar } from '@/components/OfflineStatusBar';
 import { HomeScreen } from '@/app/home-screen';
@@ -12,59 +13,22 @@ import { CalendarScreen } from '@/app/calendar-screen';
 import { SettingsScreen } from '@/app/settings-screen';
 import { AiScreen } from '@/app/ai-screen';
 import { LoginScreen } from '@/app/auth/LoginScreen';
+import { AdminScreen } from '@/app/admin-screen';
+import { AdminGuard } from '@/components/AdminGuard';
 import { pwaMe } from '@/lib/api';
 import { hapticImpact, useTelegramThemeSync } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
-import type { AppTabKey } from '@/types/navigation';
-
-function TabTitle({ tab }: { tab: AppTabKey }) {
-  switch (tab) {
-    case 'home':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">Мои Растения</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">Главный экран с карточками растений и быстрым поливом.</p>
-        </div>
-      );
-    case 'calendar':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">Календарь</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">План поливов и напоминания по датам.</p>
-        </div>
-      );
-    case 'add':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">Добавить</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">Новый мастер добавления растений в стиле iOS sheet.</p>
-        </div>
-      );
-    case 'ai':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">AI-ассистент</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">Вопросы по садоводству и уходу за растениями.</p>
-        </div>
-      );
-    case 'settings':
-      return (
-        <div className="mb-5 mt-1">
-          <h1 className="text-ios-large-title text-ios-text">Настройки</h1>
-          <p className="mt-2 text-ios-body text-ios-subtext">Параметры приложения, города и уведомлений.</p>
-        </div>
-      );
-    default:
-      return null;
-  }
-}
 
 export function App() {
   useTelegramThemeSync();
 
   const { isAuthorized, isReady } = useAuthStore();
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const activeTab = useUiStore((s) => s.activeTab);
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
   const hasAutoAuthAttemptRef = useRef(false);
+  const isAndroid = typeof document !== 'undefined' && document.documentElement.classList.contains('android');
+  const prefersReducedMotion = useReducedMotion();
 
   const meMutation = useMutation({
     mutationFn: pwaMe,
@@ -95,9 +59,16 @@ export function App() {
     }
   }, [isReady, meMutation.mutate]);
 
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') {
+      setActiveTab('home');
+    }
+  }, [isAdmin, activeTab, setActiveTab]);
+
   if (!isAuthorized) {
     return (
       <main className="app-shell">
+        <InstallPrompt />
         <LoginScreen />
       </main>
     );
@@ -107,16 +78,20 @@ export function App() {
     <main className="app-shell">
       <InstallPrompt />
       <OfflineStatusBar />
-      <TabTitle tab={activeTab} />
+      <PlatformTopNav tab={activeTab} />
 
       <AnimatePresence mode="wait">
         <motion.section
           key={activeTab}
           className="space-y-4 pb-5"
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 28, mass: 1 }}
+          initial={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.985 } : { opacity: 0, x: 26 }}
+          animate={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 1, scale: 1 } : { opacity: 1, x: 0 }}
+          exit={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.99 } : { opacity: 0, x: -18 }}
+          transition={prefersReducedMotion
+            ? { duration: 0.01 }
+            : isAndroid
+              ? { duration: 0.26, ease: [0.2, 0, 0, 1] }
+              : { type: 'spring', stiffness: 380, damping: 31, mass: 1 }}
         >
           {activeTab === 'home' ? (
             <HomeScreen />
@@ -138,11 +113,17 @@ export function App() {
             <SettingsScreen />
           ) : null}
 
+          {activeTab === 'admin' ? (
+            <AdminGuard>
+              <AdminScreen />
+            </AdminGuard>
+          ) : null}
+
         </motion.section>
       </AnimatePresence>
 
       <div className="mt-auto pt-2">
-        <IOSBottomTab />
+        <PlatformBottomNav />
       </div>
 
       <PlantDetailSheet />

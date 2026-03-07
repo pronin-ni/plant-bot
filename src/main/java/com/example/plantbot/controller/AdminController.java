@@ -3,7 +3,11 @@ package com.example.plantbot.controller;
 import com.example.plantbot.controller.dto.admin.AdminOverviewResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantsResponse;
+import com.example.plantbot.controller.dto.admin.AdminBackupItemResponse;
+import com.example.plantbot.controller.dto.admin.AdminBackupRestoreResponse;
 import com.example.plantbot.controller.dto.admin.AdminCacheClearResponse;
+import com.example.plantbot.controller.dto.admin.AdminPushTestRequest;
+import com.example.plantbot.controller.dto.admin.AdminPushTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
 import com.example.plantbot.controller.dto.admin.AdminUsersResponse;
 import com.example.plantbot.domain.User;
@@ -13,6 +17,8 @@ import com.example.plantbot.service.AdminService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.WeatherService;
+import com.example.plantbot.service.DatabaseBackupScheduler;
+import com.example.plantbot.service.WebPushNotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -21,6 +27,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +46,8 @@ public class AdminController {
   private final PlantCatalogService plantCatalogService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final WeatherService weatherService;
+  private final DatabaseBackupScheduler databaseBackupScheduler;
+  private final WebPushNotificationService webPushNotificationService;
 
   @GetMapping("/overview")
   public AdminOverviewResponse overview(Authentication authentication) {
@@ -101,6 +110,48 @@ public class AdminController {
         weatherStats.weatherEntries(),
         weatherStats.rainKeys(),
         weatherStats.rainSamples()
+    );
+  }
+
+  @GetMapping("/backups")
+  public List<AdminBackupItemResponse> backups(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    log.info("Admin backup list requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
+    return databaseBackupScheduler.listBackups();
+  }
+
+  @PostMapping("/backups/{fileName}/restore")
+  public AdminBackupRestoreResponse restoreBackup(
+      Authentication authentication,
+      @PathVariable("fileName") String fileName
+  ) {
+    User admin = requireAdmin(authentication);
+    databaseBackupScheduler.restoreFromBackup(fileName);
+    log.warn("Admin restore backup executed: userId={} telegramId={} backup={}", admin.getId(), admin.getTelegramId(), fileName);
+    return new AdminBackupRestoreResponse(true, fileName, "База данных восстановлена из backup");
+  }
+
+  @PostMapping("/push/test")
+  public AdminPushTestResponse sendPushTest(
+      Authentication authentication,
+      @RequestBody AdminPushTestRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    if (request == null || request.userId() == null || request.userId() <= 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId обязателен");
+    }
+    User user = userRepository.findById(request.userId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+    WebPushNotificationService.SendResult result = webPushNotificationService.sendTestNotification(user, request.title(), request.body());
+    log.info("Admin push test executed: adminId={} adminTelegramId={} targetUserId={} subscriptions={} delivered={}",
+        admin.getId(), admin.getTelegramId(), user.getId(), result.subscriptions(), result.delivered());
+    return new AdminPushTestResponse(
+        result.delivered() > 0,
+        user.getId(),
+        user.getUsername(),
+        result.subscriptions(),
+        result.delivered(),
+        result.message()
     );
   }
 

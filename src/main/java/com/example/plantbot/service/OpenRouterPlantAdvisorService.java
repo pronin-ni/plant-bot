@@ -287,12 +287,10 @@ public class OpenRouterPlantAdvisorService {
             Map.of("role", "user", "content", normalizedQuestion)
         ));
         if (body == null) {
-          putChatAnswerCache(cacheKey, Optional.empty());
           continue;
         }
         String content = extractContent(body);
         if (content.isEmpty()) {
-          putChatAnswerCache(cacheKey, Optional.empty());
           continue;
         }
         String answer = content.trim();
@@ -301,7 +299,6 @@ public class OpenRouterPlantAdvisorService {
             modelToUse, preview(normalizedQuestion), preview(answer));
         return Optional.of(new ChatAnswer(answer, modelToUse));
       } catch (Exception ex) {
-        putChatAnswerCache(cacheKey, Optional.empty());
         log.warn("OpenRouter chat failed. model='{}', question='{}': {}", modelToUse, preview(normalizedQuestion), ex.getMessage());
       }
     }
@@ -678,7 +675,12 @@ public class OpenRouterPlantAdvisorService {
       openRouterCacheRepository.delete(row);
       return null;
     }
-    return row.isHit() ? Optional.ofNullable(row.getPayload()) : Optional.empty();
+    if (!row.isHit()) {
+      // Для чата не кэшируем негативные ответы: чтобы пользователь мог сразу повторить попытку.
+      openRouterCacheRepository.delete(row);
+      return null;
+    }
+    return Optional.ofNullable(row.getPayload());
   }
 
   private void putChatAnswerCache(String key, Optional<String> value) {

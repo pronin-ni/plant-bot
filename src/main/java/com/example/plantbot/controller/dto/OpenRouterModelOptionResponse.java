@@ -6,7 +6,7 @@ public record OpenRouterModelOptionResponse(
     Integer contextLength,
     String inputPrice,
     String outputPrice,
-    boolean free
+    boolean free,
+    boolean supportsImageToText
 ) {
 }
-

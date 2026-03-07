@@ -74,7 +74,16 @@ public class OpenRouterModelCatalogService {
         String inputPrice = model.path("pricing").path("prompt").asText(null);
         String outputPrice = model.path("pricing").path("completion").asText(null);
         boolean free = id.endsWith(":free");
-        items.add(new OpenRouterModelOptionResponse(id, name == null ? id : name, contextLength, inputPrice, outputPrice, free));
+        boolean supportsImageToText = supportsImageToText(model);
+        items.add(new OpenRouterModelOptionResponse(
+            id,
+            name == null ? id : name,
+            contextLength,
+            inputPrice,
+            outputPrice,
+            free,
+            supportsImageToText
+        ));
       }
 
       items.sort(Comparator.comparing(OpenRouterModelOptionResponse::free).reversed()
@@ -111,10 +120,58 @@ public class OpenRouterModelCatalogService {
           null,
           null,
           null,
-          normalized.endsWith(":free")
+          normalized.endsWith(":free"),
+          isConfiguredPhotoModel(normalized)
       ));
     }
     return items;
+  }
+
+  private boolean supportsImageToText(JsonNode model) {
+    JsonNode architecture = model.path("architecture");
+    if (!architecture.isMissingNode()) {
+      boolean inputHasImage = containsIgnoreCase(architecture.path("input_modalities"), "image");
+      boolean outputHasText = containsIgnoreCase(architecture.path("output_modalities"), "text");
+      if (inputHasImage && outputHasText) {
+        return true;
+      }
+    }
+
+    // fallback для форматов без architecture
+    JsonNode modalities = model.path("modalities");
+    boolean inputHasImage = containsIgnoreCase(modalities.path("input"), "image");
+    boolean outputHasText = containsIgnoreCase(modalities.path("output"), "text");
+    return inputHasImage && outputHasText;
+  }
+
+  private boolean containsIgnoreCase(JsonNode node, String value) {
+    if (node == null || node.isMissingNode()) {
+      return false;
+    }
+    if (node.isArray()) {
+      for (JsonNode item : node) {
+        String text = item.asText("");
+        if (text.equalsIgnoreCase(value)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    String text = node.asText("");
+    return text.equalsIgnoreCase(value);
+  }
+
+  private boolean isConfiguredPhotoModel(String modelId) {
+    if (modelId == null || modelId.isBlank()) {
+      return false;
+    }
+    String normalized = modelId.trim();
+    return normalized.equalsIgnoreCase(normalize(fallbackModelPhotoIdentify))
+        || normalized.equalsIgnoreCase(normalize(fallbackModelPhotoDiagnose));
+  }
+
+  private String normalize(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private String text(JsonNode node, String field) {

@@ -1,1 +1,1 @@
-export type AppTabKey = 'home' | 'calendar' | 'add' | 'ai' | 'settings';
+export type AppTabKey = 'home' | 'calendar' | 'add' | 'ai' | 'settings' | 'admin';

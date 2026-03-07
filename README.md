@@ -127,6 +127,10 @@ docker compose up -d --build plant-bot
 - `APP_BACKUP_RETENTION_DAYS=7`
 - `APP_BACKUP_FILE_PREFIX=plantbot-backup`
 
+В админ-панели PWA доступно:
+- просмотр списка backup-файлов;
+- восстановление базы из выбранного backup (для `ROLE_ADMIN`).
+
 ## Установка PWA на iPhone/Android
 
 При открытии `/pwa/` автоматически показывается карточка-инструкция с определением платформы:

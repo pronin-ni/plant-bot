@@ -20,14 +20,14 @@ const TABS: TabItem[] = [
   { key: 'settings', title: 'Настройки', icon: Settings }
 ];
 
-export function IOSBottomTab() {
+export function PlatformBottomNav() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
-  const tabs = TABS;
+  const isAndroid = typeof document !== 'undefined' && document.documentElement.classList.contains('android');
 
   return (
-    <nav className="ios-tabbar">
-      {tabs.map((tab) => {
+    <nav className="ios-tabbar android-bottom-nav">
+      {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.key;
         return (
@@ -39,24 +39,33 @@ export function IOSBottomTab() {
               hapticSelectionChanged();
             }}
             className={cn(
-              'relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors',
-              isActive ? 'text-ios-accent' : 'text-ios-subtext'
+              'relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors android:rounded-[16px] android:py-2 android:text-[11px]',
+              isActive ? 'text-ios-accent' : 'text-ios-subtext android:text-[#5F6368]'
             )}
             aria-label={tab.title}
           >
             {isActive ? (
               <motion.span
-                layoutId="ios-tab-active"
-                className="absolute inset-0 rounded-ios-tab bg-ios-accent/12"
-                transition={{ type: 'spring', stiffness: 360, damping: 28, mass: 1 }}
+                layoutId={isAndroid ? 'android-tab-active' : 'ios-tab-active'}
+                className={cn(
+                  'absolute inset-0 rounded-ios-tab',
+                  isAndroid ? 'bg-[#4CAF50]/18' : 'bg-ios-accent/12'
+                )}
+                transition={isAndroid
+                  ? { duration: 0.24, ease: [0.2, 0, 0, 1] }
+                  : { type: 'spring', stiffness: 360, damping: 28, mass: 1 }}
               />
             ) : null}
             <motion.span
               className="relative z-10"
-              animate={{ y: isActive ? -3 : 0, scale: isActive ? 1.08 : 1 }}
-              transition={{ type: 'spring', stiffness: 340, damping: 27, mass: 1 }}
+              animate={isAndroid
+                ? { y: 0, scale: isActive ? 1.02 : 1 }
+                : { y: isActive ? -3 : 0, scale: isActive ? 1.08 : 1 }}
+              transition={isAndroid
+                ? { duration: 0.2, ease: [0.2, 0, 0, 1] }
+                : { type: 'spring', stiffness: 340, damping: 27, mass: 1 }}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className={cn('h-5 w-5', isAndroid && isActive ? 'text-[#2E7D32]' : '')} />
             </motion.span>
             <span className="relative z-10 mt-1 leading-none whitespace-nowrap">{tab.title}</span>
           </button>
@@ -65,3 +74,4 @@ export function IOSBottomTab() {
     </nav>
   );
 }
+

@@ -17,8 +17,12 @@ export function InstallPrompt() {
       setCanInstall(false);
       return;
     }
-    const savedDismiss = localStorage.getItem('plant-pwa-install-dismissed') === '1';
-    setDismissed(savedDismiss);
+    const raw = localStorage.getItem('plant-pwa-install-dismissed-at');
+    const dismissedAt = raw ? Number(raw) : 0;
+    const now = Date.now();
+    // Блокируем показ только временно, чтобы подсказка не исчезала навсегда.
+    const suppressWindowMs = 3 * 24 * 60 * 60 * 1000;
+    setDismissed(Boolean(dismissedAt) && now - dismissedAt < suppressWindowMs);
     return subscribeInstallAvailability(setCanInstall);
   }, []);
 
@@ -69,7 +73,7 @@ export function InstallPrompt() {
             aria-label="Закрыть"
             className="rounded-full p-1 text-ios-subtext"
             onClick={() => {
-              localStorage.setItem('plant-pwa-install-dismissed', '1');
+              localStorage.setItem('plant-pwa-install-dismissed-at', String(Date.now()));
               setDismissed(true);
               hapticImpact('light');
             }}

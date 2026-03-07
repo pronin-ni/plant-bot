@@ -22,6 +22,7 @@ export function OpenRouterModelSettings() {
   const [photoIdentifyModel, setPhotoIdentifyModel] = useState('');
   const [photoDiagnoseModel, setPhotoDiagnoseModel] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [showPaidModels, setShowPaidModels] = useState(false);
 
   useEffect(() => {
     const p = preferencesQuery.data;
@@ -63,6 +64,8 @@ export function OpenRouterModelSettings() {
   });
 
   const modelOptions = modelsQuery.data?.models ?? [];
+  const visibleOptions = modelOptions.filter((model) => showPaidModels || model.free);
+  const photoOptions = visibleOptions.filter((model) => model.supportsImageToText);
 
   return (
     <div className="ios-blur-card space-y-3 p-4">
@@ -74,6 +77,14 @@ export function OpenRouterModelSettings() {
       <p className="text-ios-caption text-ios-subtext">
         Можно выбрать отдельные модели для: автоподбора растения, AI-чата, распознавания фото и диагностики фото.
       </p>
+      <label className="inline-flex items-center gap-2 text-ios-caption text-ios-subtext">
+        <input
+          type="checkbox"
+          checked={showPaidModels}
+          onChange={(event) => setShowPaidModels(event.target.checked)}
+        />
+        Показывать платные модели
+      </label>
       <p className="text-ios-caption text-ios-subtext">
         Текущий персональный API-ключ: {preferencesQuery.data?.hasApiKey ? 'задан' : 'не задан'}.
       </p>
@@ -100,25 +111,25 @@ export function OpenRouterModelSettings() {
         label="Модель для подбора растения/ухода"
         value={plantModel}
         onChange={setPlantModel}
-        options={modelOptions}
+        options={visibleOptions}
       />
       <ModelSelect
         label="Модель для AI-чата"
         value={chatModel}
         onChange={setChatModel}
-        options={modelOptions}
+        options={visibleOptions}
       />
       <ModelSelect
         label="Модель для фото: распознавание"
         value={photoIdentifyModel}
         onChange={setPhotoIdentifyModel}
-        options={modelOptions}
+        options={photoOptions}
       />
       <ModelSelect
         label="Модель для фото: диагностика"
         value={photoDiagnoseModel}
         onChange={setPhotoDiagnoseModel}
-        options={modelOptions}
+        options={photoOptions}
       />
 
       <Button
@@ -157,7 +168,7 @@ function ModelSelect({
   label: string;
   value: string;
   onChange: (next: string) => void;
-  options: Array<{ id: string; name: string; free: boolean }>;
+  options: Array<{ id: string; name: string; free: boolean; supportsImageToText: boolean }>;
 }) {
   return (
     <label className="block">

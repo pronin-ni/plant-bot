@@ -106,6 +106,7 @@ export interface OpenRouterModelOption {
   inputPrice?: string | null;
   outputPrice?: string | null;
   free: boolean;
+  supportsImageToText: boolean;
 }
 
 export interface OpenRouterModelsDto {
@@ -223,6 +224,27 @@ export interface AdminCacheClearDto {
   weatherEntries: number;
   weatherRainKeys: number;
   weatherRainSamples: number;
+}
+
+export interface AdminBackupItemDto {
+  fileName: string;
+  sizeBytes: number;
+  modifiedAtEpochMs: number;
+}
+
+export interface AdminBackupRestoreDto {
+  ok: boolean;
+  restoredFile: string;
+  message: string;
+}
+
+export interface AdminPushTestDto {
+  ok: boolean;
+  userId: number;
+  username?: string;
+  subscriptions: number;
+  delivered: number;
+  message: string;
 }
 
 export interface PwaUserDto {

@@ -4,6 +4,7 @@ import { RefreshCw, Sprout } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { PlantCard } from '@/components/common/plant-card';
+import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { Button } from '@/components/ui/button';
 import { getPlants, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
@@ -168,7 +169,8 @@ export function HomeScreen() {
   }
 
   return (
-    <section>
+    <PlatformPullToRefresh onRefresh={() => plantsQuery.refetch()}>
+      <section>
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-ios-caption text-ios-subtext">Всего растений: {plants.length}</p>
         <div className="flex items-center gap-2">
@@ -217,6 +219,7 @@ export function HomeScreen() {
           />
         ))}
       </div>
-    </section>
+      </section>
+    </PlatformPullToRefresh>
   );
 }

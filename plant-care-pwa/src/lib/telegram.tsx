@@ -134,15 +134,42 @@ function hexToRgbTriplet(hex: string): string | null {
 }
 
 export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'light') {
-  getTelegramWebApp()?.HapticFeedback?.impactOccurred(style);
+  const webApp = getTelegramWebApp();
+  if (webApp?.HapticFeedback) {
+    webApp.HapticFeedback.impactOccurred(style);
+    return;
+  }
+  // Fallback для PWA вне Telegram: Vibration API.
+  if (navigator.vibrate) {
+    const isAndroid = document.documentElement.classList.contains('android');
+    const patternByStyle: Record<typeof style, number | number[]> = isAndroid
+      ? { light: 12, medium: 20, heavy: [24, 16, 30], rigid: 14, soft: 10 }
+      : { light: 10, medium: 16, heavy: 24, rigid: 12, soft: 8 };
+    navigator.vibrate(patternByStyle[style]);
+  }
 }
 
 export function hapticSelectionChanged() {
-  getTelegramWebApp()?.HapticFeedback?.selectionChanged();
+  const webApp = getTelegramWebApp();
+  if (webApp?.HapticFeedback) {
+    webApp.HapticFeedback.selectionChanged();
+    return;
+  }
+  navigator.vibrate?.(8);
 }
 
 export function hapticNotify(type: 'error' | 'success' | 'warning') {
-  getTelegramWebApp()?.HapticFeedback?.notificationOccurred(type);
+  const webApp = getTelegramWebApp();
+  if (webApp?.HapticFeedback) {
+    webApp.HapticFeedback.notificationOccurred(type);
+    return;
+  }
+  const pattern: Record<typeof type, number | number[]> = {
+    success: [16, 10, 16],
+    warning: [20, 16, 20],
+    error: [30, 12, 30, 12, 30]
+  };
+  navigator.vibrate?.(pattern[type]);
 }
 
 // Обертка для @telegram-apps/sdk-react без жесткой привязки к конкретному API экспорта

@@ -121,14 +121,48 @@ public class WebPushNotificationService {
     payload.put("plantId", plant.getId());
 
     String payloadJson = toJson(payload);
-    boolean atLeastOne = false;
+    return sendPayload(subscriptions, payloadJson) > 0;
+  }
+
+  @Transactional
+  public SendResult sendTestNotification(User user, String title, String body) {
+    if (user == null) {
+      return new SendResult(0, 0, "Пользователь не найден");
+    }
+    if (!isEnabled()) {
+      return new SendResult(0, 0, "Web Push отключен на сервере");
+    }
+    List<WebPushSubscription> subscriptions = subscriptionRepository.findByUser(user);
+    if (subscriptions.isEmpty()) {
+      return new SendResult(0, 0, "У пользователя нет активных push-подписок");
+    }
+
+    String safeTitle = title == null || title.isBlank() ? "Тестовое уведомление" : title.trim();
+    String safeBody = body == null || body.isBlank()
+        ? "Это тестовое push-сообщение из админ-панели."
+        : body.trim();
+
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("title", safeTitle);
+    payload.put("body", safeBody);
+    payload.put("tag", "admin-test-" + user.getId());
+    payload.put("url", publicBaseUrl + "/pwa/");
+
+    int delivered = sendPayload(subscriptions, toJson(payload));
+    String message = delivered > 0
+        ? "Тестовое push-сообщение отправлено"
+        : "Не удалось доставить push-сообщение";
+    return new SendResult(subscriptions.size(), delivered, message);
+  }
+
+  private int sendPayload(List<WebPushSubscription> subscriptions, String payloadJson) {
+    int delivered = 0;
     for (WebPushSubscription sub : subscriptions) {
-      boolean sent = sendToSubscription(sub, payloadJson);
-      if (sent) {
-        atLeastOne = true;
+      if (sendToSubscription(sub, payloadJson)) {
+        delivered++;
       }
     }
-    return atLeastOne;
+    return delivered;
   }
 
   private boolean sendToSubscription(WebPushSubscription subscription, String payloadJson) {
@@ -182,5 +216,8 @@ public class WebPushNotificationService {
     } catch (JsonProcessingException ex) {
       return "{}";
     }
+  }
+
+  public record SendResult(int subscriptions, int delivered, String message) {
   }
 }

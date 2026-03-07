@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import plugin from 'tailwindcss/plugin';
 
 const config: Config = {
   darkMode: ['class'],
@@ -36,10 +37,22 @@ const config: Config = {
       },
       backdropBlur: {
         ios: '20px'
+      },
+      transitionTimingFunction: {
+        'material-standard': 'cubic-bezier(0.2, 0, 0, 1)',
+        'material-emphasized': 'cubic-bezier(0.2, 0, 0, 1)'
       }
     }
   },
-  plugins: [require('tailwindcss-animate')]
+  plugins: [
+    require('tailwindcss-animate'),
+    plugin(({ addVariant }) => {
+      // Позволяет использовать классы вида ios:bg-..., android:rounded-..., pwa:pb-...
+      addVariant('ios', '.ios &');
+      addVariant('android', '.android &');
+      addVariant('pwa', '.pwa &');
+    })
+  ]
 };
 
 export default config;

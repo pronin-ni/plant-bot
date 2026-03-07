@@ -26,6 +26,14 @@ public class ApiExceptionHandler {
     ));
   }
 
+  @ExceptionHandler(IllegalStateException.class)
+  public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+    return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of(
+        "message", ex.getMessage() == null ? "Некорректная операция" : ex.getMessage(),
+        "status", HttpStatus.BAD_REQUEST.value()
+    ));
+  }
+
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).contentType(MediaType.APPLICATION_JSON).body(Map.of(

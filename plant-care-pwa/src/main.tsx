@@ -7,6 +7,7 @@ import { initTelegramWebApp, TelegramSdkProviderBridge } from '@/lib/telegram';
 import { initPwa } from '@/lib/pwa';
 import { initOfflineSync } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { applyPlatformClasses } from '@/lib/theme/platformDetect';
 import '@/index.css';
 
 const queryClient = new QueryClient({
@@ -47,6 +48,7 @@ function ensureTelegramScriptLoaded(): Promise<void> {
 }
 
 async function bootstrap() {
+  applyPlatformClasses(document.documentElement);
   initPwa();
   await ensureTelegramScriptLoaded();
   initTelegramWebApp();

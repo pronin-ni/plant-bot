@@ -1,5 +1,6 @@
 import { Award, Camera, Droplets, Sparkles, Sprout, Sun, Trees } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
 import { checkAchievements, getAchievements } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
@@ -18,6 +19,7 @@ const iconMap = {
 
 export function AchievementsView() {
   const query = useQuery({ queryKey: ['achievements'], queryFn: getAchievements });
+  const prevUnlockedRef = useRef<number | null>(null);
   const checkMutation = useMutation({
     mutationFn: checkAchievements,
     onSuccess: () => {
@@ -26,6 +28,18 @@ export function AchievementsView() {
     },
     onError: () => hapticNotify('error')
   });
+
+  useEffect(() => {
+    const unlocked = query.data?.unlocked;
+    if (typeof unlocked !== 'number') {
+      return;
+    }
+    if (prevUnlockedRef.current != null && unlocked > prevUnlockedRef.current) {
+      // При разблокировке достижения делаем выраженный отклик.
+      hapticImpact('heavy');
+    }
+    prevUnlockedRef.current = unlocked;
+  }, [query.data?.unlocked]);
 
   return (
     <div className="ios-blur-card space-y-3 p-4">

@@ -4,6 +4,7 @@ import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { getCalendar, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { Button } from '@/components/ui/button';
+import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 
 export function CalendarScreen() {
   const queryClient = useQueryClient();
@@ -27,7 +28,8 @@ export function CalendarScreen() {
   todayStart.setHours(0, 0, 0, 0);
 
   return (
-    <section className="space-y-3 pb-28">
+    <PlatformPullToRefresh onRefresh={() => calendarQuery.refetch()}>
+      <section className="space-y-3 pb-28">
       <div className="flex items-center justify-between">
         <p className="text-ios-caption text-ios-subtext">События полива на ближайшие даты</p>
         <button
@@ -79,6 +81,7 @@ export function CalendarScreen() {
         );
         })}
       </div>
-    </section>
+      </section>
+    </PlatformPullToRefresh>
   );
 }

@@ -16,7 +16,14 @@ function normalizePwaUrl(raw: string): string | null {
 }
 
 export function getConfiguredPwaUrl(): string | null {
-  return normalizePwaUrl(PWA_URL);
+  const configured = normalizePwaUrl(PWA_URL);
+  if (configured) {
+    return configured;
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return normalizePwaUrl(`${window.location.origin}/pwa/`);
+  }
+  return null;
 }
 
 export async function openPwaMigrationFlow(): Promise<void> {

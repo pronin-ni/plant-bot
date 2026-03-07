@@ -30,6 +30,9 @@ import type {
   AssistantHistoryItemDto,
   PlantProfileSuggestionDto,
   AdminCacheClearDto,
+  AdminBackupItemDto,
+  AdminBackupRestoreDto,
+  AdminPushTestDto,
   PwaAuthDto,
   PwaAuthProvidersDto,
   PwaTelegramWidgetPayloadDto,
@@ -609,6 +612,21 @@ export async function getAdminStats(): Promise<AdminStatsDto> {
 
 export async function clearAdminCache(): Promise<AdminCacheClearDto> {
   return apiFetch<AdminCacheClearDto>('/api/admin/clear-cache', { method: 'POST' });
+}
+
+export async function getAdminBackups(): Promise<AdminBackupItemDto[]> {
+  return apiFetch<AdminBackupItemDto[]>('/api/admin/backups', { method: 'GET' });
+}
+
+export async function restoreAdminBackup(fileName: string): Promise<AdminBackupRestoreDto> {
+  return apiFetch<AdminBackupRestoreDto>(`/api/admin/backups/${encodeURIComponent(fileName)}/restore`, { method: 'POST' });
+}
+
+export async function sendAdminPushTest(payload: { userId: number; title?: string; body?: string }): Promise<AdminPushTestDto> {
+  return apiFetch<AdminPushTestDto>('/api/admin/push/test', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function suggestPlantProfile(name: string): Promise<PlantProfileSuggestionDto> {
