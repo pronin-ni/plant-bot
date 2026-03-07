@@ -21,12 +21,12 @@ const telegramProvider: AuthProvider = {
       return pwaLoginTelegram(initData);
     }
 
-    const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME;
+    const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
     if (botUsername) {
       throw new Error('TELEGRAM_WIDGET_REQUIRED');
     }
 
-    throw new Error('Не задан VITE_TELEGRAM_BOT_USERNAME. Укажите username бота и пересоберите frontend.');
+    throw new Error('Не удалось определить username Telegram-бота для входа.');
   }
 };
 
