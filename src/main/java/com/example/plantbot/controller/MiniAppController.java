@@ -9,14 +9,18 @@ import com.example.plantbot.controller.dto.ChatAskRequest;
 import com.example.plantbot.controller.dto.ChatAskResponse;
 import com.example.plantbot.controller.dto.CreatePlantRequest;
 import com.example.plantbot.controller.dto.PhotoUploadResponse;
+import com.example.plantbot.controller.dto.PlantPresetSuggestionResponse;
 import com.example.plantbot.controller.dto.PlantCareAdviceResponse;
 import com.example.plantbot.controller.dto.PlantProfileSuggestionResponse;
 import com.example.plantbot.controller.dto.PlantLearningResponse;
 import com.example.plantbot.controller.dto.PlantPhotoRequest;
+import com.example.plantbot.controller.dto.PlantAiRecommendRequest;
+import com.example.plantbot.controller.dto.PlantAiRecommendResponse;
 import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.PlantStatsResponse;
 import com.example.plantbot.controller.dto.AssistantChatHistoryItemResponse;
 import com.example.plantbot.domain.Plant;
+import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
@@ -24,6 +28,7 @@ import com.example.plantbot.repository.AssistantChatHistoryRepository;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.PlantCatalogService;
+import com.example.plantbot.service.PlantPresetCatalogService;
 import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantService;
@@ -91,6 +96,7 @@ public class MiniAppController {
   private final AssistantChatHistoryRepository assistantChatHistoryRepository;
   private final AssistantChatHistoryService assistantChatHistoryService;
   private final PlantCatalogService plantCatalogService;
+  private final PlantPresetCatalogService plantPresetCatalogService;
   private final PhotoUrlSignerService photoUrlSignerService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
@@ -144,15 +150,37 @@ public class MiniAppController {
   public List<PlantResponse> searchPlants(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
       Authentication authentication,
-      @RequestParam(name = "q", required = false) String q
+      @RequestParam(name = "q", required = false) String q,
+      @RequestParam(name = "category", required = false) PlantCategory category
   ) {
     User user = currentUserService.resolve(authentication, initData);
     String query = q == null ? "" : q.trim();
     if (query.isBlank()) {
       return List.of();
     }
-    return plantRepository.findByUserAndNameContainingIgnoreCase(user, query).stream()
+    List<Plant> plants = category == null
+        ? plantRepository.findByUserAndNameContainingIgnoreCase(user, query)
+        : plantRepository.findByUserAndCategoryAndNameContainingIgnoreCase(user, category, query);
+    return plants.stream()
         .map(plant -> toPlantResponse(plant, user))
+        .toList();
+  }
+
+  @GetMapping("/plants/presets")
+  public List<PlantPresetSuggestionResponse> getPlantPresets(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @RequestParam(name = "category", required = false) PlantCategory category,
+      @RequestParam(name = "q", required = false) String q,
+      @RequestParam(name = "limit", required = false, defaultValue = "12") Integer limit
+  ) {
+    // Авторизация обязательна, даже если это справочный поиск пресетов.
+    currentUserService.resolve(authentication, initData);
+
+    PlantCategory effectiveCategory = category == null ? PlantCategory.HOME : category;
+    int safeLimit = limit == null ? 12 : limit;
+    return plantPresetCatalogService.searchByCategory(effectiveCategory, q, safeLimit).stream()
+        .map(name -> new PlantPresetSuggestionResponse(name, effectiveCategory, plantPresetCatalogService.isPopular(name)))
         .toList();
   }
 
@@ -176,6 +204,9 @@ public class MiniAppController {
     }
     PlantPlacement placement = request.placement() == null ? PlantPlacement.INDOOR : request.placement();
     PlantType type = request.type() == null ? PlantType.DEFAULT : request.type();
+    PlantCategory category = request.category() == null
+        ? (placement == PlantPlacement.OUTDOOR ? PlantCategory.OUTDOOR_DECORATIVE : PlantCategory.HOME)
+        : request.category();
 
     Plant plant = plantService.addPlant(
         user,
@@ -184,12 +215,14 @@ public class MiniAppController {
         baseInterval,
         type,
         placement,
+        category,
         request.outdoorAreaM2(),
         request.outdoorSoilType(),
         request.sunExposure(),
         request.mulched(),
         request.perennial(),
-        request.winterDormancyEnabled()
+        request.winterDormancyEnabled(),
+        request.preferredWaterMl()
     );
     return toPlantResponse(plant, user);
   }
@@ -389,6 +422,45 @@ public class MiniAppController {
         .toList();
   }
 
+  @PostMapping("/plants/ai-recommend")
+  public PlantAiRecommendResponse aiRecommendPlant(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @RequestBody PlantAiRecommendRequest request
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    if (request == null || request.name() == null || request.name().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
+    }
+
+    String sizeHint;
+    if (request.category() == PlantCategory.OUTDOOR_GARDEN) {
+      sizeHint = "высота " + safeNum(request.heightCm(), 0) + " см, диаметр " + safeNum(request.diameterCm(), 0) + " см";
+    } else {
+      sizeHint = "горшок " + safeNum(request.potVolumeLiters(), 0) + " л";
+    }
+
+    var recommendation = openRouterPlantAdvisorService
+        .suggestWizardRecommendation(user, request.name().trim(), request.category(), sizeHint)
+        .orElseGet(() -> new OpenRouterPlantAdvisorService.WizardWateringRecommendation(
+            7,
+            300,
+            "рассеянный свет",
+            "универсальный грунт",
+            "Проверьте влажность почвы перед поливом.",
+            "Heuristic"
+        ));
+
+    return new PlantAiRecommendResponse(
+        recommendation.wateringFrequencyDays(),
+        recommendation.wateringVolumeMl(),
+        recommendation.light(),
+        recommendation.soil(),
+        recommendation.notes(),
+        recommendation.source()
+    );
+  }
+
   @GetMapping("/plants/suggest-profile")
   public PlantProfileSuggestionResponse suggestPlantProfile(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
@@ -509,6 +581,7 @@ public class MiniAppController {
         plant.getId(),
         plant.getName(),
         plant.getPlacement(),
+        plant.getCategory(),
         plant.getPotVolumeLiters(),
         plant.getOutdoorAreaM2(),
         plant.getOutdoorSoilType(),
@@ -518,6 +591,7 @@ public class MiniAppController {
         plant.getWinterDormancyEnabled(),
         plant.getLastWateredDate(),
         plant.getBaseIntervalDays(),
+        plant.getPreferredWaterMl(),
         next,
         ml,
         plant.getType(),
@@ -671,6 +745,13 @@ public class MiniAppController {
     String https = base + "/api/calendar/ics/" + user.getCalendarToken();
     String webcal = https.replaceFirst("^https?://", "webcal://");
     return new CalendarSyncResponse(Boolean.TRUE.equals(user.getCalendarSyncEnabled()), webcal, https);
+  }
+
+  private static String safeNum(Double value, int scale) {
+    if (value == null) {
+      return "0";
+    }
+    return scale <= 0 ? String.valueOf(Math.round(value)) : String.format(Locale.ROOT, "%." + scale + "f", value);
   }
 
   private boolean isAdmin(User user) {

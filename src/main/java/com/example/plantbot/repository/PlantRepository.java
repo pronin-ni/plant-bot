@@ -2,6 +2,7 @@ package com.example.plantbot.repository;
 
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantPlacement;
+import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,8 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
   List<Plant> findByUser(User user);
 
   List<Plant> findByUserAndNameContainingIgnoreCase(User user, String name);
+
+  List<Plant> findByUserAndCategoryAndNameContainingIgnoreCase(User user, PlantCategory category, String name);
 
   @Query("""
       select p from Plant p

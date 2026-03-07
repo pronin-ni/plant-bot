@@ -2,6 +2,7 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.domain.OutdoorSoilType;
 import com.example.plantbot.domain.Plant;
+import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.SunExposure;
 import com.example.plantbot.domain.User;
@@ -162,7 +163,7 @@ public class WateringRecommendationService {
 
   private double plantFactor(Plant plant) {
     if (isOutdoor(plant)) {
-      return outdoorFactor(plant);
+      return outdoorFactor(plant) * outdoorCategoryIntervalFactor(plant);
     }
     return potFactor(plant.getPotVolumeLiters());
   }
@@ -226,14 +227,13 @@ public class WateringRecommendationService {
   }
 
   private double recommendWaterLiters(Plant plant, WeatherData weather) {
+    // Если пользователь вручную зафиксировал объём в wizard — используем его как приоритет.
+    if (plant.getPreferredWaterMl() != null && plant.getPreferredWaterMl() > 0) {
+      return roundTwoDecimals(clamp(plant.getPreferredWaterMl() / 1000.0, 0.05, 25.0));
+    }
+
     if (isOutdoor(plant) && plant.getOutdoorAreaM2() != null && plant.getOutdoorAreaM2() > 0) {
-      double litersPerM2 = switch (plant.getType()) {
-        case SUCCULENT -> 2.0;
-        case TROPICAL -> 6.0;
-        case FERN -> 5.0;
-        case CONIFER -> 3.5;
-        default -> 4.0;
-      };
+      double litersPerM2 = outdoorLitersPerM2(plant);
       double weatherBoost = 1.0;
       if (weather != null) {
         if (weather.temperatureC() >= 28) {
@@ -292,18 +292,45 @@ public class WateringRecommendationService {
   }
 
   private double outdoorLitersPerM2(Plant plant) {
-    return switch (plant.getType()) {
+    double base = switch (plant.getType()) {
       case SUCCULENT -> 2.0;
       case TROPICAL -> 6.0;
       case FERN -> 5.0;
       case CONIFER -> 3.5;
       default -> 4.0;
     };
+    return roundTwoDecimals(base * outdoorCategoryVolumeFactor(plant));
+  }
+
+  private double outdoorCategoryIntervalFactor(Plant plant) {
+    PlantCategory category = plant.getCategory();
+    if (category == PlantCategory.OUTDOOR_GARDEN) {
+      return 0.88; // садовые поливаем чаще
+    }
+    if (category == PlantCategory.OUTDOOR_DECORATIVE) {
+      return 1.0;
+    }
+    return 1.0;
+  }
+
+  private double outdoorCategoryVolumeFactor(Plant plant) {
+    PlantCategory category = plant.getCategory();
+    if (category == PlantCategory.OUTDOOR_GARDEN) {
+      return 1.25; // садовым обычно нужен больший объём
+    }
+    if (category == PlantCategory.OUTDOOR_DECORATIVE) {
+      return 1.0;
+    }
+    return 1.0;
   }
 
   private double enforceMinimumReasonableWater(Plant plant, double liters) {
     if (liters <= 0) {
       return liters;
+    }
+    // Если объём задан пользователем вручную в wizard, не повышаем его эвристиками.
+    if (plant.getPreferredWaterMl() != null && plant.getPreferredWaterMl() > 0) {
+      return roundTwoDecimals(clamp(plant.getPreferredWaterMl() / 1000.0, 0.05, 25.0));
     }
     double minReasonable;
     if (isOutdoor(plant)) {

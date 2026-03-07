@@ -11,6 +11,7 @@ export interface PlantDto {
   id: number;
   name: string;
   placement: 'INDOOR' | 'OUTDOOR';
+  category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
   potVolumeLiters?: number;
   outdoorAreaM2?: number | null;
   outdoorSoilType?: 'SANDY' | 'LOAMY' | 'CLAY' | null;
@@ -20,11 +21,28 @@ export interface PlantDto {
   winterDormancyEnabled?: boolean | null;
   lastWateredDate: string;
   baseIntervalDays?: number;
+  preferredWaterMl?: number;
   nextWateringDate?: string;
   recommendedWaterMl?: number;
   type?: string;
   photoUrl?: string;
   createdAt?: string;
+}
+
+
+export interface PlantAiRecommendDto {
+  wateringFrequencyDays: number;
+  wateringVolumeMl: number;
+  light?: string;
+  soil?: string;
+  notes?: string;
+  source?: string;
+}
+
+export interface PlantPresetSuggestionDto {
+  name: string;
+  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+  popular: boolean;
 }
 
 export interface CalendarEventDto {

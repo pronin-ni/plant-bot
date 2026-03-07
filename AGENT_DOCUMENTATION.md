@@ -1,120 +1,197 @@
-# Документация для агентов: Структура проекта Plant Bot
+# AGENT DOCUMENTATION — Plant Bot / Mini App / PWA
 
-## 1. Обзор проекта
-Одноконтейнерное приложение, объединяющее:
-- Spring Boot backend (`/api/...`)
+Документ для AI-агентов и разработчиков, чтобы быстро понять архитектуру, ограничения и безопасно вносить изменения.
+
+## 1. Что это за проект
+
+Монолит на Spring Boot (`Java 17`) с тремя интерфейсами:
+- Telegram Bot (LongPolling)
 - Telegram Mini App (`/mini-app/...`)
+- PWA (`/pwa/...`)
 
-### Режимы работы
-- **Полный режим**: бот + API + Mini App
-- **Miniapp-only**: API + Mini App без Telegram-бота
+Все работают с одной БД SQLite и одним backend API (`/api/...`).
 
-## 2. Основные директории
+## 2. Режимы запуска и feature flags
 
-### Backend (Java)
-```
-src/main/java/com/example/plantbot/
-├── bot/               # Телеграм-бот
-│   ├── ConversationState.java  # Управление состоянием диалога
-│   └── PlantTelegramBot.java   # Основной обработчик событий
-├── config/            # Конфигурация Spring
-│   ├── TelegramConfig.java     # Настройки бота
-│   └── WebConfig.java          # CORS, веб-маршруты
-├── controller/        # REST API endpoints
-│   ├── MiniAppController.java  # Основные эндпоинты Mini App
-│   ├── HomeAssistantController.java # Интеграция с HA
-│   └── OpenRouterAiController.java # Обработка запросов к OpenRouter
-├── service/           # Бизнес-логика
-│   ├── PlantService.java       # Управление растениями
-│   └── HomeAssistantService.java # Работа с HA
-├── repository/        # Доступ к данным
-└── util/              # Вспомогательные классы
-```
+Runtime-флаги:
+- `TELEGRAM_BOT_ENABLED=true|false` — включение Telegram-бота
+- `APP_FEATURE_MINI_APP_ENABLED=true|false` — доступность web-роутов mini app
+- `APP_FEATURE_PWA_ENABLED=true|false` — доступность web-роутов PWA
 
-### Frontend (Mini App)
-```
-plant-care-mini-app/src/
-├── app/
-│   ├── home-screen.tsx         # Главный экран
-│   ├── add-plant-screen.tsx    # Экран добавления растения
-│   ├── PlantDetail/
-│   │   ├── DiagnosisTool.tsx   # Диагностика по фото
-│   │   └── GrowthGallery.tsx   # Галерея роста
-│   └── Settings/
-│       ├── HomeAssistantSetup.tsx # Настройка HA
-│       └── OpenRouterModelSettings.tsx # Настройка моделей OpenRouter
-├── components/
-│   ├── ConditionsChart.tsx     # График условий
-│   └── SmartReminderCard.tsx   # Умное напоминание
-├── lib/
-│   ├── api.ts                  # API-клиент
-│   └── telegram.tsx            # Интеграция с Telegram
-└── types/                      # TypeScript типы
-```
+Важно:
+- Backend API должен оставаться доступным независимо от отключения UI-фич.
+- Mini App и PWA можно отключать независимо от бота.
 
-## 3. Ключевые компоненты
+## 3. Структура backend
 
-### 3.1. Телеграм-бот (Java)
-- **PlantTelegramBot.java**: Основная логика обработки команд
-  - Состояния диалога через `ConversationState`
-  - Обработка `/start`, `/add`, `/admin`
-- **MiniAppController.java**: API для Mini App
-  - `POST /api/auth/validate`: Валидация пользователя
-  - `GET /api/plants`: Получение списка растений
+Корень: `/Users/nikitapronin/projects/study/plant-bot/src/main/java/com/example/plantbot`
 
-### 3.2. Интеграции
-- **Home Assistant**:
-  - Конфигурация: `Settings -> Home Assistant` в Mini App
-  - Данные: `GET /api/home-assistant/rooms-and-sensors`
-- **OpenRouter**:
-  - Модели: `OPENROUTER_MODEL_PHOTO_IDENTIFY` (идентификация), `OPENROUTER_MODEL_PHOTO_DIAGNOSE` (диагностика)
+Основные пакеты:
+- `controller/` — REST-контроллеры
+- `service/` — бизнес-логика
+- `service/ha/` — интеграция Home Assistant
+- `service/auth/` — PWA auth провайдеры
+- `security/` — JWT, security filter
+- `domain/` — JPA сущности
+- `repository/` — JPA репозитории
+- `bot/` — Telegram bot logic
+- `config/` — security, datasource, web, rate-limit
 
-### 3.3. Структура данных
-- **Растение** (`Plant`):
-  ```java
-  class Plant {
-    Long id;
-    String name;
-    String species;
-    LocalDateTime lastWatered;
-    // ...
-  }
-  ```
-- **Уведомления**:
-  - Автоматическое обновление календаря через ICS-фид
+Критичные контроллеры:
+- `MiniAppController` — core API растений/календаря
+- `OpenRouterAiController` — identify/diagnose через OpenRouter
+- `OpenRouterSettingsController` — настройки моделей/API key
+- `HomeAssistantController` — опциональная HA-интеграция
+- `PwaAuthController` — JWT login для PWA
+- `AdminController` — админ-API (RBAC + rate limit)
+- `PwaPushController` — web push subscriptions
 
-## 4. Как добавить новую функциональность
+## 4. Структура фронтендов
 
-### 4.1. Добавление нового экрана в Mini App
-1. Создать компонент в `src/app/`
-2. Добавить роут в `App.tsx`
-3. Обновить навигацию в `ios-bottom-tab.tsx`
+- Mini App: `/Users/nikitapronin/projects/study/plant-bot/plant-care-mini-app`
+- PWA: `/Users/nikitapronin/projects/study/plant-bot/plant-care-pwa`
 
-### 4.2. Новый API endpoint
-1. Создать контроллер в `controller/`
-2. Добавить сервисную логику в `service/`
-3. Настроить валидацию в `config/WebConfig.java`
+Общее:
+- React 19 + Vite + TS
+- Zustand + TanStack Query
+- Tailwind + shadcn/ui
+- Framer Motion
 
-### 4.3. Новая команда бота
-1. Добавить обработку в `PlantTelegramBot.java`
-2. Обновить `ConversationState.java`
-3. Протестировать через локальный режим (см. README)
+PWA дополнительно:
+- Service Worker (vite-plugin-pwa)
+- Telegram Login Widget + модульный auth-каркас (OAuth providers)
+- Admin UI
 
-## 5. Режимы разработки
+## 5. База данных и данные
 
-### 5.1. Локальная разработка без Telegram
+Хранилище:
+- SQLite: `./data/plantbot.db`
+- Фотографии: `./data/photos`
+- Резервные копии: `./data/backups`
+
+Ключевые таблицы/сущности:
+- `User`, `Plant`, `WateringLog`
+- `AssistantChatHistory` (история AI-вопросов)
+- `OpenRouterCacheEntry`
+- `WebPushSubscription`
+- HA-блок: `HomeAssistantConnection`, `PlantHomeAssistantBinding`, `PlantConditionSample`, `PlantAdjustmentLog`
+
+## 6. AI/OpenRouter
+
+Поддерживается:
+- Chat (вопрос-ответ)
+- Identify plant по фото
+- Diagnose leaf по фото
+
+Важные правила:
+- Запросы к OpenRouter идут только через backend.
+- Ключ OpenRouter хранится на сервере (и может быть user-scoped в настройках).
+- Для photo-моделей в UI должны показываться только модели с `supportsImageToText=true`.
+- По умолчанию в выборе моделей — бесплатные (`:free`), платные скрыты до включения чекбокса.
+
+## 7. Home Assistant (опционально)
+
+- HA не обязателен.
+- Пользователь сам задает URL и token в UI.
+- Токен хранится шифрованно на backend.
+- Если HA не настроен — HA-блоки в карточках/списках должны быть скрыты.
+
+## 8. Админка
+
+Доступ:
+- только пользователи с `ROLE_ADMIN`
+- backend защита обязательна (`@PreAuthorize` + Security)
+
+Текущие admin-фичи:
+- overview/users/plants/stats
+- очистка кэшей
+- тестовый push определенному пользователю (поиск + suggestions)
+- просмотр backup-файлов
+- восстановление SQLite из выбранного backup
+
+## 9. Push и PWA
+
+Web Push:
+- `WEB_PUSH_ENABLED=true`
+- нужны `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_SUBJECT`
+
+PWA install UX:
+- должен показываться install prompt/instruction в зависимости от платформы (iOS/Android/Desktop)
+- если браузер поддерживает `beforeinstallprompt` — показывается кнопка установки
+
+## 10. Безопасность
+
+Обязательно:
+- Не отдавать секреты на фронт.
+- Не писать токены в логи.
+- `APP_SECURITY_JWT_SECRET` — уникальный длинный секрет в production.
+- CORS ограничивать реальными доменами.
+- Для `/api/admin/**` оставлять rate limit.
+
+## 11. Известные риски и технический долг
+
+1. Нет автотестов backend
+- `./gradlew test` проходит с `test NO-SOURCE`.
+- Нужны хотя бы smoke/integration тесты на auth + plants + admin.
+
+2. Риск блокировок SQLite при конкурентной нагрузке
+- Нужно держать пул соединений минимальным (обычно `1` для SQLite).
+- Проверять, что настройки пула реально применяются.
+
+3. Контент-негациация в exception handler
+- По логам встречался `HttpMediaTypeNotAcceptableException` внутри `ApiExceptionHandler`.
+- Нужен fallback-ответ без тела/с text fallback для нестандартных `Accept`.
+
+4. Крупный JS chunk в PWA
+- Vite предупреждает chunk > 500KB.
+- Нужен code-splitting для тяжелых экранов (admin/settings/charts).
+
+## 12. Локальная проверка перед релизом
+
+Backend:
 ```bash
-TELEGRAM_BOT_ENABLED=false APP_DEV_AUTH_ENABLED=true ./gradlew bootRun
+cd /Users/nikitapronin/projects/study/plant-bot
+./gradlew clean test
 ```
-- Используется `APP_DEV_TELEGRAM_ID` и `APP_DEV_USERNAME`
 
-### 5.2. Miniapp-only режим
+Mini App:
 ```bash
-docker compose --profile miniapp-only up -d --build
+cd /Users/nikitapronin/projects/study/plant-bot/plant-care-mini-app
+npm run build
 ```
-- Тестирование API и фронта без бота
 
-## 6. Важные заметки
-- **Безопасность HA токена**: Хранится в зашифрованном виде (`./data/ha-master.key`)
-- **Фото-обработка**: Всегда через backend, никогда напрямую к OpenRouter
-- **Кэширование**: Таймауты для кэша указаны в `.env` (например, `OPENROUTER_CARE_CACHE_TTL_MINUTES`)
+PWA:
+```bash
+cd /Users/nikitapronin/projects/study/plant-bot/plant-care-pwa
+npm run build
+```
+
+Проверить вручную:
+- авторизацию Telegram/PWA
+- список растений, карточка, отметка полива
+- календарь
+- AI chat / identify / diagnose
+- настройки OpenRouter (модели + фильтр free/paid)
+- админка: clear cache, push test, backups
+
+## 13. Правила для агентов при изменениях
+
+- Не изменять/удалять пользовательские данные в `data/` без явного запроса.
+- Не использовать destructive git-команды.
+- Перед крупными правками фиксировать текущий статус через сборку backend + оба frontend build.
+- Для bugfix сначала локализовать проблему в одном слое (UI/API/service/db), затем править минимально.
+- После правок обязательно повторять 3 сборки (backend, mini app, pwa).
+
+## 14. Что уже реализовано (сводно)
+
+- Bot + Mini App + PWA в одном Spring Boot runtime
+- PWA auth foundation (Telegram + каркас OAuth providers)
+- JWT + RBAC (`ROLE_USER`, `ROLE_ADMIN`)
+- Admin API и admin-экран PWA
+- OpenRouter chat + vision (identify/diagnose)
+- Персональные настройки OpenRouter моделей/ключа
+- Home Assistant интеграция (опционально)
+- Web Push subscriptions + admin test push
+- Ночные backup SQLite + restore из админки
+- Platform-adaptive UI (iOS/Android patterns)
+

@@ -39,7 +39,9 @@ import type {
   PwaUserDto,
   PwaPushPublicKeyDto,
   PwaPushStatusDto,
-  PwaPushSubscribeDto
+  PwaPushSubscribeDto,
+  PlantPresetSuggestionDto,
+  PlantAiRecommendDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -422,9 +424,53 @@ export async function getPlantById(id: number): Promise<PlantDto> {
   return apiFetch<PlantDto>(`/api/plants/${id}`, { method: 'GET' });
 }
 
-export async function searchPlants(q: string): Promise<PlantDto[]> {
+export async function searchPlants(q: string, category?: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN"): Promise<PlantDto[]> {
   const params = new URLSearchParams({ q });
+  if (category) {
+    params.set('category', category);
+  }
   return apiFetch<PlantDto[]>(`/api/plants/search?${params.toString()}`, { method: 'GET' });
+}
+
+export async function searchPlantPresets(
+  category: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN",
+  q = '',
+  limit = 12
+): Promise<PlantPresetSuggestionDto[]> {
+  const params = new URLSearchParams();
+  params.set('category', category);
+  if (q.trim()) {
+    params.set('q', q.trim());
+  }
+  params.set('limit', String(limit));
+
+  const path = `/api/plants/presets?${params.toString()}`;
+  const latestCategoryCacheKey = cacheKey(`/api/plants/presets/latest?category=${category}`);
+
+  try {
+    const items = await apiFetch<PlantPresetSuggestionDto[]>(path, { method: 'GET' });
+    await cacheSet(latestCategoryCacheKey, items);
+    return items;
+  } catch (error) {
+    const latest = await cacheGet<PlantPresetSuggestionDto[]>(latestCategoryCacheKey);
+    if (latest && latest.length > 0) {
+      return latest.slice(0, Math.max(1, Math.min(limit, latest.length)));
+    }
+    throw error;
+  }
+}
+
+export async function aiRecommendPlant(payload: {
+  name: string;
+  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+  potVolumeLiters?: number;
+  heightCm?: number;
+  diameterCm?: number;
+}): Promise<PlantAiRecommendDto> {
+  return apiFetch<PlantAiRecommendDto>('/api/plants/ai-recommend', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function createPlant(payload: Record<string, unknown>): Promise<PlantDto> {

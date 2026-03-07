@@ -32,6 +32,10 @@ public class Plant {
   @Column
   private PlantPlacement placement = PlantPlacement.INDOOR;
 
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  private PlantCategory category = PlantCategory.HOME;
+
   private Double outdoorAreaM2;
 
   @Enumerated(EnumType.STRING)
@@ -51,6 +55,9 @@ public class Plant {
 
   @Column(nullable = false)
   private int baseIntervalDays;
+
+  // Пользовательский объём полива в мл (если задан в wizard).
+  private Integer preferredWaterMl;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)

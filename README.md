@@ -10,6 +10,11 @@ Feature-toggle (runtime, без отключения backend API):
 - `APP_FEATURE_MINI_APP_ENABLED=true|false` — включить/выключить web-роуты Mini App (`/mini-app/...`).
 - `APP_FEATURE_PWA_ENABLED=true|false` — включить/выключить web-роуты PWA (`/pwa/...`).
 
+## Документация
+
+- Агентам: `AGENT_DOCUMENTATION.md`
+- Разработчикам: `DEVELOPER_GUIDE.md`
+
 ## Быстрый старт (Docker)
 
 1. Создать `.env` из шаблона:
