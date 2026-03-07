@@ -5,9 +5,10 @@ import com.example.plantbot.controller.dto.OpenRouterDiagnoseResponse;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyRequest;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyResponse;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.OpenRouterVisionService;
-import com.example.plantbot.service.TelegramInitDataService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -18,15 +19,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/plant")
 @RequiredArgsConstructor
 public class OpenRouterAiController {
-  private final TelegramInitDataService telegramInitDataService;
+  private final CurrentUserService currentUserService;
   private final OpenRouterVisionService openRouterVisionService;
 
   @PostMapping("/identify-openrouter")
   public OpenRouterIdentifyResponse identify(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody OpenRouterIdentifyRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     // user нужен для авторизации запроса; фото не сохраняем в этом endpoint.
     if (user.getId() == null) {
       throw new IllegalStateException("Unauthorized user context");
@@ -37,9 +39,10 @@ public class OpenRouterAiController {
   @PostMapping("/diagnose-openrouter")
   public OpenRouterDiagnoseResponse diagnose(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody OpenRouterDiagnoseRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (user.getId() == null) {
       throw new IllegalStateException("Unauthorized user context");
     }

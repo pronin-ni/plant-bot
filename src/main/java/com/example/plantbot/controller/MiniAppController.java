@@ -27,7 +27,7 @@ import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantService;
-import com.example.plantbot.service.TelegramInitDataService;
+import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.WateringLogService;
@@ -38,6 +38,7 @@ import com.example.plantbot.util.WateringRecommendation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,7 +70,7 @@ import java.util.Locale;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class MiniAppController {
-  private final TelegramInitDataService telegramInitDataService;
+  private final CurrentUserService currentUserService;
   private final PlantService plantService;
   private final PlantRepository plantRepository;
   private final WateringRecommendationService wateringRecommendationService;
@@ -90,17 +91,19 @@ public class MiniAppController {
 
   @PostMapping("/auth/validate")
   public AuthValidateResponse validateAuth(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
 
   @GetMapping("/plants")
   public List<PlantResponse> listPlants(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return plantService.list(user).stream()
         .map(plant -> toPlantResponse(plant, user))
         .toList();
@@ -109,9 +112,10 @@ public class MiniAppController {
   @GetMapping("/plants/{id}")
   public PlantResponse getPlant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("id") Long plantId
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     return toPlantResponse(plant, user);
   }
@@ -119,9 +123,10 @@ public class MiniAppController {
   @GetMapping("/plants/search")
   public List<PlantResponse> searchPlants(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestParam(name = "q", required = false) String q
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     String query = q == null ? "" : q.trim();
     if (query.isBlank()) {
       return List.of();
@@ -134,9 +139,10 @@ public class MiniAppController {
   @PostMapping("/plants")
   public PlantResponse createPlant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody CreatePlantRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.name() == null || request.name().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
     }
@@ -171,9 +177,10 @@ public class MiniAppController {
   @PutMapping("/plants/{id}/water")
   public PlantResponse waterPlant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("id") Long plantId
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
 
     WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
@@ -188,10 +195,11 @@ public class MiniAppController {
   @PostMapping(value = "/plants/{id}/photo", consumes = MediaType.APPLICATION_JSON_VALUE)
   public PhotoUploadResponse uploadPhoto(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("id") Long plantId,
       @RequestBody PlantPhotoRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     if (request == null || request.photoBase64() == null || request.photoBase64().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "photoBase64 обязателен");
@@ -232,18 +240,20 @@ public class MiniAppController {
 
   @GetMapping("/calendar")
   public List<CalendarEventResponse> getCalendar(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return buildCalendarEvents(user, LocalDate.now(), LocalDate.now().plusDays(62));
   }
 
   @DeleteMapping("/plants/{id}")
   public void deletePlant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("id") Long plantId
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     plantService.delete(plant);
   }
@@ -251,9 +261,10 @@ public class MiniAppController {
   @GetMapping("/plants/{id}/care-advice")
   public PlantCareAdviceResponse getCareAdvice(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("id") Long plantId
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
     PlantCareAdvice advice = openRouterPlantAdvisorService
@@ -278,9 +289,10 @@ public class MiniAppController {
 
   @GetMapping("/stats")
   public List<PlantStatsResponse> getStats(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     List<Plant> plants = plantService.list(user);
     LocalDate today = LocalDate.now();
     return plants.stream().map(plant -> {
@@ -297,9 +309,10 @@ public class MiniAppController {
 
   @GetMapping("/learning")
   public List<PlantLearningResponse> getLearning(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return plantService.list(user).stream().map(plant -> {
       LearningInfo info = wateringRecommendationService.learningInfo(plant, user);
       return new PlantLearningResponse(
@@ -320,9 +333,10 @@ public class MiniAppController {
   @PostMapping("/assistant/chat")
   public ChatAskResponse askAssistant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody ChatAskRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.question() == null || request.question().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "question обязателен");
     }
@@ -340,9 +354,10 @@ public class MiniAppController {
 
   @GetMapping("/assistant/history")
   public List<AssistantChatHistoryItemResponse> getAssistantHistory(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return assistantChatHistoryRepository.findTop10ByUserOrderByCreatedAtDesc(user).stream()
         .map(item -> new AssistantChatHistoryItemResponse(
             item.getId(),
@@ -357,9 +372,10 @@ public class MiniAppController {
   @GetMapping("/plants/suggest-profile")
   public PlantProfileSuggestionResponse suggestPlantProfile(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestParam(name = "name") String name
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (name == null || name.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
     }
@@ -377,9 +393,10 @@ public class MiniAppController {
   @PostMapping("/users/city")
   public AuthValidateResponse updateCity(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody CityUpdateRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.city() == null || request.city().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city обязателен");
     }
@@ -391,18 +408,20 @@ public class MiniAppController {
 
   @GetMapping("/calendar/sync")
   public CalendarSyncResponse getCalendarSync(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return toCalendarSyncResponse(user);
   }
 
   @PostMapping("/calendar/sync")
   public CalendarSyncResponse updateCalendarSync(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody CalendarSyncRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     boolean enabled = request != null && Boolean.TRUE.equals(request.enabled());
     user.setCalendarSyncEnabled(enabled);
     user = userService.save(user);

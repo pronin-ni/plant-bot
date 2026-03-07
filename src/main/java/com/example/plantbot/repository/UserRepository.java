@@ -13,6 +13,7 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
   Optional<User> findByTelegramId(Long telegramId);
+  Optional<User> findByEmailIgnoreCase(String email);
 
   Optional<User> findByCalendarToken(String calendarToken);
 
@@ -37,4 +38,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
       order by count(u.id) desc
       """)
   List<Object[]> topCities(Pageable pageable);
+
+  long countByMigrationVariant(String migrationVariant);
+
+  long countByMigrationVariantAndMigrationMigratedAtIsNotNull(String migrationVariant);
+
+  long countByPwaOpenCountGreaterThan(int value);
+
+  long countByMigrationMigratedAtIsNotNull();
 }

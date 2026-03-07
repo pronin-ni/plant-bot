@@ -5,11 +5,12 @@ import com.example.plantbot.controller.dto.OpenRouterModelPreferencesRequest;
 import com.example.plantbot.controller.dto.OpenRouterModelPreferencesResponse;
 import com.example.plantbot.controller.dto.OpenRouterModelsResponse;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
-import com.example.plantbot.service.TelegramInitDataService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,35 +25,37 @@ import java.util.List;
 @RequestMapping("/api/openrouter")
 @RequiredArgsConstructor
 public class OpenRouterSettingsController {
-  private final TelegramInitDataService telegramInitDataService;
+  private final CurrentUserService currentUserService;
   private final UserService userService;
   private final OpenRouterModelCatalogService modelCatalogService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
 
   @GetMapping("/models")
   public OpenRouterModelsResponse models(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    telegramInitDataService.validateAndResolveUser(initData);
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     List<OpenRouterModelOptionResponse> models = modelCatalogService.fetchModels(user);
     return new OpenRouterModelsResponse(models);
   }
 
   @GetMapping("/preferences")
   public OpenRouterModelPreferencesResponse preferences(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return toResponse(user);
   }
 
   @PostMapping("/preferences")
   public OpenRouterModelPreferencesResponse savePreferences(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody(required = false) OpenRouterModelPreferencesRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     user.setOpenrouterModelPlant(normalize(request == null ? null : request.plantModel()));
     user.setOpenrouterModelChat(normalize(request == null ? null : request.chatModel()));
     user.setOpenrouterModelPhotoIdentify(normalize(request == null ? null : request.photoIdentifyModel()));
@@ -66,9 +69,10 @@ public class OpenRouterSettingsController {
 
   @DeleteMapping("/preferences/api-key")
   public OpenRouterModelPreferencesResponse clearApiKey(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     openRouterUserSettingsService.updateUserApiKey(user, "");
     return toResponse(user);
   }

@@ -9,12 +9,13 @@ import com.example.plantbot.controller.dto.ha.PlantRoomBindingRequest;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.ha.HaSensorSelectionMode;
+import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.PlantService;
-import com.example.plantbot.service.TelegramInitDataService;
 import com.example.plantbot.service.ha.HomeAssistantApiService;
 import com.example.plantbot.service.ha.HomeAssistantIntegrationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,7 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class HomeAssistantController {
-  private final TelegramInitDataService telegramInitDataService;
+  private final CurrentUserService currentUserService;
   private final HomeAssistantApiService haApiService;
   private final HomeAssistantIntegrationService haIntegrationService;
   private final PlantService plantService;
@@ -38,9 +39,10 @@ public class HomeAssistantController {
   @PostMapping("/home-assistant/config")
   public HomeAssistantConfigResponse saveConfig(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @RequestBody HomeAssistantConfigRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.baseUrl() == null || request.baseUrl().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "baseUrl обязателен");
     }
@@ -62,19 +64,21 @@ public class HomeAssistantController {
 
   @GetMapping("/home-assistant/rooms-and-sensors")
   public HomeAssistantRoomsSensorsResponse roomsAndSensors(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     return haIntegrationService.getRoomsAndSensors(user);
   }
 
   @PutMapping("/plants/{plantId}/room")
   public PlantConditionsResponse bindPlantRoom(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("plantId") Long plantId,
       @RequestBody PlantRoomBindingRequest request
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
 
     HaSensorSelectionMode selectionMode = parseSelectionMode(request == null ? null : request.selectionMode());
@@ -97,9 +101,10 @@ public class HomeAssistantController {
   @GetMapping("/plants/{plantId}/conditions")
   public PlantConditionsResponse getConditions(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("plantId") Long plantId
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     return haIntegrationService.getCurrentConditionsResponse(plant);
   }
@@ -107,10 +112,11 @@ public class HomeAssistantController {
   @GetMapping("/plants/{plantId}/history-conditions")
   public PlantConditionsHistoryResponse getConditionsHistory(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
       @PathVariable("plantId") Long plantId,
       @RequestParam(name = "days", defaultValue = "7") int days
   ) {
-    User user = telegramInitDataService.validateAndResolveUser(initData);
+    User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     return haIntegrationService.getHistory(plant, days);
   }

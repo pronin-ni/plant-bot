@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone } from 'lucide-react';
+import { BarChart3, Bell, Brain, CalendarSync, Copy, ExternalLink, MapPin, Smartphone, SmartphoneNfc } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { HomeAssistantSetup } from '@/app/Settings/HomeAssistantSetup';
@@ -9,6 +9,7 @@ import { OpenRouterModelSettings } from '@/app/Settings/OpenRouterModelSettings'
 import { AchievementsView } from '@/app/Achievements/AchievementsView';
 import { getCalendarSync, getLearning, getStats, updateCalendarSync, updateCity, validateTelegramAuth } from '@/lib/api';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
+import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 import { useAuthStore } from '@/lib/store';
 
 export function SettingsScreen() {
@@ -81,6 +82,7 @@ export function SettingsScreen() {
     () => (statsQuery.data ?? []).filter((item) => item.overdue).length,
     [statsQuery.data]
   );
+  const pwaUrl = useMemo(() => getConfiguredPwaUrl(), []);
 
 
   const isApplePlatform = useMemo(() => {
@@ -177,6 +179,38 @@ export function SettingsScreen() {
       <OpenRouterModelSettings />
       <BackupRestore />
       <AchievementsView />
+
+      <div className="ios-blur-card p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <SmartphoneNfc className="h-4 w-4 text-ios-accent" />
+          <p className="text-ios-body font-medium">Переход в PWA</p>
+        </div>
+        <p className="text-ios-caption text-ios-subtext">
+          Откроется PWA в браузере и автоматически перенесёт текущую Telegram-сессию без потери данных.
+        </p>
+        {pwaUrl ? (
+          <p className="mt-2 break-all text-[11px] text-ios-subtext">{pwaUrl}</p>
+        ) : (
+          <p className="mt-2 text-[11px] text-red-500">
+            Не задан `VITE_PWA_URL`. Добавьте URL PWA в `.env` фронтенда mini app.
+          </p>
+        )}
+        <Button
+          className="mt-3 w-full"
+          disabled={!pwaUrl}
+          onClick={async () => {
+            hapticImpact('medium');
+            try {
+              await openPwaMigrationFlow();
+              hapticNotify('success');
+            } catch {
+              hapticNotify('error');
+            }
+          }}
+        >
+          Перейти в PWA
+        </Button>
+      </div>
 
       <div className="ios-blur-card p-4">
         <div className="mb-2 flex items-center gap-2">
