@@ -46,5 +46,8 @@ public class WebPushSubscription {
 
   private Instant lastSuccessAt;
   private Instant lastFailureAt;
+
+  @Column(length = 500)
+  private String lastFailureReason;
 }
 

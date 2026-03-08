@@ -1,16 +1,19 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, Droplets, Leaf, LocateFixed, Trash2, Waves } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
+import { Dialog } from '@/components/ui/dialog';
 import { ConditionsWidget } from '@/components/ConditionsWidget';
 import { ConditionsChart } from '@/components/ConditionsChart';
 import { RoomAndSensorSelector } from '@/components/RoomAndSensorSelector';
-import { SmartReminderCard } from '@/components/SmartReminderCard';
-import { GrowthGallery } from '@/app/PlantDetail/GrowthGallery';
-import { DiagnosisTool } from '@/app/PlantDetail/DiagnosisTool';
-import { ProgressRing } from '@/components/common/progress-ring';
+import { AIRecommendationCard } from '@/components/AIRecommendationCard';
+import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
+import { GrowthCarousel } from '@/components/GrowthCarousel';
+import { LeafDiagnosis } from '@/components/LeafDiagnosis';
+import { CycleProgress } from '@/components/CycleProgress';
+import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
 import { deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
@@ -28,12 +31,14 @@ function getProgress(plant: PlantDto): number {
   return Math.max(0, Math.min(100, (elapsedDays / cycleDays) * 100));
 }
 
-function nextWateringText(plant: PlantDto): string {
-  if (!plant.nextWateringDate) {
-    return 'Дата следующего полива рассчитывается...';
-  }
-  const date = new Date(plant.nextWateringDate);
-  return `Следующий полив: ${date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}`;
+function getIsOverdue(plant: PlantDto): boolean {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const next = plant.nextWateringDate
+    ? new Date(plant.nextWateringDate)
+    : new Date(new Date(plant.lastWateredDate).getTime() + Math.max(1, plant.baseIntervalDays ?? 7) * 86_400_000);
+  const target = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+  return target.getTime() < today.getTime();
 }
 
 export function PlantDetailSheet() {
@@ -41,6 +46,8 @@ export function PlantDetailSheet() {
   const selectedPlantId = useUiStore((s) => s.selectedPlantId);
   const closePlantDetail = useUiStore((s) => s.closePlantDetail);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteShake, setDeleteShake] = useState(false);
 
   const plantQuery = useQuery({
     queryKey: ['plant', selectedPlantId],
@@ -61,7 +68,6 @@ export function PlantDetailSheet() {
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
-      void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
     },
     onError: () => {
       hapticNotify('error');
@@ -83,6 +89,7 @@ export function PlantDetailSheet() {
     mutationFn: (id: number) => deletePlant(id),
     onSuccess: () => {
       hapticNotify('success');
+      setDeleteConfirmOpen(false);
       closePlantDetail();
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
@@ -91,6 +98,15 @@ export function PlantDetailSheet() {
   });
 
   const plant = useMemo(() => plantQuery.data ?? null, [plantQuery.data]);
+  const isOverdue = useMemo(() => (plant ? getIsOverdue(plant) : false), [plant]);
+
+  useEffect(() => {
+    if (selectedPlantId === null) {
+      setPreviewDataUrl(null);
+      setDeleteConfirmOpen(false);
+      setDeleteShake(false);
+    }
+  }, [selectedPlantId]);
 
   return (
     <BottomSheet open={selectedPlantId !== null} onClose={closePlantDetail}>
@@ -99,147 +115,141 @@ export function PlantDetailSheet() {
       ) : null}
 
       {plant ? (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-ios-large-title">{plant.name}</h2>
-            <p className="text-ios-caption text-ios-subtext">
-              {plant.placement === 'OUTDOOR' ? 'Уличное растение' : 'Комнатное растение'}
-            </p>
-          </div>
-
-          <div className="ios-blur-card space-y-3 p-4">
-            <p className="text-ios-caption text-ios-subtext">Фото растения</p>
-            <div className="overflow-hidden rounded-ios-card border border-ios-border/60 bg-ios-card/60">
-              {previewDataUrl || plant.photoUrl ? (
-                <img
-                  src={previewDataUrl ?? plant.photoUrl}
-                  alt={plant.name}
-                  className="h-44 w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-44 items-center justify-center text-ios-subtext">Фото пока нет</div>
-              )}
-            </div>
-            <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-ios-button border border-ios-border/70 bg-white/60 px-4 py-2 text-ios-body dark:bg-zinc-900/50">
-              <Camera className="mr-2 h-4 w-4" />
-              {photoMutation.isPending ? 'Загрузка...' : 'Загрузить фото'}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  if (!file || !selectedPlantId) {
-                    return;
-                  }
-                  hapticImpact('light');
-                  const dataUrl = await toDataUrl(file);
-                  setPreviewDataUrl(dataUrl);
-                  photoMutation.mutate({ id: selectedPlantId, dataUrl });
-                }}
-              />
-            </label>
-          </div>
-
-          <GrowthGallery plantId={plant.id} photoUrl={plant.photoUrl} />
-
-          <div className="ios-blur-card flex items-center justify-between p-4">
-            <div>
-              <p className="text-ios-caption text-ios-subtext">Состояние цикла</p>
-              <p className="mt-1 text-ios-title-2">{Math.round(getProgress(plant))}%</p>
-              <p className="mt-1 text-ios-caption text-ios-subtext">{nextWateringText(plant)}</p>
-            </div>
-            <ProgressRing value={getProgress(plant)} label="влага" />
-          </div>
-
-          <SmartReminderCard plant={plant} />
-
-          <div className="ios-blur-card p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-ios-body font-semibold">Рекомендации AI</p>
-              <p className="text-[11px] text-ios-subtext">{careAdviceQuery.data?.source ?? '—'}</p>
-            </div>
-            {careAdviceQuery.isLoading ? (
-              <p className="text-ios-caption text-ios-subtext">Подбираем рекомендации...</p>
-            ) : null}
-            {careAdviceQuery.data ? (
-              <div className="space-y-2 text-sm">
-                <p><b>Цикл полива:</b> {careAdviceQuery.data.wateringCycleDays} дн.</p>
-                <p><b>Тип грунта:</b> {careAdviceQuery.data.soilType || 'Не указано'}</p>
-                <p><b>Состав грунта:</b> {careAdviceQuery.data.soilComposition?.length ? careAdviceQuery.data.soilComposition.join(', ') : 'Не указано'}</p>
-                <p><b>Добавки:</b> {careAdviceQuery.data.additives?.length ? careAdviceQuery.data.additives.join(', ') : 'Не требуется'}</p>
-                {careAdviceQuery.data.note ? <p className="text-ios-subtext">{careAdviceQuery.data.note}</p> : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <InfoPill icon={Droplets} label="Объём" value={`${plant.recommendedWaterMl ?? 0} мл`} />
-            <InfoPill icon={Waves} label="Интервал" value={`${plant.baseIntervalDays ?? 7} дн.`} />
-            <InfoPill icon={LocateFixed} label="Тип" value={plant.placement === 'OUTDOOR' ? 'Улица' : 'Дом'} />
-          </div>
-
-          <ConditionsWidget plantId={plant.id} />
-          <ConditionsChart plantId={plant.id} />
-          <RoomAndSensorSelector plantId={plant.id} compact />
-          <DiagnosisTool plant={plant} />
-
-          <motion.div
-            animate={waterMutation.isPending ? { scale: [1, 1.03, 1] } : { scale: 1 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 26, mass: 1 }}
-          >
-            <Button
-              className="h-14 w-full text-ios-body"
-              onClick={() => {
-                if (!selectedPlantId) {
-                  return;
-                }
-                hapticImpact('rigid');
-                waterMutation.mutate(selectedPlantId);
-              }}
-              disabled={waterMutation.isPending}
-            >
-              <Leaf className="mr-2 h-5 w-5" />
-              {waterMutation.isPending ? 'Отмечаем полив...' : 'Отметить как полито'}
-            </Button>
-          </motion.div>
-
-          <Button
-            variant="secondary"
-            className="h-12 w-full border-red-300/70 bg-red-50/60 text-red-600 hover:bg-red-100/70 dark:bg-red-950/30"
-            onClick={() => {
+        <>
+          <PlantDetailPage
+            plant={plant}
+            previewDataUrl={previewDataUrl}
+            photoUploading={photoMutation.isPending}
+            onRequestDelete={() => {
+              hapticImpact('rigid');
+              setDeleteConfirmOpen(true);
+            }}
+            onPickPhoto={async (file) => {
               if (!selectedPlantId) {
                 return;
               }
-              hapticImpact('heavy');
-              deleteMutation.mutate(selectedPlantId);
+              hapticImpact('light');
+              const dataUrl = await toDataUrl(file);
+              setPreviewDataUrl(dataUrl);
+              photoMutation.mutate({ id: selectedPlantId, dataUrl });
             }}
-            disabled={deleteMutation.isPending}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {deleteMutation.isPending ? 'Удаляем...' : 'Удалить растение'}
-          </Button>
-        </div>
+            <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+
+            <CycleProgress
+              plant={plant}
+              progress={getProgress(plant)}
+              isWatering={waterMutation.isPending}
+              onWater={async () => {
+                if (!selectedPlantId) {
+                  return;
+                }
+                await waterMutation.mutateAsync(selectedPlantId);
+              }}
+            />
+
+            <AIRecommendationCard
+              plant={plant}
+              advice={careAdviceQuery.data}
+              loading={careAdviceQuery.isLoading || careAdviceQuery.isFetching}
+              onRefresh={() => {
+                void careAdviceQuery.refetch();
+              }}
+            />
+
+            <ConditionsWidget plantId={plant.id} />
+            <ConditionsChart plantId={plant.id} />
+            <RoomAndSensorSelector plantId={plant.id} compact />
+            <LeafDiagnosis plant={plant} />
+
+            <motion.div
+              className="detail-bottom-safe sticky bottom-0 z-20 mt-2 rounded-3xl border border-ios-border/60 bg-ios-card/70 p-2.5 shadow-[0_-8px_28px_rgba(0,0,0,0.14)] backdrop-blur-[22px] android:rounded-[22px] android:bg-[#FFFBFE] android:border-[#E7E0EC] android:backdrop-blur-0 android:shadow-[0_2px_10px_rgba(0,0,0,0.2)]"
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 30, delay: 0.12 }}
+            >
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <QuickWaterButton
+                  isLoading={waterMutation.isPending}
+                  isOverdue={isOverdue}
+                  onWater={async () => {
+                    if (!selectedPlantId) {
+                      return;
+                    }
+                    await waterMutation.mutateAsync(selectedPlantId);
+                  }}
+                />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-11 rounded-2xl border border-red-300/70 bg-red-50/70 px-3 text-red-600 hover:bg-red-100/70 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300"
+                  onClick={() => {
+                    hapticImpact('rigid');
+                    setDeleteConfirmOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          </PlantDetailPage>
+
+          <Dialog
+            open={deleteConfirmOpen}
+            onOpenChange={(open) => {
+              if (deleteMutation.isPending) {
+                return;
+              }
+              setDeleteConfirmOpen(open);
+            }}
+            title="Удалить растение?"
+            description="Это действие нельзя отменить. История роста и фото также будут удалены."
+          >
+            <motion.div
+              animate={deleteShake ? { x: [0, -8, 8, -6, 6, 0] } : { x: 0 }}
+              transition={{ duration: 0.36, ease: 'easeInOut' }}
+              onAnimationComplete={() => {
+                if (deleteShake) {
+                  setDeleteShake(false);
+                }
+              }}
+            >
+              <div className="mb-4 rounded-2xl border border-red-300/60 bg-red-50/60 p-3 text-xs text-red-700 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300">
+                <p className="inline-flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4" />
+                  После удаления восстановить растение из приложения нельзя.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleteMutation.isPending}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (!selectedPlantId) {
+                      return;
+                    }
+                    hapticImpact('heavy');
+                    setDeleteShake(true);
+                    deleteMutation.mutate(selectedPlantId);
+                  }}
+                >
+                  {deleteMutation.isPending ? 'Удаляем...' : 'Удалить навсегда'}
+                </Button>
+              </div>
+            </motion.div>
+          </Dialog>
+        </>
       ) : null}
     </BottomSheet>
-  );
-}
-
-function InfoPill({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: typeof Droplets;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="ios-blur-card p-3 text-center">
-      <Icon className="mx-auto h-4 w-4 text-ios-accent" />
-      <p className="mt-1 text-[11px] text-ios-subtext">{label}</p>
-      <p className="mt-0.5 text-[13px] font-semibold text-ios-text">{value}</p>
-    </div>
   );
 }
 

@@ -256,6 +256,13 @@ export interface AdminBackupRestoreDto {
   message: string;
 }
 
+export interface AdminPushEndpointResultDto {
+  endpoint: string;
+  delivered: boolean;
+  status: number;
+  error?: string | null;
+}
+
 export interface AdminPushTestDto {
   ok: boolean;
   userId: number;
@@ -263,6 +270,7 @@ export interface AdminPushTestDto {
   subscriptions: number;
   delivered: number;
   message: string;
+  endpoints: AdminPushEndpointResultDto[];
 }
 
 export interface PwaUserDto {

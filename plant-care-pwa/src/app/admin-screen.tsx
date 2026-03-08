@@ -251,9 +251,23 @@ export function AdminScreen() {
             {pushTestMutation.isPending ? 'Отправляем...' : 'Отправить тестовый push'}
           </Button>
           {pushTestMutation.data ? (
-            <p className="mt-2 text-[11px] text-ios-subtext">
-              {pushTestMutation.data.message} (доставлено {pushTestMutation.data.delivered} из {pushTestMutation.data.subscriptions})
-            </p>
+            <>
+              <p className="mt-2 text-[11px] text-ios-subtext">
+                {pushTestMutation.data.message} (доставлено {pushTestMutation.data.delivered} из {pushTestMutation.data.subscriptions})
+              </p>
+              <div className="mt-2 space-y-1 rounded-ios-button border border-ios-border/60 bg-white/70 p-2 text-[11px] dark:bg-zinc-900/60">
+                {(pushTestMutation.data.endpoints ?? []).map((item, idx) => (
+                  <div key={`${item.endpoint}-${idx}`} className="rounded-ios-button border border-ios-border/50 bg-white/65 p-2 dark:bg-zinc-950/40">
+                    <p className="truncate font-medium">{item.endpoint}</p>
+                    <p className={item.delivered ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                      {item.delivered ? 'Доставлено' : 'Ошибка'}{item.status ? ` · HTTP ${item.status}` : ''}
+                    </p>
+                    {!item.delivered && item.error ? <p className="mt-0.5 text-ios-subtext">Причина: {item.error}</p> : null}
+                  </div>
+                ))}
+                {!pushTestMutation.data.endpoints?.length ? <p className="text-ios-subtext">Детали endpoint отсутствуют.</p> : null}
+              </div>
+            </>
           ) : null}
         </div>
       </div>

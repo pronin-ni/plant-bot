@@ -153,7 +153,15 @@ public class AdminController {
         user.getUsername(),
         result.subscriptions(),
         result.delivered(),
-        result.message()
+        result.message(),
+        result.endpoints().stream()
+            .map(item -> new AdminPushTestResponse.AdminPushEndpointResultResponse(
+                item.endpoint(),
+                item.delivered(),
+                item.status(),
+                item.error()
+            ))
+            .toList()
     );
   }
 

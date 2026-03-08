@@ -8,11 +8,21 @@ import { AIRecommendationForm } from '@/components/AIRecommendationForm';
 import { PlantCategorySelector } from '@/components/PlantCategorySelector';
 import { Plant3DPreview } from '@/components/adaptive/Plant3DPreview';
 import { Button } from '@/components/ui/button';
-import { aiRecommendPlant, createPlant, searchPlantPresets, searchPlants, suggestPlantProfile } from '@/lib/api';
+import {
+  aiRecommendPlant,
+  createPlant,
+  getPwaPushPublicKey,
+  getPwaPushStatus,
+  searchPlantPresets,
+  searchPlants,
+  subscribePwaPush,
+  suggestPlantProfile
+} from '@/lib/api';
+import { ensurePushSubscription } from '@/lib/pwa';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
-import { useUiStore } from '@/lib/store';
+import { useAuthStore, useUiStore } from '@/lib/store';
 import { cn } from '@/lib/cn';
-import type { OpenRouterIdentifyResult, PlantPresetSuggestionDto } from '@/types/api';
+import type { OpenRouterIdentifyResult, PlantDto, PlantPresetSuggestionDto } from '@/types/api';
 import type { PlantCategory } from '@/types/plant';
 
 type StepKey = 'category' | 'search' | 'size' | 'confirm';
@@ -64,6 +74,7 @@ export function WizardAddPlant() {
   const queryClient = useQueryClient();
   const openPlantDetail = useUiStore((s) => s.openPlantDetail);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const telegramUserId = useAuthStore((s) => s.telegramUserId);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [category, setCategory] = useState<PlantCategory>('HOME');
@@ -186,6 +197,42 @@ export function WizardAddPlant() {
     onError: () => hapticNotify('error')
   });
 
+
+  const maybeEnablePushOnFirstPlant = async (hadPlantsBeforeCreate: boolean) => {
+    if (hadPlantsBeforeCreate) {
+      return;
+    }
+
+    const promptKey = `plantbot.push.prompted.${telegramUserId ?? 'anonymous'}`;
+    if (localStorage.getItem(promptKey) === '1') {
+      return;
+    }
+
+    try {
+      const keyData = await getPwaPushPublicKey();
+      if (!keyData.enabled || !keyData.publicKey) {
+        return;
+      }
+
+      const status = await getPwaPushStatus();
+      if (status.subscribed) {
+        localStorage.setItem(promptKey, '1');
+        return;
+      }
+
+      const subscription = await ensurePushSubscription(keyData.publicKey);
+      if (!subscription) {
+        return;
+      }
+
+      await subscribePwaPush(subscription.toJSON());
+      localStorage.setItem(promptKey, '1');
+      hapticNotify('success');
+    } catch {
+      // Ничего не делаем: пользователь может включить push вручную в Настройках.
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: () => {
       const placement = placementByCategory(category);
@@ -213,11 +260,14 @@ export function WizardAddPlant() {
         winterDormancyEnabled: placement === 'OUTDOOR' ? !isGarden : null
       });
     },
-    onSuccess: (createdPlant) => {
+    onSuccess: async (createdPlant) => {
+      const hadPlantsBeforeCreate = ((queryClient.getQueryData(['plants']) as PlantDto[] | undefined) ?? []).length > 0;
+
       hapticImpact('heavy');
       hapticNotify('success');
-      void queryClient.invalidateQueries({ queryKey: ['plants'] });
-      void queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      void maybeEnablePushOnFirstPlant(hadPlantsBeforeCreate);
       setActiveTab('home');
       openPlantDetail(createdPlant.id);
     },

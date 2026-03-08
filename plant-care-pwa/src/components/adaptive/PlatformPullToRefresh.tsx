@@ -112,7 +112,7 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
               className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
               style={{ transform: isRefreshing ? undefined : `rotate(${Math.floor(progress * 300)}deg)` }}
             />
-            <span>{isRefreshing ? 'Обновляем...' : 'Потяни для обновления'}</span>
+            <span>{isRefreshing ? 'Росток обновляется...' : progress > 0.72 ? 'Отпусти, чтобы обновить' : 'Потяни — росток растёт'}</span>
           </motion.div>
         ) : null}
       </AnimatePresence>

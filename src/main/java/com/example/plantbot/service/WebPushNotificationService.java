@@ -121,20 +121,20 @@ public class WebPushNotificationService {
     payload.put("plantId", plant.getId());
 
     String payloadJson = toJson(payload);
-    return sendPayload(subscriptions, payloadJson) > 0;
+    return countDelivered(sendPayload(subscriptions, payloadJson)) > 0;
   }
 
   @Transactional
   public SendResult sendTestNotification(User user, String title, String body) {
     if (user == null) {
-      return new SendResult(0, 0, "Пользователь не найден");
+      return new SendResult(0, 0, "Пользователь не найден", List.of());
     }
     if (!isEnabled()) {
-      return new SendResult(0, 0, "Web Push отключен на сервере");
+      return new SendResult(0, 0, "Web Push отключен на сервере", List.of());
     }
     List<WebPushSubscription> subscriptions = subscriptionRepository.findByUser(user);
     if (subscriptions.isEmpty()) {
-      return new SendResult(0, 0, "У пользователя нет активных push-подписок");
+      return new SendResult(0, 0, "У пользователя нет активных push-подписок", List.of());
     }
 
     String safeTitle = title == null || title.isBlank() ? "Тестовое уведомление" : title.trim();
@@ -148,57 +148,80 @@ public class WebPushNotificationService {
     payload.put("tag", "admin-test-" + user.getId());
     payload.put("url", publicBaseUrl + "/pwa/");
 
-    int delivered = sendPayload(subscriptions, toJson(payload));
+    List<EndpointDeliveryResult> endpointResults = sendPayload(subscriptions, toJson(payload));
+    int delivered = countDelivered(endpointResults);
     String message = delivered > 0
         ? "Тестовое push-сообщение отправлено"
         : "Не удалось доставить push-сообщение";
-    return new SendResult(subscriptions.size(), delivered, message);
+    return new SendResult(subscriptions.size(), delivered, message, endpointResults);
   }
 
-  private int sendPayload(List<WebPushSubscription> subscriptions, String payloadJson) {
-    int delivered = 0;
+  private List<EndpointDeliveryResult> sendPayload(List<WebPushSubscription> subscriptions, String payloadJson) {
+    List<EndpointDeliveryResult> results = new java.util.ArrayList<>();
     for (WebPushSubscription sub : subscriptions) {
-      if (sendToSubscription(sub, payloadJson)) {
+      log.info("WebPush send attempt: userId={} subscriptionId={} endpoint={}",
+          sub.getUser() != null ? sub.getUser().getId() : null,
+          sub.getId(),
+          maskEndpoint(sub.getEndpoint()));
+      results.add(sendToSubscription(sub, payloadJson));
+    }
+    return results;
+  }
+
+  private int countDelivered(List<EndpointDeliveryResult> results) {
+    int delivered = 0;
+    for (EndpointDeliveryResult result : results) {
+      if (result.delivered()) {
         delivered++;
       }
     }
     return delivered;
   }
 
-  private boolean sendToSubscription(WebPushSubscription subscription, String payloadJson) {
+  private EndpointDeliveryResult sendToSubscription(WebPushSubscription subscription, String payloadJson) {
+    String maskedEndpoint = maskEndpoint(subscription.getEndpoint());
     try {
       PushService pushService = buildPushService();
       Notification notification = new Notification(
           subscription.getEndpoint(),
-          Utils.loadPublicKey(subscription.getP256dh()),
-          Base64.getUrlDecoder().decode(subscription.getAuth()),
+          Utils.loadPublicKey(normalizeBase64Url(subscription.getP256dh())),
+          decodeAuthSecret(subscription.getAuth()),
           payloadJson.getBytes(StandardCharsets.UTF_8)
       );
       HttpResponse response = pushService.send(notification);
       int status = response.getStatusLine().getStatusCode();
+      log.info("WebPush send response: status={} endpoint={}", status, maskedEndpoint);
       if (status == HttpStatus.SC_GONE || status == HttpStatus.SC_NOT_FOUND) {
         subscriptionRepository.delete(subscription);
-        return false;
+        return new EndpointDeliveryResult(maskedEndpoint, false, status, "Subscription is gone (removed)");
       }
       if (status >= 200 && status < 300) {
         subscription.setLastSuccessAt(Instant.now());
         subscription.setLastFailureAt(null);
+        subscription.setLastFailureReason(null);
         subscriptionRepository.save(subscription);
-        return true;
+        return new EndpointDeliveryResult(maskedEndpoint, true, status, null);
       }
+      String reason = "HTTP " + status;
+      log.warn("WebPush non-success status: status={} endpoint={}", status, maskedEndpoint);
       subscription.setLastFailureAt(Instant.now());
+      subscription.setLastFailureReason(reason);
       subscriptionRepository.save(subscription);
-      return false;
+      return new EndpointDeliveryResult(maskedEndpoint, false, status, reason);
     } catch (GeneralSecurityException | JoseException | IOException | ExecutionException ex) {
-      log.warn("WebPush send failed for endpoint='{}': {}", subscription.getEndpoint(), ex.getMessage());
+      String reason = trimReason(ex.getClass().getSimpleName() + ": " + ex.getMessage());
+      log.warn("WebPush send failed for endpoint={}: {}", maskedEndpoint, reason);
       subscription.setLastFailureAt(Instant.now());
+      subscription.setLastFailureReason(reason);
       subscriptionRepository.save(subscription);
-      return false;
+      return new EndpointDeliveryResult(maskedEndpoint, false, 0, reason);
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
+      String reason = "InterruptedException";
       subscription.setLastFailureAt(Instant.now());
+      subscription.setLastFailureReason(reason);
       subscriptionRepository.save(subscription);
-      return false;
+      return new EndpointDeliveryResult(maskedEndpoint, false, 0, reason);
     }
   }
 
@@ -210,6 +233,42 @@ public class WebPushNotificationService {
     return pushService;
   }
 
+  private byte[] decodeAuthSecret(String auth) {
+    String normalized = normalizeBase64Url(auth);
+    int paddingNeeded = (4 - (normalized.length() % 4)) % 4;
+    String padded = normalized + "=".repeat(paddingNeeded);
+    return Base64.getUrlDecoder().decode(padded);
+  }
+
+  private String normalizeBase64Url(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.trim()
+        .replace('+', '-')
+        .replace('/', '_')
+        .replace("=", "");
+  }
+
+  private String maskEndpoint(String endpoint) {
+    if (endpoint == null || endpoint.isBlank()) {
+      return "<empty>";
+    }
+    int keep = Math.min(36, endpoint.length());
+    return endpoint.substring(0, keep) + "...";
+  }
+
+  private String trimReason(String reason) {
+    if (reason == null) {
+      return null;
+    }
+    String normalized = reason.trim();
+    if (normalized.length() <= 400) {
+      return normalized;
+    }
+    return normalized.substring(0, 400);
+  }
+
   private String toJson(Map<String, Object> payload) {
     try {
       return objectMapper.writeValueAsString(payload);
@@ -218,6 +277,9 @@ public class WebPushNotificationService {
     }
   }
 
-  public record SendResult(int subscriptions, int delivered, String message) {
+  public record SendResult(int subscriptions, int delivered, String message, List<EndpointDeliveryResult> endpoints) {
+  }
+
+  public record EndpointDeliveryResult(String endpoint, boolean delivered, int status, String error) {
   }
 }
