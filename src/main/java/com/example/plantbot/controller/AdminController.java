@@ -6,6 +6,8 @@ import com.example.plantbot.controller.dto.admin.AdminPlantsResponse;
 import com.example.plantbot.controller.dto.admin.AdminBackupItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminBackupRestoreResponse;
 import com.example.plantbot.controller.dto.admin.AdminCacheClearResponse;
+import com.example.plantbot.controller.dto.admin.AdminMergeTaskItemResponse;
+import com.example.plantbot.controller.dto.admin.AdminMergeTaskRetryResponse;
 import com.example.plantbot.controller.dto.admin.AdminPushTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminPushTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
@@ -165,6 +167,24 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     log.info("Admin plants requested: userId={} telegramId={} page={} size={} q={}", admin.getId(), admin.getTelegramId(), page, size, q);
     return adminService.plants(page, size, q);
+  }
+
+  @GetMapping("/dictionary/merge-tasks")
+  public List<AdminMergeTaskItemResponse> mergeTasks(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    log.info("Admin merge tasks requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
+    return adminService.mergeTasks();
+  }
+
+  @PostMapping("/dictionary/merge-tasks/{taskId}/retry")
+  public AdminMergeTaskRetryResponse retryMergeTask(
+      Authentication authentication,
+      @PathVariable("taskId") Long taskId
+  ) {
+    User admin = requireAdmin(authentication);
+    adminService.retryMergeTask(taskId);
+    log.warn("Admin merge task retry requested: userId={} telegramId={} taskId={}", admin.getId(), admin.getTelegramId(), taskId);
+    return new AdminMergeTaskRetryResponse(true, taskId, "Задача помечена на повторную обработку");
   }
 
   private User requireAdmin(Authentication authentication) {

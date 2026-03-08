@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronLeft, ChevronRight, Search, Sparkles } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Loader2, Search, Sparkles } from 'lucide-react';
 
 import { PlantPhotoCapture } from '@/app/AddPlant/PlantPhotoCapture';
 import { AIRecommendationForm } from '@/components/AIRecommendationForm';
@@ -71,6 +71,10 @@ export function WizardAddPlant() {
   const [searchQuery, setSearchQuery] = useState('');
   const [presets, setPresets] = useState<PlantPresetSuggestionDto[]>([]);
   const [hints, setHints] = useState<string[]>([]);
+  const [lastSearchHadResults, setLastSearchHadResults] = useState(true);
+  const [highlightResults, setHighlightResults] = useState(false);
+  const [autoPickFirstResult, setAutoPickFirstResult] = useState(true);
+  const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const [sizePotLiters, setSizePotLiters] = useState('2');
   const [sizeHeightCm, setSizeHeightCm] = useState('45');
@@ -112,19 +116,47 @@ export function WizardAddPlant() {
   });
 
   const searchMutation = useMutation({
-    mutationFn: async ({ q, currentCategory }: { q: string; currentCategory: PlantCategory }) => {
+    mutationFn: async ({
+      q,
+      currentCategory,
+      source
+    }: {
+      q: string;
+      currentCategory: PlantCategory;
+      source: 'auto' | 'button';
+    }) => {
       const [localPlants, presetItems] = await Promise.all([
         searchPlants(q, currentCategory),
         searchPlantPresets(currentCategory, q, 12)
       ]);
-      return { localPlants, presetItems };
+      return { localPlants, presetItems, source, q };
     },
-    onSuccess: ({ localPlants, presetItems }) => {
+    onSuccess: ({ localPlants, presetItems, source, q }) => {
       const merged = new Set<string>();
       localPlants.forEach((item) => merged.add(item.name));
       presetItems.forEach((item) => merged.add(item.name));
-      setHints(Array.from(merged).slice(0, 8));
+      const mergedList = Array.from(merged);
+      setHints(mergedList.slice(0, 8));
       setPresets(presetItems);
+      setLastSearchHadResults(mergedList.length > 0 || presetItems.length > 0);
+
+      if (
+        source === 'button' &&
+        autoPickFirstResult &&
+        mergedList.length > 0 &&
+        (!name.trim() || !mergedList.includes(name.trim()))
+      ) {
+        setName(mergedList[0]);
+        setSearchQuery(mergedList[0]);
+      }
+
+      if (source === 'button' && q.trim()) {
+        setHighlightResults(true);
+        window.setTimeout(() => setHighlightResults(false), 900);
+        requestAnimationFrame(() => {
+          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+      }
     }
   });
 
@@ -195,13 +227,15 @@ export function WizardAddPlant() {
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) {
-      searchMutation.mutate({ q: '', currentCategory: category });
+      searchMutation.mutate({ q: '', currentCategory: category, source: 'auto' });
       setHints([]);
+      setPresets([]);
+      setLastSearchHadResults(true);
       return;
     }
 
     const timer = window.setTimeout(() => {
-      searchMutation.mutate({ q, currentCategory: category });
+      searchMutation.mutate({ q, currentCategory: category, source: 'auto' });
     }, 260);
 
     return () => window.clearTimeout(timer);
@@ -305,59 +339,89 @@ export function WizardAddPlant() {
                   <Button
                     variant="secondary"
                     className="h-11"
-                    onClick={() => searchMutation.mutate({ q: searchQuery.trim(), currentCategory: category })}
+                    disabled={searchMutation.isPending}
+                    onClick={() => searchMutation.mutate({ q: searchQuery.trim(), currentCategory: category, source: 'button' })}
                   >
-                    Найти
+                    {searchMutation.isPending ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Ищем...
+                      </span>
+                    ) : 'Найти'}
                   </Button>
                 </div>
 
-                {presets.length ? (
-                  <div className="mt-3 overflow-x-auto pb-1">
-                    <div className="flex min-w-max gap-2">
-                      {presets.map((item) => (
-                        <button
-                          key={`${item.category}:${item.name}`}
-                          type="button"
-                          onClick={() => {
-                            hapticSelectionChanged();
-                            setName(item.name);
-                            setSearchQuery(item.name);
-                          }}
-                          className={cn(
-                            'whitespace-nowrap rounded-full border px-3 py-1.5 text-xs',
-                            item.popular
-                              ? 'border-ios-accent/40 bg-ios-accent/15 text-ios-accent'
-                              : 'border-ios-border/60 bg-white/65 text-ios-text dark:bg-zinc-900/55'
-                          )}
-                        >
-                          {item.popular ? 'Популярное: ' : ''}{item.name}
-                        </button>
-                      ))}
+                <div
+                  ref={resultsRef}
+                  className={cn(
+                    'mt-3 space-y-3 rounded-ios-button transition-all',
+                    highlightResults ? 'ring-2 ring-ios-accent/45 ring-offset-2 ring-offset-transparent' : ''
+                  )}
+                >
+                  {searchQuery.trim() && !searchMutation.isPending && !lastSearchHadResults ? (
+                    <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 text-sm text-ios-subtext dark:bg-zinc-900/50">
+                      Ничего не найдено. Попробуйте другое название или используйте распознавание по фото.
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
 
-                {hints.length ? (
-                  <div className="mt-3 rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/50">
-                    <p className="text-xs text-ios-subtext">Подсказки:</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {hints.map((hint) => (
-                        <button
-                          key={hint}
-                          type="button"
-                          onClick={() => {
-                            hapticSelectionChanged();
-                            setName(hint);
-                            setSearchQuery(hint);
-                          }}
-                          className="rounded-full border border-ios-border/60 bg-transparent px-2.5 py-1 text-xs"
-                        >
-                          {hint}
-                        </button>
-                      ))}
+                  <label className="inline-flex items-center gap-2 px-1 text-xs text-ios-subtext">
+                    <input
+                      type="checkbox"
+                      checked={autoPickFirstResult}
+                      onChange={(event) => setAutoPickFirstResult(event.target.checked)}
+                      className="h-4 w-4 rounded border-ios-border/70"
+                    />
+                    Автоподставлять первый найденный вариант
+                  </label>
+
+                  {presets.length ? (
+                    <div className="overflow-x-auto pb-1">
+                      <div className="flex min-w-max gap-2">
+                        {presets.map((item) => (
+                          <button
+                            key={`${item.category}:${item.name}`}
+                            type="button"
+                            onClick={() => {
+                              hapticSelectionChanged();
+                              setName(item.name);
+                              setSearchQuery(item.name);
+                            }}
+                            className={cn(
+                              'whitespace-nowrap rounded-full border px-3 py-1.5 text-xs',
+                              item.popular
+                                ? 'border-ios-accent/40 bg-ios-accent/15 text-ios-accent'
+                                : 'border-ios-border/60 bg-white/65 text-ios-text dark:bg-zinc-900/55'
+                            )}
+                          >
+                            {item.popular ? 'Популярное: ' : ''}{item.name}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
+
+                  {hints.length ? (
+                    <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/50">
+                      <p className="text-xs text-ios-subtext">Подсказки:</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {hints.map((hint) => (
+                          <button
+                            key={hint}
+                            type="button"
+                            onClick={() => {
+                              hapticSelectionChanged();
+                              setName(hint);
+                              setSearchQuery(hint);
+                            }}
+                            className="rounded-full border border-ios-border/60 bg-transparent px-2.5 py-1 text-xs"
+                          >
+                            {hint}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <PlantPhotoCapture onIdentified={applyIdentify} />

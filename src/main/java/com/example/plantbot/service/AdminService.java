@@ -3,6 +3,7 @@ package com.example.plantbot.service;
 import com.example.plantbot.controller.dto.admin.AdminOverviewResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantsResponse;
+import com.example.plantbot.controller.dto.admin.AdminMergeTaskItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
 import com.example.plantbot.controller.dto.admin.AdminUserItemResponse;
@@ -31,6 +32,7 @@ public class AdminService {
   private final UserRepository userRepository;
   private final PlantRepository plantRepository;
   private final WateringLogRepository wateringLogRepository;
+  private final PlantDuplicateMergeProcessor plantDuplicateMergeProcessor;
 
   public AdminOverviewResponse overview() {
     long totalUsers = userRepository.count();
@@ -122,6 +124,26 @@ public class AdminService {
     long activeUsers7d = wateringLogRepository.countDistinctUsersActiveSince(LocalDate.now().minusDays(7));
     long activeUsers30d = wateringLogRepository.countDistinctUsersActiveSince(LocalDate.now().minusDays(30));
     return new AdminStatsResponse(topCities, topPlantTypes, overduePlants, activeUsers7d, activeUsers30d);
+  }
+
+  public List<AdminMergeTaskItemResponse> mergeTasks() {
+    return plantDuplicateMergeProcessor.latestTasks().stream()
+        .map(task -> new AdminMergeTaskItemResponse(
+            task.getId(),
+            task.getCategory(),
+            task.getLeftName(),
+            task.getRightName(),
+            task.getStatus(),
+            task.getAttemptCount(),
+            task.getNextAttemptAt(),
+            task.getLastError(),
+            task.getUpdatedAt()
+        ))
+        .toList();
+  }
+
+  public void retryMergeTask(Long taskId) {
+    plantDuplicateMergeProcessor.markForRetry(taskId);
   }
 
   public AdminPlantItemResponse toPlantItem(Plant plant) {

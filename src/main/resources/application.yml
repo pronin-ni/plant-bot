@@ -116,6 +116,14 @@ app:
   learning:
     last-n: 5
     alpha: 0.5
+  dictionary:
+    aggregate-cron: ${APP_DICTIONARY_AGGREGATE_CRON:0 20 */6 * * *}
+    merge-cron: ${APP_DICTIONARY_MERGE_CRON:0 35 4 * * *}
+    min-usage-for-dynamic: ${APP_DICTIONARY_MIN_USAGE_DYNAMIC:2}
+    min-usage-for-merge: ${APP_DICTIONARY_MIN_USAGE_MERGE:3}
+    max-merge-candidates-per-run: ${APP_DICTIONARY_MAX_MERGE_CANDIDATES:50}
+    merge-batch-size: ${APP_DICTIONARY_MERGE_BATCH_SIZE:20}
+    merge-max-attempts: ${APP_DICTIONARY_MERGE_MAX_ATTEMPTS:30}
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
   dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
   dev-username: ${APP_DEV_USERNAME:dev_user}

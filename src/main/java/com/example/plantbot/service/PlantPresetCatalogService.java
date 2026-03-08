@@ -3,6 +3,8 @@ package com.example.plantbot.service;
 import com.example.plantbot.domain.PlantCategory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,13 +27,19 @@ public class PlantPresetCatalogService {
       "Монстера", "Сансевиерия", "Томат", "Огурец", "Клубника", "Гортензия"
   );
 
+  private final PlantDictionaryService plantDictionaryService;
+
+  public PlantPresetCatalogService(PlantDictionaryService plantDictionaryService) {
+    this.plantDictionaryService = plantDictionaryService;
+  }
+
   public List<String> searchByCategory(PlantCategory category, String query, int limit) {
     PlantCategory effectiveCategory = category == null ? PlantCategory.HOME : category;
     List<String> source = PRESETS_BY_CATEGORY.getOrDefault(effectiveCategory, List.of());
     String q = query == null ? "" : query.trim().toLowerCase();
     int safeLimit = Math.max(1, Math.min(limit, 20));
 
-    return source.stream()
+    List<String> staticItems = source.stream()
         .filter(name -> q.isBlank() || name.toLowerCase().contains(q))
         .sorted((a, b) -> {
           boolean aPopular = POPULAR_PRESETS.contains(a);
@@ -41,8 +49,13 @@ public class PlantPresetCatalogService {
           }
           return aPopular ? -1 : 1;
         })
-        .limit(safeLimit)
         .toList();
+
+    List<String> dynamicItems = plantDictionaryService.searchDynamicPresets(effectiveCategory, q, safeLimit);
+    LinkedHashSet<String> merged = new LinkedHashSet<>();
+    merged.addAll(dynamicItems);
+    merged.addAll(staticItems);
+    return new ArrayList<>(merged).stream().limit(safeLimit).toList();
   }
 
   public boolean isPopular(String name) {

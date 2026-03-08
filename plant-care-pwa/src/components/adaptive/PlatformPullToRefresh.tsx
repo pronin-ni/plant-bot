@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sprout } from 'lucide-react';
 import type { PropsWithChildren, TouchEvent } from 'react';
 import { useMemo, useState } from 'react';
 
@@ -56,7 +56,7 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
       return;
     }
 
-    // iOS rubber-band (сильнее демпфирование), Android — более линейный ход.
+    // iOS rubber-band с более пружинистым демпфированием.
     const damped = isAndroid
       ? Math.min(96, delta * 0.42)
       : Math.min(110, Math.sqrt(delta) * 10);
@@ -86,6 +86,28 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
             exit={{ opacity: 0, y: -8, scale: 0.96 }}
             transition={isAndroid ? { duration: 0.2, ease: [0.2, 0, 0, 1] } : { type: 'spring', stiffness: 360, damping: 30, mass: 1 }}
           >
+            <motion.span
+              className="relative inline-flex h-4 w-4 items-end justify-center"
+              animate={{ scale: isRefreshing ? [1, 1.08, 1] : 1 + progress * 0.06 }}
+              transition={isRefreshing ? { duration: 0.8, repeat: Infinity } : { type: 'spring', stiffness: 380, damping: 30 }}
+            >
+              <motion.span
+                className="absolute bottom-0 h-2 w-[2px] rounded-full bg-ios-accent/60"
+                style={{ transformOrigin: 'bottom center' }}
+                animate={{ scaleY: 0.4 + progress * 0.8 }}
+              />
+              <motion.span
+                style={{ transformOrigin: 'bottom center' }}
+                animate={{
+                  rotate: isRefreshing ? [0, -8, 8, 0] : progress * 10,
+                  y: isRefreshing ? [0, -1, 0] : -progress * 2
+                }}
+                transition={isRefreshing ? { duration: 0.7, repeat: Infinity } : { type: 'spring', stiffness: 320, damping: 26 }}
+              >
+                <Sprout className="h-3.5 w-3.5 text-ios-accent" />
+              </motion.span>
+            </motion.span>
+
             <Loader2
               className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
               style={{ transform: isRefreshing ? undefined : `rotate(${Math.floor(progress * 300)}deg)` }}
@@ -104,4 +126,3 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
     </div>
   );
 }
-
