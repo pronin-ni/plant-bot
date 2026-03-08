@@ -60,25 +60,8 @@ public class DatabaseBackupScheduler {
       return;
     }
     try {
-      Path sourceDb = resolveSourceDbPath(datasourceUrl);
-      if (sourceDb == null || !Files.exists(sourceDb)) {
-        log.warn("DB backup skipped: source DB file not found. datasourceUrl='{}'", datasourceUrl);
-        return;
-      }
-
-      Path backupDir = resolvePath(backupPath);
-      Files.createDirectories(backupDir);
-
-      LocalDateTime now = LocalDateTime.now(ZoneId.of(zone));
-      String fileName = filePrefix + "-" + now.format(TS) + ".db";
-      Path target = backupDir.resolve(fileName);
-      Path tmp = backupDir.resolve(fileName + ".tmp");
-
-      createSqliteBackup(tmp);
-      Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-      cleanupOldBackups(backupDir);
-
-      log.info("DB backup completed: source='{}', backup='{}'", sourceDb, target);
+      AdminBackupItemResponse item = createBackupInternal("scheduler");
+      log.info("DB backup completed by scheduler: file='{}'", item.fileName());
     } catch (Exception ex) {
       log.warn("DB backup failed: {}", ex.getMessage(), ex);
     }
@@ -100,7 +83,8 @@ public class DatabaseBackupScheduler {
               return new AdminBackupItemResponse(
                   path.getFileName().toString(),
                   Files.size(path),
-                  Files.getLastModifiedTime(path).toMillis()
+                  Files.getLastModifiedTime(path).toMillis(),
+                  inferCreatedBy(path.getFileName().toString())
               );
             } catch (Exception e) {
               return null;
@@ -129,6 +113,47 @@ public class DatabaseBackupScheduler {
     } finally {
       restoreLock.unlock();
     }
+  }
+
+  public AdminBackupItemResponse createBackupNow(String createdBy) {
+    if (!backupEnabled) {
+      throw new IllegalStateException("Создание backup отключено настройками");
+    }
+    try {
+      return createBackupInternal(createdBy == null || createdBy.isBlank() ? "admin" : createdBy);
+    } catch (Exception ex) {
+      throw new IllegalStateException("Не удалось создать backup: " + ex.getMessage(), ex);
+    }
+  }
+
+  private AdminBackupItemResponse createBackupInternal(String createdBy) throws Exception {
+    Path sourceDb = resolveSourceDbPath(datasourceUrl);
+    if (sourceDb == null || !Files.exists(sourceDb)) {
+      throw new IllegalStateException("source DB file not found");
+    }
+
+    Path backupDir = resolvePath(backupPath);
+    Files.createDirectories(backupDir);
+
+    String tag = sanitizeTag(createdBy);
+    LocalDateTime now = LocalDateTime.now(ZoneId.of(zone));
+    String suffix = now.format(TS);
+    String fileName = "scheduler".equals(tag)
+        ? filePrefix + "-" + suffix + ".db"
+        : filePrefix + "-manual-" + tag + "-" + suffix + ".db";
+    Path target = backupDir.resolve(fileName);
+    Path tmp = backupDir.resolve(fileName + ".tmp");
+
+    createSqliteBackup(tmp);
+    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    cleanupOldBackups(backupDir);
+
+    return new AdminBackupItemResponse(
+        fileName,
+        Files.size(target),
+        Files.getLastModifiedTime(target).toMillis(),
+        inferCreatedBy(fileName)
+    );
   }
 
   private void createSqliteBackup(Path targetFile) throws Exception {
@@ -189,6 +214,34 @@ public class DatabaseBackupScheduler {
       throw new IllegalStateException("Backup-файл не найден");
     }
     return candidate;
+  }
+
+  private String sanitizeTag(String value) {
+    String normalized = value == null ? "admin" : value.trim().toLowerCase(Locale.ROOT);
+    normalized = normalized.replaceAll("[^a-z0-9_-]+", "-");
+    if (normalized.isBlank()) {
+      return "admin";
+    }
+    return normalized.length() > 32 ? normalized.substring(0, 32) : normalized;
+  }
+
+  private String inferCreatedBy(String fileName) {
+    if (fileName == null || fileName.isBlank()) {
+      return "unknown";
+    }
+    if (fileName.contains("-manual-")) {
+      java.util.regex.Matcher matcher = java.util.regex.Pattern
+          .compile(".*-manual-([a-z0-9_-]+)-\\d{8}-\\d{6}\\.db$")
+          .matcher(fileName);
+      if (matcher.matches()) {
+        return matcher.group(1);
+      }
+      return "admin";
+    }
+    if (fileName.contains("-pre-restore-")) {
+      return "system";
+    }
+    return "scheduler";
   }
 
   private void restoreOnlineFromBackup(Path backupFile) throws Exception {

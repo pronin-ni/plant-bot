@@ -1,5 +1,6 @@
 package com.example.plantbot.controller.dto.admin;
 
+import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 
@@ -12,8 +13,10 @@ public record AdminPlantItemResponse(
     Long userId,
     Long telegramId,
     String username,
+    PlantCategory category,
     PlantPlacement placement,
     PlantType type,
+    Boolean hasPhoto,
     Integer baseIntervalDays,
     LocalDate lastWateredDate,
     LocalDate nextWateringDate,

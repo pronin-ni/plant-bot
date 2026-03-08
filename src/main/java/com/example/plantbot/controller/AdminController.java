@@ -2,17 +2,28 @@ package com.example.plantbot.controller;
 
 import com.example.plantbot.controller.dto.admin.AdminOverviewResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantItemResponse;
+import com.example.plantbot.controller.dto.admin.AdminPlantActionResponse;
 import com.example.plantbot.controller.dto.admin.AdminPlantsResponse;
+import com.example.plantbot.controller.dto.admin.AdminBulkPlantWaterRequest;
+import com.example.plantbot.controller.dto.admin.AdminBulkPlantWaterResponse;
+import com.example.plantbot.controller.dto.admin.AdminPlantUpdateRequest;
+import com.example.plantbot.controller.dto.admin.AdminUserActionResponse;
+import com.example.plantbot.controller.dto.admin.AdminUserBlockRequest;
+import com.example.plantbot.controller.dto.admin.AdminUserDetailsResponse;
 import com.example.plantbot.controller.dto.admin.AdminBackupItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminBackupRestoreResponse;
 import com.example.plantbot.controller.dto.admin.AdminCacheClearResponse;
+import com.example.plantbot.controller.dto.admin.AdminScopedCacheClearResponse;
 import com.example.plantbot.controller.dto.admin.AdminMergeTaskItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminMergeTaskRetryResponse;
 import com.example.plantbot.controller.dto.admin.AdminPushTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminPushTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
 import com.example.plantbot.controller.dto.admin.AdminUsersResponse;
+import com.example.plantbot.controller.dto.admin.AdminActivityLogItemResponse;
+import com.example.plantbot.controller.dto.admin.AdminMonitoringResponse;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.domain.UserRole;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
@@ -21,14 +32,19 @@ import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.service.DatabaseBackupScheduler;
 import com.example.plantbot.service.WebPushNotificationService;
+import com.example.plantbot.service.PlantService;
+import com.example.plantbot.config.AdminRateLimitInterceptor;
+import com.example.plantbot.service.AdminInsightsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -48,6 +64,9 @@ public class AdminController {
   private final PlantCatalogService plantCatalogService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final WeatherService weatherService;
+  private final PlantService plantService;
+  private final AdminRateLimitInterceptor adminRateLimitInterceptor;
+  private final AdminInsightsService adminInsightsService;
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
 
@@ -70,6 +89,48 @@ public class AdminController {
     return adminService.users(page, size, q);
   }
 
+  @GetMapping("/users/{userId}/details")
+  public AdminUserDetailsResponse userDetails(
+      Authentication authentication,
+      @PathVariable("userId") Long userId
+  ) {
+    User admin = requireAdmin(authentication);
+    User user = userRepository.findById(userId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+    log.info("Admin user details requested: adminUserId={} adminTelegramId={} targetUserId={}",
+        admin.getId(), admin.getTelegramId(), userId);
+    return adminService.userDetails(user);
+  }
+
+  @PostMapping("/users/{userId}/block")
+  public AdminUserActionResponse blockUser(
+      Authentication authentication,
+      @PathVariable("userId") Long userId,
+      @RequestBody(required = false) AdminUserBlockRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    User user = userRepository.findById(userId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+    boolean blocked = adminService.setBlocked(admin, user, request == null ? null : request.blocked());
+    log.warn("Admin user block toggled: adminUserId={} adminTelegramId={} targetUserId={} blocked={}",
+        admin.getId(), admin.getTelegramId(), userId, blocked);
+    return new AdminUserActionResponse(true, userId, blocked ? "Пользователь заблокирован" : "Пользователь разблокирован");
+  }
+
+  @DeleteMapping("/users/{userId}")
+  public AdminUserActionResponse deleteUser(
+      Authentication authentication,
+      @PathVariable("userId") Long userId
+  ) {
+    User admin = requireAdmin(authentication);
+    User user = userRepository.findById(userId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден"));
+    adminService.deleteUser(admin, user);
+    log.warn("Admin user deleted: adminUserId={} adminTelegramId={} targetUserId={}",
+        admin.getId(), admin.getTelegramId(), userId);
+    return new AdminUserActionResponse(true, userId, "Пользователь удалён");
+  }
+
   @GetMapping("/users/{userId}/plants")
   public List<AdminPlantItemResponse> userPlants(
       Authentication authentication,
@@ -87,6 +148,23 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     log.info("Admin stats requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
     return adminService.stats();
+  }
+
+  @GetMapping("/monitoring")
+  public AdminMonitoringResponse monitoring(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    log.info("Admin monitoring requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
+    return adminInsightsService.monitoring();
+  }
+
+  @GetMapping("/activity/logs")
+  public List<AdminActivityLogItemResponse> activityLogs(
+      Authentication authentication,
+      @RequestParam(name = "limit", defaultValue = "50") int limit
+  ) {
+    User admin = requireAdmin(authentication);
+    log.info("Admin activity logs requested: userId={} telegramId={} limit={}", admin.getId(), admin.getTelegramId(), limit);
+    return adminInsightsService.activityLogs(limit);
   }
 
   @PostMapping("/clear-cache")
@@ -115,11 +193,80 @@ public class AdminController {
     );
   }
 
+  @PostMapping("/clear-cache/{scope}")
+  public AdminScopedCacheClearResponse clearCacheScope(
+      Authentication authentication,
+      @PathVariable("scope") String scopeRaw
+  ) {
+    User admin = requireAdmin(authentication);
+    String scope = scopeRaw == null ? "" : scopeRaw.trim().toLowerCase();
+    switch (scope) {
+      case "weather" -> {
+        WeatherService.CacheClearStats weatherStats = weatherService.clearCaches();
+        log.info("Admin weather cache clear executed: userId={} telegramId={} weather={}/{}/{}",
+            admin.getId(), admin.getTelegramId(), weatherStats.weatherEntries(), weatherStats.rainKeys(), weatherStats.rainSamples());
+        return new AdminScopedCacheClearResponse(
+            "weather",
+            weatherStats.weatherEntries(),
+            weatherStats.rainKeys(),
+            weatherStats.rainSamples(),
+            0,
+            0,
+            0,
+            0,
+            "Кэш погоды очищен"
+        );
+      }
+      case "openrouter" -> {
+        OpenRouterPlantAdvisorService.CacheClearStats openRouterStats = openRouterPlantAdvisorService.clearCaches();
+        log.info("Admin openrouter cache clear executed: userId={} telegramId={} openRouter={}/{}/{}",
+            admin.getId(), admin.getTelegramId(), openRouterStats.careAdviceEntries(), openRouterStats.wateringProfileEntries(), openRouterStats.chatEntries());
+        return new AdminScopedCacheClearResponse(
+            "openrouter",
+            0,
+            0,
+            0,
+            openRouterStats.careAdviceEntries(),
+            openRouterStats.wateringProfileEntries(),
+            openRouterStats.chatEntries(),
+            0,
+            "Кэш OpenRouter очищен"
+        );
+      }
+      case "users" -> {
+        int userCacheEntries = adminRateLimitInterceptor.clearTrackedClients();
+        log.info("Admin user cache clear executed: userId={} telegramId={} entries={}",
+            admin.getId(), admin.getTelegramId(), userCacheEntries);
+        return new AdminScopedCacheClearResponse(
+            "users",
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            userCacheEntries,
+            "Пользовательский кэш очищен"
+        );
+      }
+      default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Неподдерживаемый scope: " + scopeRaw);
+    }
+  }
+
   @GetMapping("/backups")
   public List<AdminBackupItemResponse> backups(Authentication authentication) {
     User admin = requireAdmin(authentication);
     log.info("Admin backup list requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
     return databaseBackupScheduler.listBackups();
+  }
+
+  @PostMapping({"/backups/create", "/backup/create"})
+  public AdminBackupItemResponse createBackupNow(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    String actorTag = "admin-" + admin.getId();
+    AdminBackupItemResponse created = databaseBackupScheduler.createBackupNow(actorTag);
+    log.warn("Admin backup created: userId={} telegramId={} file={}", admin.getId(), admin.getTelegramId(), created.fileName());
+    return created;
   }
 
   @PostMapping("/backups/{fileName}/restore")
@@ -177,6 +324,67 @@ public class AdminController {
     return adminService.plants(page, size, q);
   }
 
+  @PostMapping("/plants/{plantId}/water")
+  public AdminPlantActionResponse waterPlant(
+      Authentication authentication,
+      @PathVariable("plantId") Long plantId
+  ) {
+    User admin = requireAdmin(authentication);
+    var plant = plantService.getById(plantId);
+    if (plant == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
+    }
+    boolean updated = adminService.waterPlantNow(plant);
+    log.info("Admin plant water action: adminUserId={} adminTelegramId={} plantId={} updated={}",
+        admin.getId(), admin.getTelegramId(), plantId, updated);
+    return new AdminPlantActionResponse(true, plantId, updated ? "Полив отмечен" : "Растение не просрочено");
+  }
+
+  @PostMapping("/plants/water-overdue")
+  public AdminBulkPlantWaterResponse waterOverduePlants(
+      Authentication authentication,
+      @RequestBody(required = false) AdminBulkPlantWaterRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    AdminBulkPlantWaterResponse response = adminService.waterOverduePlants(request == null ? null : request.plantIds());
+    log.info("Admin bulk overdue watering: adminUserId={} adminTelegramId={} total={} updated={} skipped={}",
+        admin.getId(), admin.getTelegramId(), response.total(), response.updated(), response.skipped());
+    return response;
+  }
+
+  @DeleteMapping("/plants/{plantId}")
+  public AdminPlantActionResponse deletePlant(
+      Authentication authentication,
+      @PathVariable("plantId") Long plantId
+  ) {
+    User admin = requireAdmin(authentication);
+    var plant = plantService.getById(plantId);
+    if (plant == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
+    }
+    adminService.deletePlant(plant);
+    log.warn("Admin plant deleted: adminUserId={} adminTelegramId={} plantId={}",
+        admin.getId(), admin.getTelegramId(), plantId);
+    return new AdminPlantActionResponse(true, plantId, "Растение удалено");
+  }
+
+  @PatchMapping("/plants/{plantId}")
+  public AdminPlantItemResponse updatePlant(
+      Authentication authentication,
+      @PathVariable("plantId") Long plantId,
+      @RequestBody AdminPlantUpdateRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    var plant = plantService.getById(plantId);
+    if (plant == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
+    }
+    AdminPlantItemResponse response = adminService.updatePlant(plant, request);
+    log.info("Admin plant updated: adminUserId={} adminTelegramId={} plantId={}",
+        admin.getId(), admin.getTelegramId(), plantId);
+    return response;
+  }
+
   @GetMapping("/dictionary/merge-tasks")
   public List<AdminMergeTaskItemResponse> mergeTasks(Authentication authentication) {
     User admin = requireAdmin(authentication);
@@ -199,7 +407,14 @@ public class AdminController {
     if (authentication == null || !(authentication.getPrincipal() instanceof PwaPrincipal principal)) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется JWT авторизация");
     }
-    return userRepository.findById(principal.userId())
+    User user = userRepository.findById(principal.userId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не найден"));
+    if (user.getRoles() == null || !user.getRoles().contains(UserRole.ROLE_ADMIN)) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Недостаточно прав");
+    }
+    if (Boolean.TRUE.equals(user.getBlocked())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован");
+    }
+    return user;
   }
 }

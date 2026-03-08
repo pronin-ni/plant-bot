@@ -42,9 +42,12 @@ public class User {
   private String migrationVariant;
   private Integer tmaOpenCount = 0;
   private Integer pwaOpenCount = 0;
+  @Enumerated(EnumType.STRING)
+  private WeatherProvider weatherProvider = WeatherProvider.OPEN_METEO;
   private Instant migrationMigratedAt;
   private Instant lastSeenTmaAt;
   private Instant lastSeenPwaAt;
+  private Boolean blocked = false;
   @Column(name = "calendar_token")
   private String calendarToken = UUID.randomUUID().toString();
 

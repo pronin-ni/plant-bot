@@ -1,40 +1,70 @@
 import type { ComponentType } from 'react';
-import { Apple, Send, CircleDashed, MessagesSquare, Chrome } from 'lucide-react';
+import { CircleDashed, Chrome, Send } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { LoginButton } from '@/components/LoginButton';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
 
-const providerUi: Record<AuthProviderId, { icon: ComponentType<{ className?: string }>; className: string }> = {
-  telegram: { icon: Send, className: 'bg-[#229ED9] text-white hover:bg-[#1f8bc0]' },
-  yandex: { icon: CircleDashed, className: 'bg-[#FC3F1D] text-white hover:bg-[#e53617]' },
-  vk: { icon: MessagesSquare, className: 'bg-[#0077FF] text-white hover:bg-[#0068e0]' },
-  google: { icon: Chrome, className: 'bg-[#4285F4] text-white hover:bg-[#3b78dc]' },
-  apple: { icon: Apple, className: 'bg-black text-white hover:bg-neutral-800' }
+const visibleProviderIds: AuthProviderId[] = ['telegram', 'yandex', 'google'];
+
+const providerUi: Record<AuthProviderId, {
+  icon: ComponentType<{ className?: string }>;
+  gradientClassName: string;
+  subtitle: string;
+}> = {
+  telegram: {
+    icon: Send,
+    gradientClassName: 'bg-gradient-to-br from-[#1B8FD1] via-[#229ED9] to-[#2cb6e8]',
+    subtitle: 'Быстрый вход через Telegram'
+  },
+  yandex: {
+    icon: CircleDashed,
+    gradientClassName: 'bg-gradient-to-br from-[#ff4b2f] via-[#FC3F1D] to-[#e93513]',
+    subtitle: 'OAuth через Yandex ID'
+  },
+  google: {
+    icon: Chrome,
+    gradientClassName: 'bg-gradient-to-br from-[#4f9dff] via-[#4285F4] to-[#3367d6]',
+    subtitle: 'OAuth через Google Account'
+  },
+  vk: {
+    icon: CircleDashed,
+    gradientClassName: 'bg-gradient-to-br from-[#0a84ff] to-[#005fd1]',
+    subtitle: 'Отключено на этом этапе'
+  },
+  apple: {
+    icon: CircleDashed,
+    gradientClassName: 'bg-gradient-to-br from-[#3c3c3c] to-[#121212]',
+    subtitle: 'Отключено на этом этапе'
+  }
 };
 
 export function AuthProvidersList({
   loadingProvider,
-  onLogin
+  onLogin,
+  disabledAll = false
 }: {
   loadingProvider?: AuthProviderId | null;
   onLogin: (provider: AuthProviderId) => void;
+  disabledAll?: boolean;
 }) {
+  const providers = authProviders.filter((provider) => visibleProviderIds.includes(provider.id));
+
   return (
-    <div className="space-y-2">
-      {authProviders.map((provider) => {
+    <div className="space-y-2.5">
+      {providers.map((provider) => {
         const ui = providerUi[provider.id];
-        const Icon = ui.icon;
-        const disabled = !provider.available() || loadingProvider === provider.id;
+        const disabled = disabledAll || !provider.available() || Boolean(loadingProvider && loadingProvider !== provider.id);
         return (
-          <Button
+          <LoginButton
             key={provider.id}
-            className={`w-full ${ui.className}`}
+            icon={ui.icon}
+            title={provider.title}
+            subtitle={ui.subtitle}
+            gradientClassName={ui.gradientClassName}
             disabled={disabled}
+            loading={loadingProvider === provider.id}
             onClick={() => onLogin(provider.id)}
-          >
-            <Icon className="mr-2 h-4 w-4" />
-            {loadingProvider === provider.id ? 'Выполняем вход...' : `Войти через ${provider.title}`}
-          </Button>
+          />
         );
       })}
     </div>

@@ -17,10 +17,19 @@ public class CurrentUserService {
 
   public User resolve(Authentication authentication, String initData) {
     if (authentication != null && authentication.getPrincipal() instanceof PwaPrincipal principal) {
-      return userRepository.findById(principal.userId())
+      User user = userRepository.findById(principal.userId())
           .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не найден"));
+      ensureNotBlocked(user);
+      return user;
     }
-    return telegramInitDataService.validateAndResolveUser(initData);
+    User user = telegramInitDataService.validateAndResolveUser(initData);
+    ensureNotBlocked(user);
+    return user;
+  }
+
+  private void ensureNotBlocked(User user) {
+    if (Boolean.TRUE.equals(user.getBlocked())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован");
+    }
   }
 }
-

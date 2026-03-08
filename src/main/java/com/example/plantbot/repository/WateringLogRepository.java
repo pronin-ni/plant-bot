@@ -15,6 +15,9 @@ public interface WateringLogRepository extends JpaRepository<WateringLog, Long> 
   List<WateringLog> findByPlantAndWateredAtBetween(Plant plant, LocalDate start, LocalDate end);
 
   long countByPlant(Plant plant);
+  long countByPlantIn(List<Plant> plants);
+  long deleteByPlantIn(List<Plant> plants);
+  List<WateringLog> findTop50ByOrderByCreatedAtDesc();
 
   @Query("""
       select count(distinct wl.plant.user.id)

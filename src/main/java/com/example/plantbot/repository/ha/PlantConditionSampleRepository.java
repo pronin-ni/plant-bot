@@ -12,4 +12,6 @@ public interface PlantConditionSampleRepository extends JpaRepository<PlantCondi
   Optional<PlantConditionSample> findTopByPlantOrderBySampledAtDesc(Plant plant);
 
   List<PlantConditionSample> findByPlantAndSampledAtAfterOrderBySampledAtAsc(Plant plant, Instant sampledAt);
+
+  long deleteByPlantIn(List<Plant> plants);
 }

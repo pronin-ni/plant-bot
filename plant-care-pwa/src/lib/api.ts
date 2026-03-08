@@ -24,15 +24,22 @@ import type {
   PlantCareAdviceDto,
   AdminOverviewDto,
   AdminUsersDto,
+  AdminUserDetailsDto,
+  AdminUserActionDto,
   AdminPlantsDto,
+  AdminPlantActionDto,
+  AdminBulkPlantWaterDto,
   AdminPlantItemDto,
   AdminStatsDto,
   AssistantHistoryItemDto,
   PlantProfileSuggestionDto,
   AdminCacheClearDto,
+  AdminScopedCacheClearDto,
   AdminBackupItemDto,
   AdminBackupRestoreDto,
   AdminPushTestDto,
+  AdminActivityLogItemDto,
+  AdminMonitoringDto,
   PwaAuthDto,
   PwaAuthProvidersDto,
   PwaTelegramWidgetPayloadDto,
@@ -41,7 +48,10 @@ import type {
   PwaPushStatusDto,
   PwaPushSubscribeDto,
   PlantPresetSuggestionDto,
-  PlantAiRecommendDto
+  PlantAiRecommendDto,
+  WeatherProvidersResponse,
+  WeatherCurrentDto,
+  WeatherForecastDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -91,6 +101,9 @@ function isQueueableMutation(method: string, path: string): boolean {
   if (upperMethod === 'POST' && path === '/api/users/city') {
     return true;
   }
+  if (upperMethod === 'POST' && path === '/api/weather/provider') {
+    return true;
+  }
   return false;
 }
 
@@ -138,6 +151,15 @@ async function buildOfflineFallback<T>(path: string, init: RequestInit): Promise
       isAdmin: auth.isAdmin
     };
     return payload as T;
+  }
+
+  if (method === 'POST' && path === '/api/weather/provider') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { provider?: string }) : {};
+    const response: WeatherProvidersResponse = {
+      providers: [],
+      selected: body.provider ?? null
+    };
+    return response as T;
   }
 
   return null;
@@ -504,6 +526,29 @@ export async function deletePlant(id: number): Promise<void> {
   return apiFetch<void>(`/api/plants/${id}`, { method: 'DELETE' });
 }
 
+export async function getWeatherProviders(): Promise<WeatherProvidersResponse> {
+  return apiFetch<WeatherProvidersResponse>('/api/weather/providers', { method: 'GET' });
+}
+
+export async function setWeatherProvider(provider: string): Promise<WeatherProvidersResponse> {
+  return apiFetch<WeatherProvidersResponse>('/api/weather/provider', {
+    method: 'POST',
+    body: JSON.stringify({ provider })
+  });
+}
+
+export async function getWeatherCurrent(city: string): Promise<WeatherCurrentDto> {
+  return apiFetch<WeatherCurrentDto>(`/api/weather/current?city=${encodeURIComponent(city)}`, {
+    method: 'GET'
+  });
+}
+
+export async function getWeatherForecast(city: string): Promise<WeatherForecastDto> {
+  return apiFetch<WeatherForecastDto>(`/api/weather/forecast?city=${encodeURIComponent(city)}`, {
+    method: 'GET'
+  });
+}
+
 export async function getStats(): Promise<PlantStatsDto[]> {
   return apiFetch<PlantStatsDto[]>('/api/stats', { method: 'GET' });
 }
@@ -610,6 +655,20 @@ export async function clearOpenRouterApiKey(): Promise<OpenRouterPreferencesDto>
   });
 }
 
+export async function validateOpenRouterKey(apiKey: string): Promise<{ ok: boolean; message?: string }> {
+  return apiFetch<{ ok: boolean; message?: string }>('/api/openrouter/validate-key', {
+    method: 'POST',
+    body: JSON.stringify({ apiKey })
+  });
+}
+
+export async function sendOpenRouterTest(payload: { message: string; imageBase64?: string }): Promise<ChatAskResponse> {
+  return apiFetch<ChatAskResponse>('/api/openrouter/send', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 
 export async function askAssistant(question: string): Promise<ChatAskResponse> {
   return apiFetch<ChatAskResponse>('/api/assistant/chat', {
@@ -618,8 +677,13 @@ export async function askAssistant(question: string): Promise<ChatAskResponse> {
   });
 }
 
-export async function getAssistantHistory(): Promise<AssistantHistoryItemDto[]> {
-  return apiFetch<AssistantHistoryItemDto[]>('/api/assistant/history', { method: 'GET' });
+export async function getAssistantHistory(limit = 50): Promise<AssistantHistoryItemDto[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return apiFetch<AssistantHistoryItemDto[]>(`/api/assistant/history?${params.toString()}`, { method: 'GET' });
+}
+
+export async function clearAssistantHistory(): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>('/api/assistant/history', { method: 'DELETE' });
 }
 
 
@@ -648,8 +712,48 @@ export async function getAdminPlants(page = 0, size = 20, q = ''): Promise<Admin
   return apiFetch<AdminPlantsDto>(`/api/admin/plants?${params.toString()}`, { method: 'GET' });
 }
 
+export async function waterAdminPlant(plantId: number): Promise<AdminPlantActionDto> {
+  return apiFetch<AdminPlantActionDto>(`/api/admin/plants/${plantId}/water`, { method: 'POST' });
+}
+
+export async function waterAdminOverduePlants(plantIds?: number[]): Promise<AdminBulkPlantWaterDto> {
+  return apiFetch<AdminBulkPlantWaterDto>('/api/admin/plants/water-overdue', {
+    method: 'POST',
+    body: JSON.stringify({ plantIds: plantIds?.length ? plantIds : undefined })
+  });
+}
+
+export async function deleteAdminPlant(plantId: number): Promise<AdminPlantActionDto> {
+  return apiFetch<AdminPlantActionDto>(`/api/admin/plants/${plantId}`, { method: 'DELETE' });
+}
+
+export async function updateAdminPlant(
+  plantId: number,
+  payload: { name?: string; baseIntervalDays?: number; category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' }
+): Promise<AdminPlantItemDto> {
+  return apiFetch<AdminPlantItemDto>(`/api/admin/plants/${plantId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getAdminUserPlants(userId: number): Promise<AdminPlantItemDto[]> {
   return apiFetch<AdminPlantItemDto[]>(`/api/admin/users/${userId}/plants`, { method: 'GET' });
+}
+
+export async function getAdminUserDetails(userId: number): Promise<AdminUserDetailsDto> {
+  return apiFetch<AdminUserDetailsDto>(`/api/admin/users/${userId}/details`, { method: 'GET' });
+}
+
+export async function setAdminUserBlocked(userId: number, blocked?: boolean): Promise<AdminUserActionDto> {
+  return apiFetch<AdminUserActionDto>(`/api/admin/users/${userId}/block`, {
+    method: 'POST',
+    body: JSON.stringify({ blocked })
+  });
+}
+
+export async function deleteAdminUser(userId: number): Promise<AdminUserActionDto> {
+  return apiFetch<AdminUserActionDto>(`/api/admin/users/${userId}`, { method: 'DELETE' });
 }
 
 export async function getAdminStats(): Promise<AdminStatsDto> {
@@ -660,8 +764,16 @@ export async function clearAdminCache(): Promise<AdminCacheClearDto> {
   return apiFetch<AdminCacheClearDto>('/api/admin/clear-cache', { method: 'POST' });
 }
 
+export async function clearAdminCacheScope(scope: 'weather' | 'openrouter' | 'users'): Promise<AdminScopedCacheClearDto> {
+  return apiFetch<AdminScopedCacheClearDto>(`/api/admin/clear-cache/${scope}`, { method: 'POST' });
+}
+
 export async function getAdminBackups(): Promise<AdminBackupItemDto[]> {
   return apiFetch<AdminBackupItemDto[]>('/api/admin/backups', { method: 'GET' });
+}
+
+export async function createAdminBackup(): Promise<AdminBackupItemDto> {
+  return apiFetch<AdminBackupItemDto>('/api/admin/backup/create', { method: 'POST' });
 }
 
 export async function restoreAdminBackup(fileName: string): Promise<AdminBackupRestoreDto> {
@@ -673,6 +785,35 @@ export async function sendAdminPushTest(payload: { userId: number; title?: strin
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+export async function getAdminMonitoring(): Promise<AdminMonitoringDto> {
+  return apiFetch<AdminMonitoringDto>('/api/admin/monitoring', { method: 'GET' });
+}
+
+export async function getAdminActivityLogs(limit = 50): Promise<AdminActivityLogItemDto[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return apiFetch<AdminActivityLogItemDto[]>(`/api/admin/activity/logs?${params.toString()}`, { method: 'GET' });
+}
+
+// Экспорт / импорт / бэкап
+export async function exportPdf(): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/export/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY) ?? ''}` }
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await parseErrorMessage(response));
+  }
+  return await response.blob();
+}
+
+export async function importFromCloud(provider: 'drive' | 'dropbox'): Promise<{ imported: number }> {
+  return apiFetch<{ imported: number }>(`/api/import/${provider}`, { method: 'POST' });
+}
+
+export async function backupToTelegram(): Promise<{ ok: boolean; file?: string }> {
+  return apiFetch<{ ok: boolean; file?: string }>('/api/backup/telegram', { method: 'POST' });
 }
 
 export async function suggestPlantProfile(name: string): Promise<PlantProfileSuggestionDto> {

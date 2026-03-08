@@ -14,4 +14,6 @@ public interface PlantHomeAssistantBindingRepository extends JpaRepository<Plant
 
   @Query("select b from PlantHomeAssistantBinding b where b.plant.user = :user")
   List<PlantHomeAssistantBinding> findAllByUser(User user);
+
+  long deleteByPlantIn(List<Plant> plants);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, BarChart3, RefreshCw, Sparkles } from 'lucide-react';
 
 import { getCalendar, waterPlant } from '@/lib/api';
@@ -11,6 +11,7 @@ import { CalendarStrip } from '@/components/CalendarStrip';
 import { DayCard } from '@/components/DayCard';
 import { MassWaterButton } from '@/components/MassWaterButton';
 import { ConditionsForecast } from '@/components/ConditionsForecast';
+import { useMotionGuard } from '@/lib/motion';
 
 type CalendarActionFilter = 'all' | 'watering' | 'fertilizer' | 'repotting' | 'cutting';
 
@@ -90,6 +91,8 @@ export function CalendarPage() {
   const [filter, setFilter] = useState<CalendarActionFilter>('all');
   const [stripAnchorDate, setStripAnchorDate] = useState<Date>(() => addDays(todayBase, -3));
   const [selectedDate, setSelectedDate] = useState<string>(() => dayKeyFromDate(todayBase));
+  const [wateringWavePulse, setWateringWavePulse] = useState(0);
+  const { reduceMotion } = useMotionGuard();
 
   const calendarQuery = useQuery({
     queryKey: ['calendar'],
@@ -100,6 +103,8 @@ export function CalendarPage() {
     mutationFn: (plantId: number) => waterPlant(plantId),
     onSuccess: () => {
       hapticNotify('success');
+      navigator.vibrate?.([100, 50, 100]);
+      setWateringWavePulse((prev) => prev + 1);
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
@@ -117,6 +122,8 @@ export function CalendarPage() {
     onSuccess: ({ successCount, failedCount }) => {
       if (successCount > 0) {
         hapticNotify('success');
+        navigator.vibrate?.([100, 50, 100]);
+        setWateringWavePulse((prev) => prev + 1);
       } else {
         hapticNotify('warning');
       }
@@ -210,9 +217,48 @@ export function CalendarPage() {
 
   const forecastPlant = selectedDayEvents[0] ?? overdueEvents[0] ?? null;
 
+  useEffect(() => {
+    hapticImpact('light');
+    navigator.vibrate?.(50);
+  }, []);
+
   return (
     <PlatformPullToRefresh onRefresh={() => calendarQuery.refetch()}>
-      <section className="calendar-premium-shell space-y-3 pb-28">
+      <section className="calendar-premium-shell relative space-y-3 overflow-hidden pb-28">
+        <AnimatePresence>
+          {wateringWavePulse > 0 ? (
+            <motion.div
+              key={`calendar-water-wave-${wateringWavePulse}`}
+              className="pointer-events-none absolute inset-0 z-40"
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0.25 : 1.5, ease: 'easeInOut' }}
+            >
+              <motion.div
+                className="absolute inset-y-0 left-[-35%] w-[48%] rounded-[40%] bg-gradient-to-r from-emerald-400/0 via-emerald-400/28 to-cyan-300/25 blur-[1px]"
+                initial={{ x: '-8%' }}
+                animate={{ x: '320%' }}
+                transition={{ duration: reduceMotion ? 0.3 : 1.5, ease: 'easeInOut' }}
+              />
+              {!reduceMotion ? (
+                <div className="absolute inset-0">
+                  {Array.from({ length: 16 }).map((_, index) => (
+                    <motion.span
+                      key={index}
+                      className="absolute h-1.5 w-1.5 rounded-full bg-cyan-300/85"
+                      style={{ left: `${8 + index * 5.7}%`, top: `${24 + (index % 5) * 12}%` }}
+                      initial={{ opacity: 0, y: 8, scale: 0.7 }}
+                      animate={{ opacity: [0, 1, 0], y: [8, -5, -14], scale: [0.7, 1, 0.8] }}
+                      transition={{ duration: 0.8, delay: index * 0.02, ease: 'easeOut' }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
         <div className="ios-blur-card overflow-hidden p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -290,8 +336,8 @@ export function CalendarPage() {
         {overdueCount > 0 ? (
           <motion.section
             className="ios-blur-card border border-red-300/60 bg-red-500/10 p-3"
-            animate={{ x: [0, -4, 4, -2, 2, 0] }}
-            transition={{ duration: 0.52, ease: 'easeInOut', repeat: Infinity, repeatDelay: 5.5 }}
+            animate={reduceMotion ? { x: 0 } : { x: [0, -4, 4, -2, 2, 0] }}
+            transition={{ duration: 0.52, ease: 'easeInOut', repeat: reduceMotion ? 0 : Infinity, repeatDelay: 5.5 }}
           >
             <div className="flex items-center justify-between gap-2">
               <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-300">

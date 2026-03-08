@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ interface CycleProgressProps {
   progress: number;
   isWatering?: boolean;
   onWater: () => Promise<unknown> | unknown;
+  onSuccess?: () => void;
 }
 
 function getNextDate(plant: PlantDto): Date {
@@ -77,10 +78,13 @@ function confettiPieces(): ConfettiPiece[] {
   }));
 }
 
-export function CycleProgress({ plant, progress, isWatering = false, onWater }: CycleProgressProps) {
+export function CycleProgress({ plant, progress, isWatering = false, onWater, onSuccess }: CycleProgressProps) {
   const [burst, setBurst] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [running, setRunning] = useState(false);
+  const [wave, setWave] = useState(false);
+  const [aliveText, setAliveText] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   const daysLeft = useMemo(() => getDaysLeft(plant), [plant]);
   const p = Math.max(0, Math.min(100, progress));
@@ -97,12 +101,18 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater }: 
       return;
     }
     setRunning(true);
-    hapticImpact('heavy');
+    hapticImpact('rigid');
+    navigator.vibrate?.(300);
     try {
       await onWater();
       setBurst(true);
       setConfirmed(true);
-      window.setTimeout(() => setBurst(false), 460);
+      setWave(true);
+      setAliveText(true);
+      onSuccess?.();
+      window.setTimeout(() => setBurst(false), 700);
+      window.setTimeout(() => setWave(false), 820);
+      window.setTimeout(() => setAliveText(false), 940);
       window.setTimeout(() => setConfirmed(false), 980);
     } finally {
       setRunning(false);
@@ -116,6 +126,24 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater }: 
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 30 }}
     >
+      <AnimatePresence>
+        {wave ? (
+          <motion.span
+            className="pointer-events-none absolute inset-0 z-20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.span
+              className="absolute left-1/2 top-[78%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/35"
+              initial={{ scale: 0.1, opacity: 0.8 }}
+              animate={{ scale: 5.2, opacity: 0 }}
+              transition={{ duration: 1.2, ease: 'easeOut' }}
+            />
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-ios-caption text-ios-subtext">Состояние цикла</p>
@@ -151,7 +179,11 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater }: 
 
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <motion.div
-              animate={{ y: burst ? [0, -3, 0] : 0, scale: burst ? [1, 1.08, 1] : 1 }}
+              animate={{
+                y: burst ? [0, -3, 0] : 0,
+                scale: burst ? [1, 1.08, 1] : 1,
+                rotate: burst && !prefersReducedMotion ? [0, -3, 3, -2, 2, 0] : 0
+              }}
               transition={{ type: 'spring', stiffness: 380, damping: 26 }}
             >
               <Droplets className="mx-auto h-5 w-5 text-ios-accent" />
@@ -164,8 +196,8 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater }: 
 
       <motion.div className="relative mt-3" animate={{ scale: burst ? 1.02 : 1 }} transition={{ type: 'spring', stiffness: 420, damping: 30 }}>
         <AnimatePresence>
-          {burst ? (
-            <motion.span className="pointer-events-none absolute inset-0 z-10" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            {burst ? (
+              <motion.span className="pointer-events-none absolute inset-0 z-10" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <span className="water-drop water-drop-1" />
               <span className="water-drop water-drop-2" />
               <span className="water-drop water-drop-3" />
@@ -179,6 +211,20 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater }: 
                   transition={{ duration: 0.62, ease: 'easeOut' }}
                 />
               ))}
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {aliveText ? (
+            <motion.span
+              className="pointer-events-none absolute left-1/2 top-[-14px] z-20 -translate-x-1/2 whitespace-nowrap text-xs font-semibold text-emerald-600 dark:text-emerald-300"
+              initial={{ opacity: 0, y: 8, scale: 0.94 }}
+              animate={{ opacity: 1, y: -10, scale: 1 }}
+              exit={{ opacity: 0, y: -18 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            >
+              Я оживаю!
             </motion.span>
           ) : null}
         </AnimatePresence>

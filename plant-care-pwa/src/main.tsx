@@ -47,8 +47,26 @@ function ensureTelegramScriptLoaded(): Promise<void> {
   });
 }
 
+function initMotionLifecycleFlags() {
+  const root = document.documentElement;
+  root.dataset.motionState = document.hidden ? 'paused' : 'active';
+
+  const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const syncReducedMotion = () => {
+    root.classList.toggle('reduced-motion', media.matches);
+  };
+  syncReducedMotion();
+  media.addEventListener('change', syncReducedMotion);
+
+  const onVisibilityChange = () => {
+    root.dataset.motionState = document.hidden ? 'paused' : 'active';
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange, { passive: true });
+}
+
 async function bootstrap() {
   applyPlatformClasses(document.documentElement);
+  initMotionLifecycleFlags();
   initPwa();
   await ensureTelegramScriptLoaded();
   initTelegramWebApp();

@@ -63,8 +63,11 @@ public class PwaPushController {
     if (authentication == null || !(authentication.getPrincipal() instanceof PwaPrincipal principal)) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется JWT авторизация");
     }
-    return userRepository.findById(principal.userId())
+    User user = userRepository.findById(principal.userId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не найден"));
+    if (Boolean.TRUE.equals(user.getBlocked())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован");
+    }
+    return user;
   }
 }
-

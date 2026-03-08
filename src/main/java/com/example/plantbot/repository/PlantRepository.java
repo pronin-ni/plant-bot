@@ -43,4 +43,6 @@ public interface PlantRepository extends JpaRepository<Plant, Long> {
 
   @Query("select count(distinct p.user.id) from Plant p")
   long countDistinctUsersWithPlants();
+
+  List<Plant> findTop50ByOrderByCreatedAtDesc();
 }

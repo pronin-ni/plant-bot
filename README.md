@@ -1,372 +1,183 @@
-# Plant Bot + Telegram Mini App
+# Plant Bot / «Мои Растения»
 
-Проект запускает в **одном контейнере**:
-- Spring Boot backend (`/api/...`)
-- Telegram Mini App (`/mini-app/...`)
-- PWA frontend (`/pwa/...`)
+Plant Bot is a Java Spring Boot application with two React clients (Telegram Mini App and PWA) for plant care management: watering schedules, AI recommendations, weather-aware tips, Home Assistant integration, push notifications, and admin operations.
 
-Feature-toggle (runtime, без отключения backend API):
-- `TELEGRAM_BOT_ENABLED=true|false` — включить/выключить Telegram LongPolling бота.
-- `APP_FEATURE_MINI_APP_ENABLED=true|false` — включить/выключить web-роуты Mini App (`/mini-app/...`).
-- `APP_FEATURE_PWA_ENABLED=true|false` — включить/выключить web-роуты PWA (`/pwa/...`).
+## Features
 
-## Документация
+- Plant lifecycle management (create, update, water, delete, photos).
+- Calendar and ICS sync for watering reminders.
+- Adaptive watering recommendations from history + weather.
+- AI features via OpenRouter (chat, care advice, photo identify/diagnose).
+- Weather provider selection per user (Open-Meteo/OpenWeather-compatible providers).
+- Telegram-based auth and PWA JWT auth.
+- Web Push subscriptions and test pushes.
+- Home Assistant connection, room/sensor mapping, and condition history.
+- Admin dashboard: users, plants, cache control, backups, monitoring, logs.
 
-- Агентам: `AGENT_DOCUMENTATION.md`
-- Разработчикам: `DEVELOPER_GUIDE.md`
+## Tech Stack
 
-## Быстрый старт (Docker)
+- Frontend (PWA): React 19, Vite 7, TypeScript, Tailwind, shadcn/ui primitives, Framer Motion, TanStack Query/Table, Zustand.
+- Frontend (Mini App): React 19, Vite 7, TypeScript, Tailwind, Framer Motion, Zustand.
+- Backend: Java 17, Spring Boot 3.2, Spring Web, Spring Data JPA, Spring Security.
+- Database: SQLite (Hibernate + community SQLite dialect).
+- Integrations: Telegram Bot API, OpenRouter, Home Assistant, Open-Meteo/OpenWeather APIs, Web Push (VAPID).
+- Infra: Docker, Docker Compose, GitHub Actions (GHCR publish).
 
-1. Создать `.env` из шаблона:
+## High-Level Architecture
+
+```text
+PWA (React) / Mini App (React)
+            |
+            | REST API + JWT / Telegram init-data
+            v
+      Spring Boot Backend
+            |
+            | JPA/Hibernate
+            v
+        SQLite database
+
+External services: Telegram, OpenRouter, Weather APIs, Home Assistant, Web Push
+```
+
+## Installation
+
+### Prerequisites
+
+- Java 17+
+- Node.js 20+
+- npm 10+
+- (Optional) Docker + Docker Compose
+
+### 1. Clone
+
+```bash
+git clone <your-repo-url>
+cd plant-bot
+```
+
+### 2. Configure environment
+
 ```bash
 cp .env.example .env
 ```
 
-2. Выбрать режим запуска.
+Fill required secrets at least:
 
-Полный режим (бот + API + Mini App):
-- заполнить `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `APP_PUBLIC_BASE_URL`
-- запустить:
-```bash
-docker compose up -d --build
-```
-
-Miniapp-only режим (API + Mini App, без запуска Telegram-бота):
-- в `.env` можно оставить Telegram токен/username пустыми
-- важно: `TELEGRAM_BOT_ENABLED=false`
-- запустить профиль:
-```bash
-docker compose --profile miniapp-only up -d --build plant-miniapp
-```
-
-## Miniapp-only: что это и зачем
-
-`miniapp-only` — это режим, где поднимаются только:
-- backend API (`/api/...`)
-- Telegram Mini App (`/mini-app/...`)
-
-И **не поднимается Telegram LongPolling bot** (регистрация в Bot API отключена).
-
-Когда использовать:
-- локальная/стендовая проверка фронта и REST API без реального bot token;
-- деплой Mini App отдельно от Telegram-бота;
-- диагностика API/верстки, когда бот временно не нужен.
-
-Что меняется технически:
-- `TELEGRAM_BOT_ENABLED=false`
-- бин `TelegramConfig` не инициализируется, и приложение не падает на регистрации бота.
-
-Ограничения режима:
-- чат-бот в Telegram (команды `/start`, `/add` и т.д.) не работает;
-- Mini App работает штатно, но API по-прежнему требует `X-Telegram-Init-Data` для защищенных endpoint'ов.
-
-### Настройка miniapp-only
-
-1. Создать `.env`:
-```bash
-cp .env.example .env
-```
-
-2. Указать минимум:
-```env
-TELEGRAM_BOT_ENABLED=false
-APP_PUBLIC_BASE_URL=https://your-domain.example
-WEB_CORS_ALLOWED_ORIGINS=https://your-domain.example
-```
-
-3. Запуск:
-```bash
-docker compose --profile miniapp-only up -d --build plant-miniapp
-```
-
-4. Проверка:
-```bash
-curl -fsS https://your-domain.example/actuator/health
-# ожидается: {"status":"UP"}
-```
-
-### Как вернуться в полный режим
-
-```env
-TELEGRAM_BOT_ENABLED=true
-TELEGRAM_BOT_TOKEN=<real_token>
-TELEGRAM_BOT_USERNAME=<real_username>
-```
-
-```bash
-docker compose up -d --build plant-bot
-```
-
-## URL
-
-- API: `https://<domain>/api/...`
-- Mini App: `https://<domain>/mini-app/`
-- PWA: `https://<domain>/pwa/`
-- Healthcheck: `https://<domain>/actuator/health`
-
-В BotFather для WebApp указывать:
-`https://<domain>/mini-app/`
-
-## Переменные для бота + Mini App + PWA
-
-Минимум для production:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_BOT_USERNAME`
-- `OPENROUTER_API_KEY`
-- `APP_PUBLIC_BASE_URL` (например `https://plant.okgk.ru`)
-- `APP_SECURITY_JWT_SECRET` (длинный секрет, не дефолтное значение)
+- `APP_SECURITY_JWT_SECRET`
+- optional: `OPENROUTER_API_KEY`, `OPENWEATHER_API_KEY`, `WEB_PUSH_VAPID_*`
 
-Для сборки PWA в Docker (build args через `docker-compose.yml`):
-- `PWA_VITE_API_BASE_URL` (обычно пусто для same-origin)
-- `PWA_VITE_TELEGRAM_BOT_USERNAME` (username бота)
-- `PWA_VITE_PWA_URL` (например `https://plant.okgk.ru/pwa/`)
-- `PWA_VITE_BASE_PATH` (для reverse proxy, по умолчанию `/pwa/`)
-
-Отдельный «PWA токен» не нужен: PWA авторизуется через backend JWT.
-
-Ночной backup SQLite (встроен в backend):
-- `APP_BACKUP_ENABLED=true`
-- `APP_BACKUP_CRON="0 10 3 * * *"` (каждую ночь в 03:10)
-- `APP_BACKUP_ZONE=Europe/Moscow`
-- `APP_BACKUP_PATH=./data/backups`
-- `APP_BACKUP_RETENTION_DAYS=7`
-- `APP_BACKUP_FILE_PREFIX=plantbot-backup`
-
-В админ-панели PWA доступно:
-- просмотр списка backup-файлов;
-- восстановление базы из выбранного backup (для `ROLE_ADMIN`).
-
-## Установка PWA на iPhone/Android
-
-При открытии `/pwa/` автоматически показывается карточка-инструкция с определением платформы:
-- iPhone (iOS Safari): шаги через «Поделиться» → «На экран Домой»
-- Android: шаги через меню браузера → «Установить приложение / Добавить на главный экран»
-
-Если браузер поддерживает `beforeinstallprompt`, дополнительно показывается кнопка «Установить PWA».
-
-## Portainer Stack (copy/paste)
-
-```yaml
-services:
-  plant-bot:
-    build:
-      context: /path/to/plant-bot
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
-        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
-        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
-    image: ghcr.io/pronin-ni/plant-bot:latest
-    container_name: plant-bot
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    environment:
-      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
-      TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME}"
-      TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-true}"
-      BOT_UPDATE_THREADS: "${BOT_UPDATE_THREADS:-4}"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
-      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
-      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
-      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
-      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
-      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
-      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
-      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
-      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
-      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
-      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
-      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
-      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
-      APP_SECURITY_JWT_SECRET: "${APP_SECURITY_JWT_SECRET}"
-      APP_SECURITY_JWT_TTL_SECONDS: "${APP_SECURITY_JWT_TTL_SECONDS:-2592000}"
-      APP_SECURITY_JWT_ISSUER: "${APP_SECURITY_JWT_ISSUER:-plant-care}"
-      TZ: "Europe/Moscow"
-      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
-      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
-    volumes:
-      - plantbot-data:/app/data
-
-  # Профиль для Mini App без Telegram-бота
-  plant-miniapp:
-    profiles: ["miniapp-only"]
-    build:
-      context: /path/to/plant-bot
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: "${PWA_VITE_API_BASE_URL:-}"
-        VITE_TELEGRAM_BOT_USERNAME: "${PWA_VITE_TELEGRAM_BOT_USERNAME:-}"
-        VITE_PWA_URL: "${PWA_VITE_PWA_URL:-}"
-    image: ghcr.io/pronin-ni/plant-bot:latest
-    container_name: plant-miniapp
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    environment:
-      TELEGRAM_BOT_ENABLED: "false"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL}"
-      OPENROUTER_MODEL_PLANT: "${OPENROUTER_MODEL_PLANT}"
-      OPENROUTER_MODEL_PHOTO_IDENTIFY: "${OPENROUTER_MODEL_PHOTO_IDENTIFY}"
-      OPENROUTER_MODEL_PHOTO_DIAGNOSE: "${OPENROUTER_MODEL_PHOTO_DIAGNOSE}"
-      OPENROUTER_MODEL_CHAT: "${OPENROUTER_MODEL_CHAT}"
-      OPENROUTER_CARE_CACHE_TTL_MINUTES: "${OPENROUTER_CARE_CACHE_TTL_MINUTES:-10080}"
-      OPENROUTER_WATERING_CACHE_TTL_MINUTES: "${OPENROUTER_WATERING_CACHE_TTL_MINUTES:-720}"
-      OPENROUTER_CHAT_CACHE_TTL_MINUTES: "${OPENROUTER_CHAT_CACHE_TTL_MINUTES:-10080}"
-      OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
-      PERENUAL_API_KEY: "${PERENUAL_API_KEY}"
-      TELEGRAM_AUTH_MAX_AGE_SECONDS: "${TELEGRAM_AUTH_MAX_AGE_SECONDS:-86400}"
-      WEB_CORS_ALLOWED_ORIGINS: "${WEB_CORS_ALLOWED_ORIGINS:-*}"
-      APP_PUBLIC_BASE_URL: "${APP_PUBLIC_BASE_URL:-http://localhost:8080}"
-      APP_SECURITY_JWT_SECRET: "${APP_SECURITY_JWT_SECRET}"
-      APP_SECURITY_JWT_TTL_SECONDS: "${APP_SECURITY_JWT_TTL_SECONDS:-2592000}"
-      APP_SECURITY_JWT_ISSUER: "${APP_SECURITY_JWT_ISSUER:-plant-care}"
-      TZ: "Europe/Moscow"
-      HTTP_CLIENT_CONNECT_TIMEOUT_MS: "${HTTP_CLIENT_CONNECT_TIMEOUT_MS:-5000}"
-      HTTP_CLIENT_READ_TIMEOUT_MS: "${HTTP_CLIENT_READ_TIMEOUT_MS:-15000}"
-    ports:
-      - "${MINIAPP_PORT:-8080}:8080"
-    volumes:
-      - plantbot-data:/app/data
-
-volumes:
-  plantbot-data:
-```
-
-## Основные REST API (Mini App)
-
-- `POST /api/auth/validate`
-- `GET /api/plants`
-- `GET /api/plants/{id}`
-- `POST /api/plants`
-- `DELETE /api/plants/{id}`
-- `PUT /api/plants/{id}/water`
-- `POST /api/plants/{id}/photo`
-- `GET /api/plants/search?q=...`
-- `GET /api/calendar`
-- `GET /api/stats`
-- `GET /api/learning`
-- `POST /api/users/city`
-
-
-## Home Assistant интеграция
-
-Что поддерживается:
-- безопасное подключение Home Assistant (`/api/home-assistant/config`)
-- токен хранится только на backend в зашифрованном виде (AES-GCM), на frontend не возвращается
-- автообнаружение комнат (Area) и сенсоров `temperature_*`, `humidity_*`, `soil_moisture_*`, `illuminance_*`
-- ручной выбор `entity_id` для температуры, влажности, влажности почвы, освещенности
-- почасовой polling Home Assistant c random offset, timeout 10s, retries=3
-- fallback на базовый график, если HA недоступен > 6 часов
-- Telegram уведомление пользователю при длительной недоступности HA
-- мягкая автокоррекция интервала полива (не больше ±35%)
-- отключение автокоррекции для конкретного растения
-- история корректировок и история условий за 7 дней
-
-Новые API:
-- `POST /api/home-assistant/config`
-- `GET /api/home-assistant/rooms-and-sensors`
-- `PUT /api/plants/{plantId}/room`
-- `GET /api/plants/{plantId}/conditions`
-- `GET /api/plants/{plantId}/history-conditions?days=7`
-
-HA полностью опционален:
-- пользователь указывает URL и токен прямо в Mini App (`Settings -> Home Assistant`);
-- если HA не подключён, расчеты идут по базовой логике без HA;
-- отдельные переменные для HA в `.env` не нужны.
-
-Безопасность токена HA:
-- токен не отдаётся на фронтенд;
-- backend хранит его в зашифрованном виде;
-- ключ шифрования создаётся автоматически локально в `./data/ha-master.key`.
-
-Frontend (Mini App):
-- `Settings -> Home Assistant` — подключение по URL + Token
-- `Add Plant` и `Plant Detail` — выбор комнаты/сенсоров и автокоррекции
-- `Plant Card` и `Plant Detail` — виджет условий
-- `Plant Detail` — график температуры/влажности за 7 дней + предупреждение по освещенности
-
-## OpenRouter: модели для фото (identify/diagnose)
-
-Для фото-запросов используются отдельные переменные:
-- `OPENROUTER_MODEL_PHOTO_IDENTIFY` — модель для `POST /api/plant/identify-openrouter`
-- `OPENROUTER_MODEL_PHOTO_DIAGNOSE` — модель для `POST /api/plant/diagnose-openrouter`
-
-Рекомендуемые значения:
-- identify (быстро/дешево): `google/gemini-flash-1.5` или `qwen/qwen-vl-max`
-- diagnose (точнее): `google/gemini-1.5-pro` или `anthropic/claude-3.5-sonnet`
-
-Fallback-логика на backend:
-- identify: `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
-- diagnose: `OPENROUTER_MODEL_PHOTO_DIAGNOSE` -> `OPENROUTER_MODEL_PHOTO_IDENTIFY` -> `OPENROUTER_MODEL_PLANT` -> `OPENROUTER_MODEL`
-
-Важно:
-- фронтенд никогда не ходит в OpenRouter напрямую;
-- фото всегда отправляется на backend, и уже backend делает OpenRouter `/chat/completions` с `content: [text, image_url]`.
-
-## Опциональная синхронизация с Google/Apple календарём
-
-Поддерживается подписка на динамический ICS-feed:
-- `GET /api/calendar/sync` — получить статус и ссылки
-- `POST /api/calendar/sync` — включить/выключить sync
-- `GET /api/calendar/ics/{token}` — ICS календарь (подписка)
-
-Как работает:
-- пользователь включает sync в настройках Mini App;
-- получает `webcal://...`/`https://...` ссылку;
-- импортирует в Google/Apple/другой календарь;
-- при добавлении/изменении растений события обновляются через подписку на feed.
-
-## Локальная разработка Mini App
+### 3. Run backend
 
 ```bash
-cd plant-care-mini-app
+./gradlew bootRun
+```
+
+Backend default URL: `http://localhost:8080`
+
+### 4. Run PWA frontend
+
+```bash
+cd plant-care-pwa
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-
-## Проверка перед продом
-
-```bash
-# backend
-./gradlew clean build -x test
-
-# frontend
-cd plant-care-mini-app && npm install && npm run build
-
-# docker config
-docker compose config
-```
-
-Smoke-check для miniapp-only:
-```bash
-docker compose --profile miniapp-only up -d --build plant-miniapp
-curl -fsS http://localhost:8080/actuator/health
-```
-
-
-## Локальный запуск без Telegram токена
-
-Для разработки Mini App/REST без Telegram initData:
+### 5. Run Mini App frontend (optional)
 
 ```bash
-TELEGRAM_BOT_ENABLED=false APP_DEV_AUTH_ENABLED=true ./gradlew bootRun
+cd ../plant-care-mini-app
+cp .env.example .env
+npm install
+npm run dev
 ```
 
-В этом режиме используется fallback-пользователь из переменных:
+## Running with Docker
 
-- `APP_DEV_TELEGRAM_ID`
-- `APP_DEV_USERNAME`
+```bash
+docker compose up -d --build
+```
 
-Использовать только для локальной разработки.
+Main service URL: `http://localhost:8080`
+
+## Running the Project
+
+### Backend
+
+```bash
+./gradlew bootRun
+```
+
+### PWA frontend
+
+```bash
+cd plant-care-pwa
+npm run dev
+```
+
+### Mini App frontend
+
+```bash
+cd plant-care-mini-app
+npm run dev
+```
+
+### Docker
+
+```bash
+docker compose up -d --build
+```
+
+## Project Structure
+
+```text
+src/main/java/com/example/plantbot
+  controller/      REST controllers
+  service/         business logic
+  repository/      JPA repositories
+  domain/          JPA entities + enums
+  security/        JWT filter/service/principal
+  config/          Spring and infra config
+
+plant-care-pwa/    PWA frontend
+plant-care-mini-app/ Telegram Mini App frontend
+```
+
+Detailed docs:
+
+- `DOCUMENTATION.md`
+- `ARCHITECTURE.md`
+- `DEVELOPMENT_GUIDE.md`
+- `AI_CONTEXT.md`
+
+## API Overview
+
+Key groups:
+
+- `/api/plants`, `/api/calendar`, `/api/stats`, `/api/learning`
+- `/api/assistant/*`, `/api/plant/*` (OpenRouter vision)
+- `/api/openrouter/*` (model/preferences)
+- `/api/weather/*`
+- `/api/home-assistant/*`
+- `/api/pwa/auth/*`, `/api/pwa/push/*`, `/api/pwa/migration/*`
+- `/api/admin/*` (ROLE_ADMIN)
+
+Full endpoint documentation is in `DOCUMENTATION.md`.
+
+## Development
+
+- Backend: `./gradlew build` / `./gradlew bootRun`
+- Frontend PWA: `npm run dev`, `npm run build` (inside `plant-care-pwa`)
+- Frontend Mini App: `npm run dev`, `npm run build` (inside `plant-care-mini-app`)
+
+See `DEVELOPMENT_GUIDE.md` for task-oriented implementation recipes.
+
+## Contributing
+
+1. Create a feature branch.
+2. Keep backend/frontend contract in sync.
+3. Prefer small, isolated PRs.
+4. Add/update docs for each behavioral change.
+5. Validate manually because automated tests are currently minimal.

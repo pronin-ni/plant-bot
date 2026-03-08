@@ -86,6 +86,7 @@ public class PwaAuthService {
   }
 
   private PwaAuthResponse finalizeTelegramLogin(User user) {
+    ensureNotBlocked(user);
     ensureUserDefaults(user);
     if (user.getTelegramId() != null && user.getTelegramId().equals(adminTelegramId)) {
       user.getRoles().add(UserRole.ROLE_ADMIN);
@@ -179,6 +180,7 @@ public class PwaAuthService {
 
     VerifiedExternalUser verified = verifier.verify(request);
     User user = resolveUserForExternalIdentity(verified);
+    ensureNotBlocked(user);
     ensureUserDefaults(user);
     user = userService.save(user);
     upsertIdentity(user, verified);
@@ -186,6 +188,7 @@ public class PwaAuthService {
   }
 
   public PwaUserResponse me(User user) {
+    ensureNotBlocked(user);
     ensureUserDefaults(user);
     return toUserResponse(user);
   }
@@ -269,6 +272,12 @@ public class PwaAuthService {
       return null;
     }
     return email.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private void ensureNotBlocked(User user) {
+    if (Boolean.TRUE.equals(user.getBlocked())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Аккаунт заблокирован");
+    }
   }
 
   private Long allocatePseudoTelegramId() {

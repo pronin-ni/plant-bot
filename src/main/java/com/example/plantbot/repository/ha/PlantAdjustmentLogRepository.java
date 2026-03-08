@@ -9,4 +9,6 @@ import java.util.List;
 
 public interface PlantAdjustmentLogRepository extends JpaRepository<PlantAdjustmentLog, Long> {
   List<PlantAdjustmentLog> findByPlantAndCreatedAtAfterOrderByCreatedAtDesc(Plant plant, Instant createdAt);
+
+  long deleteByPlantIn(List<Plant> plants);
 }

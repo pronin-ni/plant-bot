@@ -1,7 +1,9 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.util.CityOption;
 import com.example.plantbot.util.WeatherData;
+import com.example.plantbot.util.WeatherForecastDay;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +16,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -76,43 +79,51 @@ public class WeatherService {
   private int rainMaxKeys;
 
   public Optional<WeatherData> getCurrent(String city, Double lat, Double lon) {
-    String key = cacheKey(city, lat, lon);
+    return getCurrent(city, lat, lon, WeatherProvider.OPEN_METEO);
+  }
+
+  public Optional<WeatherData> getCurrent(String city) {
+    return getCurrent(city, null, null);
+  }
+
+  public Optional<WeatherData> getCurrent(String city, Double lat, Double lon, WeatherProvider provider) {
+    WeatherProvider effective = provider == null ? WeatherProvider.OPEN_METEO : provider;
+    String key = cacheKey(city, lat, lon) + ":" + effective.name();
     CachedWeather cached = cache.get(key);
     if (cached != null && cached.expiresAt().isAfter(Instant.now())) {
       return Optional.of(cached.data());
     }
 
-    // 1) Бесплатный источник без API-ключа (приоритетный)
-    if (openMeteoEnabled) {
-      Optional<WeatherData> meteoByCoords = requestOpenMeteoByCoords(lat, lon, city);
-      if (meteoByCoords.isPresent()) {
-        return storeWeather(key, meteoByCoords.get());
-      }
-      Optional<WeatherData> meteoByCity = requestOpenMeteoByCityCandidates(city);
-      if (meteoByCity.isPresent()) {
-        return storeWeather(key, meteoByCity.get());
-      }
+    Optional<WeatherData> result = switch (effective) {
+      case OPEN_METEO -> requestOpenMeteo(lat, lon, city);
+      case WEATHERAPI, TOMORROW, OPENWEATHER -> requestOpenWeatherLike(lat, lon, city);
+    };
+
+    if (result.isEmpty() && effective != WeatherProvider.OPEN_METEO) {
+      // fallback на open-meteo если платформа не доступна
+      result = requestOpenMeteo(lat, lon, city);
     }
 
-    // 2) Optional fallback на OpenWeather
-    if (hasOpenWeatherKey()) {
-      Optional<WeatherData> fromCoords = requestOpenWeatherByCoords(lat, lon);
-      if (fromCoords.isPresent()) {
-        return storeWeather(key, fromCoords.get());
-      }
-
-      Optional<WeatherData> fromCity = requestOpenWeatherByCityCandidates(city);
-      if (fromCity.isPresent()) {
-        return storeWeather(key, fromCity.get());
-      }
+    result.ifPresent(data -> storeWeather(key, data));
+    if (result.isEmpty()) {
+      log.warn("Weather request failed for city='{}' provider={} lat={} lon={}", city, effective, lat, lon);
     }
-
-    log.warn("Weather request failed for city='{}' lat={} lon={}", city, lat, lon);
-    return Optional.empty();
+    return result;
   }
 
-  public Optional<WeatherData> getCurrent(String city) {
-    return getCurrent(city, null, null);
+  public List<WeatherForecastDay> getForecast(String city, Double lat, Double lon, int days, WeatherProvider provider) {
+    int safeDays = Math.max(1, Math.min(days, 7));
+    WeatherProvider effective = provider == null ? WeatherProvider.OPEN_METEO : provider;
+    Optional<List<WeatherForecastDay>> result = switch (effective) {
+      case OPEN_METEO -> requestOpenMeteoForecast(lat, lon, city, safeDays);
+      case WEATHERAPI, TOMORROW, OPENWEATHER -> requestOpenWeatherForecast(lat, lon, city, safeDays);
+    };
+
+    if (result.isEmpty() && effective != WeatherProvider.OPEN_METEO) {
+      result = requestOpenMeteoForecast(lat, lon, city, safeDays);
+    }
+
+    return result.orElse(List.of());
   }
 
   public double getAccumulatedRainMm(String city, Double lat, Double lon, int hours) {
@@ -205,6 +216,14 @@ public class WeatherService {
     return executeOpenMeteoRequest(url, "open-meteo coords " + (debug == null ? "" : debug));
   }
 
+  private Optional<WeatherData> requestOpenMeteo(Double lat, Double lon, String city) {
+    Optional<WeatherData> byCoords = requestOpenMeteoByCoords(lat, lon, city);
+    if (byCoords.isPresent()) {
+      return byCoords;
+    }
+    return requestOpenMeteoByCityCandidates(city);
+  }
+
   private Optional<WeatherData> requestOpenMeteoByCityCandidates(String city) {
     if (city == null || city.isBlank()) {
       return Optional.empty();
@@ -266,6 +285,14 @@ public class WeatherService {
     return Optional.empty();
   }
 
+  private Optional<WeatherData> requestOpenWeatherLike(Double lat, Double lon, String city) {
+    Optional<WeatherData> fromCoords = requestOpenWeatherByCoords(lat, lon);
+    if (fromCoords.isPresent()) {
+      return fromCoords;
+    }
+    return requestOpenWeatherByCityCandidates(city);
+  }
+
   private Optional<WeatherData> executeOpenWeatherRequest(String url, String debugName) {
     try {
       JsonNode response = restTemplate.getForObject(url, JsonNode.class);
@@ -286,6 +313,117 @@ public class WeatherService {
       log.debug("OpenWeather request error for '{}': {}", debugName, ex.getMessage());
       return Optional.empty();
     }
+  }
+
+  private Optional<List<WeatherForecastDay>> requestOpenMeteoForecast(Double lat, Double lon, String city, int days) {
+    try {
+      CityOption resolvedCity = resolveCityForForecast(lat, lon, city);
+      if (resolvedCity == null) {
+        return Optional.empty();
+      }
+      String url = String.format(Locale.ROOT,
+          "%s?latitude=%.6f&longitude=%.6f&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean&timezone=auto&forecast_days=%d",
+          openMeteoBaseUrl, resolvedCity.lat(), resolvedCity.lon(), days);
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode daily = response == null ? null : response.path("daily");
+      if (daily == null || daily.isMissingNode()) {
+        return Optional.empty();
+      }
+      JsonNode dates = daily.path("time");
+      JsonNode tMax = daily.path("temperature_2m_max");
+      JsonNode tMin = daily.path("temperature_2m_min");
+      JsonNode humidity = daily.path("relative_humidity_2m_mean");
+      int len = dates.size();
+      List<WeatherForecastDay> list = new ArrayList<>();
+      for (int i = 0; i < len; i++) {
+        String dateIso = dates.get(i).asText("");
+        double max = tMax.path(i).asDouble(Double.NaN);
+        double min = tMin.path(i).asDouble(Double.NaN);
+        double hum = humidity.path(i).asDouble(Double.NaN);
+        if (dateIso.isEmpty() || Double.isNaN(max) || Double.isNaN(min)) {
+          continue;
+        }
+        double avg = (max + min) / 2.0;
+        list.add(new WeatherForecastDay(dateIso, avg, Double.isNaN(hum) ? null : hum, null));
+        if (list.size() >= days) {
+          break;
+        }
+      }
+      return list.isEmpty() ? Optional.empty() : Optional.of(list);
+    } catch (Exception ex) {
+      log.debug("Open-Meteo forecast failed for city='{}': {}", city, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private Optional<List<WeatherForecastDay>> requestOpenWeatherForecast(Double lat, Double lon, String city, int days) {
+    if (!hasOpenWeatherKey()) {
+      return Optional.empty();
+    }
+    try {
+      CityOption resolvedCity = resolveCityForForecast(lat, lon, city);
+      if (resolvedCity == null) {
+        return Optional.empty();
+      }
+      // OpenWeather free tier 5-day/3h forecast
+      String url = String.format(Locale.ROOT, "https://api.openweathermap.org/data/2.5/forecast?lat=%.6f&lon=%.6f&appid=%s&units=%s",
+          resolvedCity.lat(), resolvedCity.lon(), apiKey, units);
+      JsonNode response = restTemplate.getForObject(url, JsonNode.class);
+      JsonNode list = response == null ? null : response.path("list");
+      if (list == null || !list.isArray()) {
+        return Optional.empty();
+      }
+      Map<String, List<Double>> dayTemps = new LinkedHashMap<>();
+      Map<String, List<Double>> dayHum = new LinkedHashMap<>();
+      for (JsonNode item : list) {
+        String dtTxt = item.path("dt_txt").asText("");
+        if (dtTxt.length() < 10) {
+          continue;
+        }
+        String dayKey = dtTxt.substring(0, 10);
+        double temp = item.path("main").path("temp").asDouble(Double.NaN);
+        double hum = item.path("main").path("humidity").asDouble(Double.NaN);
+        if (!Double.isNaN(temp)) {
+          dayTemps.computeIfAbsent(dayKey, k -> new ArrayList<>()).add(temp);
+        }
+        if (!Double.isNaN(hum)) {
+          dayHum.computeIfAbsent(dayKey, k -> new ArrayList<>()).add(hum);
+        }
+      }
+      List<WeatherForecastDay> result = new ArrayList<>();
+      for (Map.Entry<String, List<Double>> entry : dayTemps.entrySet()) {
+        String day = entry.getKey();
+        List<Double> temps = entry.getValue();
+        double avg = temps.stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
+        Double hum = null;
+        List<Double> hums = dayHum.get(day);
+        if (hums != null && !hums.isEmpty()) {
+          hum = hums.stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
+          if (Double.isNaN(hum)) {
+            hum = null;
+          }
+        }
+        if (Double.isNaN(avg)) {
+          continue;
+        }
+        result.add(new WeatherForecastDay(day, avg, hum, null));
+        if (result.size() >= days) {
+          break;
+        }
+      }
+      return result.isEmpty() ? Optional.empty() : Optional.of(result);
+    } catch (Exception ex) {
+      log.debug("OpenWeather forecast failed for city='{}': {}", city, ex.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private CityOption resolveCityForForecast(Double lat, Double lon, String city) {
+    if (lat != null && lon != null) {
+      return new CityOption(city == null ? "" : city, lat, lon, null);
+    }
+    List<CityOption> options = resolveCityOptions(city, 1);
+    return options.isEmpty() ? null : options.get(0);
   }
 
   private List<CityOption> fetchOpenMeteoGeoCandidates(String cityQuery, int limit) {

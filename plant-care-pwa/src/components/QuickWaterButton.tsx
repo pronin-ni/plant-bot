@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ interface QuickWaterButtonProps {
   isOverdue?: boolean;
   onWater: () => Promise<unknown> | unknown;
   onSuccess?: (meta: { rescued: boolean }) => void;
+  onBurstStart?: () => void;
+  onBurstEnd?: () => void;
 }
 
 interface ConfettiPiece {
@@ -18,6 +20,12 @@ interface ConfettiPiece {
   color: string;
   rotate: number;
   drift: number;
+}
+
+interface DropPiece {
+  id: number;
+  left: string;
+  delay: number;
 }
 
 const CONFETTI_COLORS = ['#34C759', '#8BC34A', '#F59E0B', '#60A5FA', '#F472B6'];
@@ -32,16 +40,28 @@ function buildConfettiPieces(): ConfettiPiece[] {
   }));
 }
 
+function buildWaterDrops(): DropPiece[] {
+  return Array.from({ length: 8 }, (_, index) => ({
+    id: index,
+    left: `${10 + index * 10}%`,
+    delay: index * 0.035
+  }));
+}
+
 export function QuickWaterButton({
   isLoading = false,
   isOverdue = false,
   onWater,
-  onSuccess
+  onSuccess,
+  onBurstStart,
+  onBurstEnd
 }: QuickWaterButtonProps) {
   const [burst, setBurst] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
   const confettiPieces = useMemo(() => buildConfettiPieces(), []);
+  const waterDrops = useMemo(() => buildWaterDrops(), []);
 
   const handleClick = async () => {
     if (isLoading || isRunning) {
@@ -50,15 +70,20 @@ export function QuickWaterButton({
 
     setIsRunning(true);
     hapticImpact('heavy');
+    navigator.vibrate?.([50, 30, 50]);
 
     try {
       await onWater();
 
       setBurst(true);
       setConfirmed(true);
+      onBurstStart?.();
       onSuccess?.({ rescued: isOverdue });
 
-      window.setTimeout(() => setBurst(false), 420);
+      window.setTimeout(() => {
+        setBurst(false);
+        onBurstEnd?.();
+      }, 840);
       window.setTimeout(() => setConfirmed(false), 980);
     } catch {
       // Ошибка уже обрабатывается на уровне mutation (toast/haptic),
@@ -82,14 +107,31 @@ export function QuickWaterButton({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <span className="water-drop water-drop-1" />
-            <span className="water-drop water-drop-2" />
-            <span className="water-drop water-drop-3" />
+            {!prefersReducedMotion ? (
+              <>
+                {waterDrops.map((piece) => (
+                  <motion.span
+                    key={`drop-${piece.id}`}
+                    className="absolute top-[-8px] h-2 w-1.5 rounded-b-full rounded-t-[60%] bg-cyan-300/90"
+                    style={{ left: piece.left }}
+                    initial={{ y: -6, opacity: 0 }}
+                    animate={{ y: 26, opacity: [0, 1, 0.2] }}
+                    transition={{ duration: 0.42, delay: piece.delay, ease: 'easeIn' }}
+                  />
+                ))}
+                <motion.span
+                  className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/30"
+                  initial={{ scale: 0.3, opacity: 0 }}
+                  animate={{ scale: [0.3, 1.1, 0.8], opacity: [0, 0.7, 0] }}
+                  transition={{ duration: 0.55, ease: 'easeOut' }}
+                />
+              </>
+            ) : null}
 
             {confettiPieces.map((piece) => (
               <motion.span
                 key={piece.id}
-                className="absolute top-1/2 h-1.5 w-1.5 rounded-[2px]"
+                className="absolute top-1/2 h-1.5 w-2 rounded-[4px]"
                 style={{ left: piece.left, backgroundColor: piece.color }}
                 initial={{ y: 4, x: 0, opacity: 0.95, rotate: 0, scale: 0.95 }}
                 animate={{
@@ -102,6 +144,16 @@ export function QuickWaterButton({
                 transition={{ duration: 0.62, ease: 'easeOut' }}
               />
             ))}
+
+            <motion.span
+              className="absolute left-1/2 top-[-18px] -translate-x-1/2 whitespace-nowrap text-[11px] font-semibold text-emerald-600 dark:text-emerald-300"
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: -8, scale: 1 }}
+              exit={{ opacity: 0, y: -14 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            >
+              Спасибо! 🌿
+            </motion.span>
           </motion.span>
         ) : null}
       </AnimatePresence>

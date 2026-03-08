@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, ChevronLeft, ChevronRight, Loader2, Search, Sparkles } from 'lucide-react';
 
 import { PlantPhotoCapture } from '@/app/AddPlant/PlantPhotoCapture';
@@ -77,6 +77,7 @@ export function WizardAddPlant() {
   const telegramUserId = useAuthStore((s) => s.telegramUserId);
 
   const [stepIndex, setStepIndex] = useState(0);
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [category, setCategory] = useState<PlantCategory>('HOME');
   const [name, setName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,6 +96,9 @@ export function WizardAddPlant() {
   const [type, setType] = useState<PlantType>('DEFAULT');
   const [profileSource, setProfileSource] = useState<string | null>(null);
   const [aiHint, setAiHint] = useState<string | null>(null);
+  const [aiFoundPulse, setAiFoundPulse] = useState(0);
+  const [aiFoundName, setAiFoundName] = useState<string>('');
+  const prefersReducedMotion = useReducedMotion();
 
   const [manualMode, setManualMode] = useState(false);
   const [waterVolumeMl, setWaterVolumeMl] = useState<number>(260);
@@ -292,8 +296,10 @@ export function WizardAddPlant() {
   }, [searchQuery, category]);
 
   const applyIdentify = (result: OpenRouterIdentifyResult) => {
+    let resolvedName = '';
     if (result.russianName?.trim()) {
       const resolved = result.russianName.trim();
+      resolvedName = resolved;
       setName(resolved);
       setSearchQuery(resolved);
       if (!suggestProfileMutation.isPending) {
@@ -309,7 +315,13 @@ export function WizardAddPlant() {
       setAiHint(`AI определил неуверенно (${result.confidence}%). Проверьте название вручную.`);
     } else {
       hapticImpact('medium');
+      navigator.vibrate?.(100);
       setAiHint(`AI: ${result.russianName ?? 'название не найдено'} (${result.confidence}%)`);
+    }
+
+    if (resolvedName) {
+      setAiFoundName(resolvedName);
+      setAiFoundPulse((prev) => prev + 1);
     }
   };
 
@@ -347,10 +359,12 @@ export function WizardAddPlant() {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, y: 14, scale: 0.985 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.99 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 30, mass: 1 }}
+          initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: 8 }}
+          animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+          exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.86, x: stepDirection === 1 ? -42 : 42 }}
+          transition={prefersReducedMotion
+            ? { duration: 0.16 }
+            : { type: 'spring', stiffness: 350, damping: 28, mass: 1 }}
           className="space-y-3"
         >
           {currentStep === 'category' ? (
@@ -475,6 +489,39 @@ export function WizardAddPlant() {
               </div>
 
               <PlantPhotoCapture onIdentified={applyIdentify} />
+              <AnimatePresence>
+                {aiFoundPulse > 0 && aiFoundName ? (
+                  <motion.div
+                    key={`ai-found-${aiFoundPulse}`}
+                    className="relative overflow-hidden rounded-ios-button border border-ios-accent/40 bg-ios-accent/12 p-3"
+                    initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -22, scale: 0.92 }}
+                    animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                    exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                    transition={prefersReducedMotion
+                      ? { duration: 0.18 }
+                      : { type: 'spring', stiffness: 350, damping: 26, bounce: 0.3 }}
+                  >
+                    {!prefersReducedMotion ? (
+                      <div className="pointer-events-none absolute inset-0">
+                        {Array.from({ length: 8 }).map((_, index) => (
+                          <motion.span
+                            key={index}
+                            className="absolute h-1.5 w-1.5 rounded-full bg-emerald-300/80"
+                            style={{ left: `${12 + index * 10}%`, top: `${36 + (index % 2) * 14}%` }}
+                            initial={{ opacity: 0, scale: 0.65, y: 8 }}
+                            animate={{ opacity: [0, 1, 0], scale: [0.65, 1.15, 0.9], y: [8, -14, -24] }}
+                            transition={{ duration: 0.8, delay: index * 0.02, ease: 'easeOut' }}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <p className="relative text-sm font-semibold text-ios-text">
+                      Растение найдено! {aiFoundName}
+                    </p>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
               {aiHint ? (
                 <div className="ios-blur-card flex items-start gap-2 p-3 text-sm text-ios-subtext">
                   <Sparkles className="mt-0.5 h-4 w-4 text-ios-accent" />
@@ -595,6 +642,7 @@ export function WizardAddPlant() {
           disabled={stepIndex === 0}
           onClick={() => {
             hapticImpact('light');
+            setStepDirection(-1);
             setStepIndex((prev) => Math.max(0, prev - 1));
           }}
         >
@@ -607,6 +655,7 @@ export function WizardAddPlant() {
             disabled={!canGoNext}
             onClick={() => {
               hapticImpact('light');
+              setStepDirection(1);
               if (currentStep === 'search' && name.trim() && !suggestProfileMutation.isPending) {
                 suggestProfileMutation.mutate(name.trim());
               }

@@ -7,8 +7,11 @@ public record AdminUserItemResponse(
     Long telegramId,
     String username,
     String firstName,
+    String email,
     String city,
     Instant createdAt,
+    Instant lastSeenAt,
+    Boolean blocked,
     long plantCount
 ) {
 }

@@ -173,8 +173,11 @@ export interface AdminUserItemDto {
   telegramId: number;
   username?: string;
   firstName?: string;
+  email?: string;
   city?: string;
   createdAt?: string;
+  lastSeenAt?: string;
+  blocked?: boolean;
   plantCount: number;
 }
 
@@ -191,8 +194,10 @@ export interface AdminPlantItemDto {
   userId?: number;
   telegramId?: number;
   username?: string;
+  category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
   placement?: string;
   type?: string;
+  hasPhoto?: boolean;
   baseIntervalDays?: number;
   lastWateredDate?: string;
   nextWateringDate?: string;
@@ -204,6 +209,54 @@ export interface AdminPlantsDto {
   page: number;
   size: number;
   total: number;
+}
+
+export interface AdminPlantActionDto {
+  ok: boolean;
+  plantId: number;
+  message: string;
+}
+
+export interface AdminBulkPlantWaterDto {
+  ok: boolean;
+  total: number;
+  updated: number;
+  skipped: number;
+  message: string;
+}
+
+export interface AdminUserDetailsDto {
+  id: number;
+  telegramId: number;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  city?: string;
+  blocked?: boolean;
+  createdAt?: string;
+  lastSeenAt?: string;
+  lastSeenPwaAt?: string;
+  lastSeenTmaAt?: string;
+  plantCount: number;
+  overduePlants: number;
+  totalWaterings: number;
+  homeAssistantConnected: boolean;
+  homeAssistantInstanceName?: string;
+  homeAssistantBaseUrlMasked?: string;
+  homeAssistantLastSuccessAt?: string;
+  hasOpenRouterKey: boolean;
+  openrouterModelPlant?: string;
+  openrouterModelChat?: string;
+  openrouterModelPhotoIdentify?: string;
+  openrouterModelPhotoDiagnose?: string;
+  plants: AdminPlantItemDto[];
+}
+
+export interface AdminUserActionDto {
+  ok: boolean;
+  userId: number;
+  message: string;
 }
 
 export interface AdminStatsItemDto {
@@ -244,10 +297,23 @@ export interface AdminCacheClearDto {
   weatherRainSamples: number;
 }
 
+export interface AdminScopedCacheClearDto {
+  scope: string;
+  weatherEntries: number;
+  weatherRainKeys: number;
+  weatherRainSamples: number;
+  openRouterCareEntries: number;
+  openRouterWateringEntries: number;
+  openRouterChatEntries: number;
+  userCacheEntries: number;
+  message: string;
+}
+
 export interface AdminBackupItemDto {
   fileName: string;
   sizeBytes: number;
   modifiedAtEpochMs: number;
+  createdBy?: string;
 }
 
 export interface AdminBackupRestoreDto {
@@ -271,6 +337,24 @@ export interface AdminPushTestDto {
   delivered: number;
   message: string;
   endpoints: AdminPushEndpointResultDto[];
+}
+
+export interface AdminActivityLogItemDto {
+  at?: string;
+  type: string;
+  userId?: number;
+  telegramId?: number;
+  username?: string;
+  message: string;
+  severity?: 'info' | 'warning' | 'error' | string;
+}
+
+export interface AdminMonitoringDto {
+  onlineUsers: number;
+  activeUsers24h: number;
+  avgSessionMinutes: number;
+  errorsToday: number;
+  pushFailuresToday: number;
 }
 
 export interface PwaUserDto {
@@ -316,4 +400,39 @@ export interface PwaPushStatusDto {
 export interface PwaPushSubscribeDto {
   ok: boolean;
   subscriptionsCount: number;
+}
+
+export interface WeatherProviderDto {
+  id: string;
+  name: string;
+  description?: string;
+  free?: boolean;
+}
+
+export interface WeatherProvidersResponse {
+  providers: WeatherProviderDto[];
+  selected?: string | null;
+}
+
+export interface WeatherCurrentDto {
+  city: string;
+  tempC: number;
+  humidity: number;
+  icon?: string | null;
+  description?: string | null;
+  source: string;
+}
+
+export interface WeatherForecastItemDto {
+  date: string;
+  tempC: number;
+  humidity?: number | null;
+  icon?: string | null;
+  description?: string | null;
+}
+
+export interface WeatherForecastDto {
+  city: string;
+  source: string;
+  days: WeatherForecastItemDto[];
 }

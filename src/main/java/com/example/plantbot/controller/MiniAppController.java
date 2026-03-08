@@ -24,7 +24,6 @@ import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
-import com.example.plantbot.repository.AssistantChatHistoryRepository;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.PlantCatalogService;
@@ -81,6 +80,7 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -93,7 +93,6 @@ public class MiniAppController {
   private final WateringLogService wateringLogService;
   private final UserService userService;
   private final UserRepository userRepository;
-  private final AssistantChatHistoryRepository assistantChatHistoryRepository;
   private final AssistantChatHistoryService assistantChatHistoryService;
   private final PlantCatalogService plantCatalogService;
   private final PlantPresetCatalogService plantPresetCatalogService;
@@ -408,10 +407,11 @@ public class MiniAppController {
   @GetMapping("/assistant/history")
   public List<AssistantChatHistoryItemResponse> getAssistantHistory(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-      Authentication authentication
+      Authentication authentication,
+      @RequestParam(name = "limit", defaultValue = "50") int limit
   ) {
     User user = currentUserService.resolve(authentication, initData);
-    return assistantChatHistoryRepository.findTop10ByUserOrderByCreatedAtDesc(user).stream()
+    return assistantChatHistoryService.getRecent(user, limit).stream()
         .map(item -> new AssistantChatHistoryItemResponse(
             item.getId(),
             item.getQuestion(),
@@ -420,6 +420,16 @@ public class MiniAppController {
             item.getCreatedAt()
         ))
         .toList();
+  }
+
+  @DeleteMapping("/assistant/history")
+  public Map<String, Object> clearAssistantHistory(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    assistantChatHistoryService.clearHistory(user);
+    return Map.of("ok", true);
   }
 
   @PostMapping("/plants/ai-recommend")

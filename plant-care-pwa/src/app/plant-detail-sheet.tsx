@@ -48,6 +48,7 @@ export function PlantDetailSheet() {
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteShake, setDeleteShake] = useState(false);
+  const [wateringPulse, setWateringPulse] = useState(0);
 
   const plantQuery = useQuery({
     queryKey: ['plant', selectedPlantId],
@@ -105,8 +106,13 @@ export function PlantDetailSheet() {
       setPreviewDataUrl(null);
       setDeleteConfirmOpen(false);
       setDeleteShake(false);
+      setWateringPulse(0);
     }
   }, [selectedPlantId]);
+
+  const triggerWateringPulse = () => {
+    setWateringPulse((prev) => prev + 1);
+  };
 
   return (
     <BottomSheet open={selectedPlantId !== null} onClose={closePlantDetail}>
@@ -120,6 +126,7 @@ export function PlantDetailSheet() {
             plant={plant}
             previewDataUrl={previewDataUrl}
             photoUploading={photoMutation.isPending}
+            wateringPulse={wateringPulse}
             onRequestDelete={() => {
               hapticImpact('rigid');
               setDeleteConfirmOpen(true);
@@ -128,7 +135,8 @@ export function PlantDetailSheet() {
               if (!selectedPlantId) {
                 return;
               }
-              hapticImpact('light');
+              hapticImpact('medium');
+              navigator.vibrate?.(100);
               const dataUrl = await toDataUrl(file);
               setPreviewDataUrl(dataUrl);
               photoMutation.mutate({ id: selectedPlantId, dataUrl });
@@ -140,6 +148,7 @@ export function PlantDetailSheet() {
               plant={plant}
               progress={getProgress(plant)}
               isWatering={waterMutation.isPending}
+              onSuccess={triggerWateringPulse}
               onWater={async () => {
                 if (!selectedPlantId) {
                   return;
@@ -172,6 +181,9 @@ export function PlantDetailSheet() {
                 <QuickWaterButton
                   isLoading={waterMutation.isPending}
                   isOverdue={isOverdue}
+                  onSuccess={() => {
+                    triggerWateringPulse();
+                  }}
                   onWater={async () => {
                     if (!selectedPlantId) {
                       return;

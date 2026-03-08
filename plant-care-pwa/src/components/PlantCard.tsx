@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { CloudRain, Home, Image as ImageIcon, SunMedium, TreePine } from 'lucide-react';
 
@@ -61,6 +61,8 @@ export function PlantCard({
 }: PlantCardProps) {
   const critical = daysLeft <= 0;
   const [rescueFlash, setRescueFlash] = useState(false);
+  const [ringPulse, setRingPulse] = useState(false);
+  const [thanksVisible, setThanksVisible] = useState(false);
 
   return (
     <motion.article
@@ -104,6 +106,18 @@ export function PlantCard({
         </div>
       ) : null}
 
+      <AnimatePresence>
+        {ringPulse ? (
+          <motion.span
+            className="pointer-events-none absolute inset-0 z-[1] rounded-ios-card bg-emerald-400/18"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.75, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.65, ease: 'easeOut' }}
+          />
+        ) : null}
+      </AnimatePresence>
+
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[16px] font-semibold text-ios-text">{plant.name}</h3>
@@ -113,7 +127,10 @@ export function PlantCard({
           </p>
         </div>
 
-        <div className="h-12 w-12 overflow-hidden rounded-xl border border-white/55 bg-white/45 shadow-[0_6px_16px_rgba(0,0,0,0.08)]">
+        <motion.div
+          layoutId={`plant-photo-${plant.id}`}
+          className="h-12 w-12 overflow-hidden rounded-xl border border-white/55 bg-white/45 shadow-[0_6px_16px_rgba(0,0,0,0.08)]"
+        >
           {plant.photoUrl ? (
             <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
@@ -121,11 +138,30 @@ export function PlantCard({
               <ImageIcon className="h-4 w-4" />
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
 
-      <div className="mb-2 flex items-center justify-center">
-        <ProgressRing value={progress} size={86} stroke={8} label="до полива" />
+      <div className="relative mb-2 flex items-center justify-center">
+        <motion.div
+          animate={ringPulse ? { scale: [1, 1.12, 1], rotate: [0, -2.5, 2.5, 0] } : { scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+        >
+          <ProgressRing value={progress} size={86} stroke={8} label="до полива" />
+        </motion.div>
+
+        <AnimatePresence>
+          {thanksVisible ? (
+            <motion.span
+              className="pointer-events-none absolute -top-2 text-xs font-semibold text-emerald-600 dark:text-emerald-300"
+              initial={{ opacity: 0, y: 8, scale: 0.9 }}
+              animate={{ opacity: 1, y: -12, scale: 1 }}
+              exit={{ opacity: 0, y: -18 }}
+              transition={{ type: 'spring', stiffness: 340, damping: 25 }}
+            >
+              Спасибо! 🌿
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       <p className={cn('text-center text-[12px] font-medium', critical ? 'text-red-500' : 'text-ios-subtext')}>
@@ -153,6 +189,11 @@ export function PlantCard({
             isOverdue={critical}
             onWater={onWater}
             onSuccess={({ rescued }) => {
+              setRingPulse(true);
+              setThanksVisible(true);
+              window.setTimeout(() => setRingPulse(false), 720);
+              window.setTimeout(() => setThanksVisible(false), 900);
+
               if (!rescued) {
                 return;
               }
@@ -165,4 +206,3 @@ export function PlantCard({
     </motion.article>
   );
 }
-

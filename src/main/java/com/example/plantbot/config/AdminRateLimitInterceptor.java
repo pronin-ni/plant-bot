@@ -44,4 +44,10 @@ public class AdminRateLimitInterceptor implements HandlerInterceptor {
     }
     return true;
   }
+
+  public int clearTrackedClients() {
+    int size = requestTimesByKey.size();
+    requestTimesByKey.clear();
+    return size;
+  }
 }

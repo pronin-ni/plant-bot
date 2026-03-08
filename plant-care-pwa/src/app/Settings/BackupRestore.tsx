@@ -1,11 +1,11 @@
-import { Database, Download, Upload } from 'lucide-react';
+import { Database } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { createPlant, deletePlant, getPlants } from '@/lib/api';
 import { cloudStorageGet, cloudStorageSet, hapticImpact, hapticNotify } from '@/lib/telegram';
 import type { PlantDto } from '@/types/api';
-import { Button } from '@/components/ui/button';
+import { ExportImportSection } from '@/components/ExportImportSection';
 
 const BACKUP_KEY = 'plantbot:backup:v1';
 
@@ -80,63 +80,36 @@ export function BackupRestore() {
   });
 
   return (
-    <div className="ios-blur-card space-y-3 p-4">
-      <div className="flex items-center gap-2">
-        <Database className="h-4 w-4 text-ios-accent" />
-        <p className="text-ios-body font-semibold">Экспорт / импорт</p>
-      </div>
-      <p className="text-ios-caption text-ios-subtext">
-        Данные можно сохранить в Telegram Cloud Storage и восстановить на другом устройстве.
-      </p>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant={restoreMode === 'MERGE' ? 'default' : 'secondary'}
-          onClick={() => setRestoreMode('MERGE')}
-        >
-          Объединить
-        </Button>
-        <Button
-          variant={restoreMode === 'REPLACE' ? 'default' : 'secondary'}
-          onClick={() => setRestoreMode('REPLACE')}
-        >
-          Заменить
-        </Button>
-      </div>
-      <p className="text-xs text-ios-subtext">
-        {restoreMode === 'MERGE'
-          ? 'Merge: существующие растения не дублируются (по имени и размещению).'
-          : 'Replace: текущие растения удаляются, затем импортируются из бэкапа.'}
-      </p>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => {
-            hapticImpact('light');
-            exportMutation.mutate();
-          }}
-          disabled={exportMutation.isPending}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {exportMutation.isPending ? 'Сохраняем...' : 'Экспорт'}
-        </Button>
-
-        <Button
-          variant="secondary"
-          onClick={() => {
-            hapticImpact('light');
-            importMutation.mutate();
-          }}
-          disabled={importMutation.isPending}
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          {importMutation.isPending ? 'Импорт...' : 'Импорт'}
-        </Button>
+    <div className="space-y-3">
+      <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:border-emerald-500/20 dark:bg-zinc-900/45">
+        <div className="mb-1.5 flex items-center gap-2">
+          <Database className="h-4 w-4 text-ios-accent" />
+          <p className="text-ios-body font-semibold">Экспорт / импорт</p>
+        </div>
+        <p className="text-ios-caption text-ios-subtext">
+          Сохранение и восстановление через Telegram Cloud Storage между устройствами.
+        </p>
       </div>
 
-      {importMutation.error ? <p className="text-xs text-red-600">{(importMutation.error as Error).message}</p> : null}
-      {importMutation.data != null ? <p className="text-xs text-ios-subtext">Импортировано растений: {importMutation.data}</p> : null}
+      <ExportImportSection
+        restoreMode={restoreMode}
+        onChangeMode={(next) => {
+          hapticImpact('light');
+          setRestoreMode(next);
+        }}
+        onExport={() => {
+          hapticImpact('light');
+          exportMutation.mutate();
+        }}
+        onImport={() => {
+          hapticImpact('light');
+          importMutation.mutate();
+        }}
+        exportPending={exportMutation.isPending}
+        importPending={importMutation.isPending}
+        importError={importMutation.error ? (importMutation.error as Error).message : null}
+        importedCount={importMutation.data ?? null}
+      />
     </div>
   );
 }

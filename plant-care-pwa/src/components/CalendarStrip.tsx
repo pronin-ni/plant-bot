@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { hapticImpact, hapticSelectionChanged } from '@/lib/telegram';
+import { useMotionGuard } from '@/lib/motion';
 
 export interface CalendarStripEvent {
   date: string;
@@ -41,6 +42,7 @@ export function CalendarStrip({
   onShiftWindow,
   daysCount = 14
 }: CalendarStripProps) {
+  const { reduceMotion } = useMotionGuard();
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -147,7 +149,19 @@ export function CalendarStrip({
                 }`}
               >
                 {day.overdue ? (
-                  <span className="pointer-events-none absolute inset-0 animate-pulse bg-red-500/5" />
+                  <motion.span
+                    className="pointer-events-none absolute inset-0 bg-red-500/8"
+                    animate={
+                      reduceMotion
+                        ? { opacity: 0.35 }
+                        : { opacity: [0.25, 0.65, 0.25], scale: [1, 1.03, 1], x: [0, -1.2, 1.2, 0] }
+                    }
+                    transition={{
+                      duration: 2,
+                      ease: 'easeInOut',
+                      repeat: reduceMotion ? 0 : Infinity
+                    }}
+                  />
                 ) : null}
 
                 <p className="relative z-10 text-[11px] capitalize text-ios-subtext">{weekDay}</p>

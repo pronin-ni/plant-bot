@@ -23,6 +23,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
              lower(coalesce(u.username, '')) like lower(concat('%', :q, '%')) or
              lower(coalesce(u.firstName, '')) like lower(concat('%', :q, '%')) or
              lower(coalesce(u.lastName, '')) like lower(concat('%', :q, '%')) or
+             lower(coalesce(u.email, '')) like lower(concat('%', :q, '%')) or
              lower(coalesce(u.city, '')) like lower(concat('%', :q, '%')) or
              lower(coalesce(u.cityDisplayName, '')) like lower(concat('%', :q, '%')) or
              cast(u.telegramId as string) like concat('%', :q, '%'))
@@ -46,4 +47,18 @@ public interface UserRepository extends JpaRepository<User, Long> {
   long countByPwaOpenCountGreaterThan(int value);
 
   long countByMigrationMigratedAtIsNotNull();
+
+  @Query("""
+      select count(u.id) from User u
+      where (u.lastSeenPwaAt is not null and u.lastSeenPwaAt >= :from)
+         or (u.lastSeenTmaAt is not null and u.lastSeenTmaAt >= :from)
+      """)
+  long countOnlineSince(@Param("from") Instant from);
+
+  @Query("""
+      select u from User u
+      where (u.lastSeenPwaAt is not null and u.lastSeenPwaAt >= :from)
+         or (u.lastSeenTmaAt is not null and u.lastSeenTmaAt >= :from)
+      """)
+  List<User> findActiveSince(@Param("from") Instant from);
 }

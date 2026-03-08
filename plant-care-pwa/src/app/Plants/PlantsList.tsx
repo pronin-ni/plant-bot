@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CloudSun, RefreshCw, Search, Sparkles, Sprout } from 'lucide-react';
+import { CloudFog, CloudRain, CloudSun, RefreshCw, Search, Sparkles, Sprout, Sun } from 'lucide-react';
 
 import { PlantCard } from '@/components/PlantCard';
 import { CategoryTabs, type PlantCategoryFilter } from '@/components/CategoryTabs';
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { Button } from '@/components/ui/button';
-import { getPlantConditions, getPlants, waterPlant } from '@/lib/api';
+import { getPlantConditions, getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useAuthStore, useOfflineStore, useUiStore } from '@/lib/store';
-import type { PlantDto } from '@/types/api';
+import type { PlantDto, WeatherCurrentDto } from '@/types/api';
 import type { PlantConditionsResponse } from '@/types/home-assistant';
 
 type SortMode = 'needs_water' | 'created_desc' | 'alpha' | 'category';
@@ -154,31 +154,66 @@ function sourceLabel(source?: string): string {
   return source;
 }
 
-function buildConditionsHint(data?: PlantConditionsResponse): string {
-  if (!data) {
-    return 'Подключите HA или укажите город, чтобы видеть подсказки по условиям.';
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function buildConditionsHint(data?: PlantConditionsResponse | null, weather?: WeatherCurrentDto | null): string {
+  const temperature = isFiniteNumber(data?.temperatureC) ? data?.temperatureC : weather?.tempC;
+  const humidity = isFiniteNumber(data?.humidityPercent) ? data?.humidityPercent : weather?.humidity;
+
+  if (!isFiniteNumber(temperature) && !isFiniteNumber(humidity)) {
+    return 'Укажите город и провайдера погоды в Настройках — получим подсказки автоматически.';
   }
 
-  const temperature = data.temperatureC;
-  const humidity = data.humidityPercent;
-
-  if (typeof temperature === 'number' && typeof humidity === 'number') {
+  if (isFiniteNumber(temperature) && isFiniteNumber(humidity)) {
     if (temperature >= 28 && humidity <= 40) {
-      return 'Сегодня жарко и сухо — проверяйте грунт чаще.';
+      return 'Жарко и сухо — проверяйте грунт чаще.';
     }
     if (temperature <= 12) {
       return 'Прохладно — поливайте аккуратно, без переувлажнения.';
     }
     if (humidity >= 70) {
-      return 'Влажность высокая — можно слегка увеличить интервал полива.';
+      return 'Влажность высокая — можно увеличить интервал полива.';
     }
   }
 
-  if (typeof temperature === 'number' && temperature >= 26) {
+  if (isFiniteNumber(temperature) && temperature >= 26) {
     return 'Тёплая погода — наблюдайте за пересыханием верхнего слоя.';
   }
 
-  return 'Условия стабильные — держите обычный график полива.';
+  if (isFiniteNumber(humidity) && humidity <= 35) {
+    return 'Низкая влажность — добавьте опрыскивание или поливайте немного чаще.';
+  }
+
+  return 'Условия стабильные — придерживайтесь базового графика полива.';
+}
+
+function WeatherIcon({ code }: { code?: string | null }) {
+  const icon = (code ?? '').toLowerCase();
+  const cls = 'h-4 w-4 text-ios-accent';
+  if (icon.includes('clear')) return <Sun className={cls} />;
+  if (icon.includes('partly')) return <CloudSun className={cls} />;
+  if (icon.includes('rain') || icon.includes('drizzle')) return <CloudRain className={cls} />;
+  if (icon.includes('fog')) return <CloudFog className={cls} />;
+  return <CloudSun className={cls} />;
+}
+
+function translateWeather(icon?: string | null, fallback?: string | null): string | null {
+  const map: Record<string, string> = {
+    'clear-day': 'Солнечно',
+    'clear-night': 'Ясно',
+    'partly-cloudy-day': 'Переменная облачность',
+    'partly-cloudy-night': 'Облачно ночью',
+    cloudy: 'Облачно',
+    rain: 'Дождь',
+    drizzle: 'Морось',
+    snow: 'Снег',
+    fog: 'Туман'
+  };
+  if (fallback) return fallback;
+  if (!icon) return null;
+  return map[icon.toLowerCase()] ?? null;
 }
 
 function AnimatedCount({ value }: { value: number }) {
@@ -297,11 +332,28 @@ export function PlantsList() {
     return byNeed[0]?.id ?? null;
   }, [plantsQuery.data]);
 
+  const authCity = useAuthStore((s) => s.city);
+  const [weatherCity, setWeatherCity] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('settings:weather-city');
+    const next = (stored ?? authCity ?? '').trim();
+    setWeatherCity(next || null);
+  }, [authCity]);
+
   const conditionsQuery = useQuery({
     queryKey: ['home-conditions-widget', priorityPlantId],
     queryFn: () => getPlantConditions(priorityPlantId!),
     enabled: priorityPlantId !== null,
     staleTime: 2 * 60_000,
+    retry: 1
+  });
+
+  const weatherQuery = useQuery({
+    queryKey: ['weather-current-home', weatherCity],
+    queryFn: () => getWeatherCurrent(weatherCity as string),
+    enabled: Boolean(weatherCity),
+    staleTime: 10 * 60_000,
     retry: 1
   });
 
@@ -344,9 +396,14 @@ export function PlantsList() {
   );
 
   const conditionsData = conditionsQuery.data;
+  const weatherData = weatherQuery.data;
 
   const refreshAll = async () => {
-    await Promise.all([plantsQuery.refetch(), conditionsQuery.refetch()]);
+    await Promise.all([
+      plantsQuery.refetch(),
+      conditionsQuery.refetch(),
+      weatherCity ? weatherQuery.refetch() : Promise.resolve()
+    ]);
     setLastSyncAt(new Date());
   };
 
@@ -477,13 +534,32 @@ export function PlantsList() {
             <CloudSun className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-ios-subtext">Условия сегодня · {sourceLabel(conditionsData?.source)}</p>
-            <p className="mt-1 text-sm text-ios-text">
-              {typeof conditionsData?.temperatureC === 'number' ? `${Math.round(conditionsData.temperatureC)}°C` : '—'} ·{' '}
-              {typeof conditionsData?.humidityPercent === 'number' ? `${Math.round(conditionsData.humidityPercent)}% влажность` : 'влажность —'}
+            <p className="text-xs font-semibold text-ios-subtext">
+              Условия сегодня · {sourceLabel(conditionsData?.source ?? weatherData?.source)}{' '}
+              {weatherCity ? `· ${weatherCity}` : ''}
             </p>
-            <p className="mt-1 text-xs text-ios-subtext">{buildConditionsHint(conditionsData)}</p>
+            <p className="mt-1 text-sm text-ios-text">
+              {isFiniteNumber(conditionsData?.temperatureC)
+                ? `${Math.round(conditionsData.temperatureC)}°C`
+                : isFiniteNumber(weatherData?.tempC)
+                  ? `${Math.round(weatherData.tempC)}°C`
+                  : '—'}{' '}
+              ·{' '}
+              {isFiniteNumber(conditionsData?.humidityPercent)
+                ? `${Math.round(conditionsData.humidityPercent)}% влажность`
+                : isFiniteNumber(weatherData?.humidity)
+                  ? `${Math.round(weatherData.humidity)}% влажность`
+                  : 'влажность —'}
+            </p>
+            <p className="mt-1 text-xs text-ios-subtext">{buildConditionsHint(conditionsData, weatherData)}</p>
           </div>
+          {weatherData ? (
+            <div className="flex items-center gap-2 rounded-xl border border-ios-border/50 bg-white/60 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
+              <WeatherIcon code={weatherData.icon} />
+              <span>{translateWeather(weatherData.icon, weatherData.description) ?? 'Погода'}</span>
+              {weatherCity ? <span className="text-ios-subtext/70">· {weatherCity}</span> : null}
+            </div>
+          ) : null}
         </motion.div>
 
         <div className="ios-blur-card flex flex-wrap items-center gap-2 p-3">

@@ -11,4 +11,8 @@ public interface HomeAssistantConnectionRepository extends JpaRepository<HomeAss
   Optional<HomeAssistantConnection> findByUser(User user);
 
   List<HomeAssistantConnection> findByConnectedTrue();
+
+  List<HomeAssistantConnection> findTop50ByOrderByUpdatedAtDesc();
+
+  long deleteByUser(User user);
 }
