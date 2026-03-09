@@ -702,8 +702,9 @@ export async function clearAssistantHistory(): Promise<{ ok: boolean }> {
 }
 
 
-export async function getPlantCareAdvice(id: number): Promise<PlantCareAdviceDto> {
-  return apiFetch<PlantCareAdviceDto>(`/api/plants/${id}/care-advice`, { method: 'GET' });
+export async function getPlantCareAdvice(id: number, forceRefresh = false): Promise<PlantCareAdviceDto> {
+  const query = forceRefresh ? '?refresh=true' : '';
+  return apiFetch<PlantCareAdviceDto>(`/api/plants/${id}/care-advice${query}`, { method: 'GET' });
 }
 
 

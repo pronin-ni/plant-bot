@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Camera, Droplets, Leaf, Loader2, RefreshCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Bot, Droplets, Leaf, Loader2, RefreshCcw, Trash2 } from 'lucide-react';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
 import { Dialog } from '@/components/ui/dialog';
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useUiStore } from '@/lib/store';
-import type { PlantDto } from '@/types/api';
+import type { PlantCareAdviceDto, PlantDto } from '@/types/api';
 
 function getProgress(plant: PlantDto): number {
   const last = new Date(plant.lastWateredDate);
@@ -46,6 +46,32 @@ function getNextDate(plant: PlantDto): Date {
   return next;
 }
 
+function normalizeAdviceText(data?: PlantCareAdviceDto | null): string | null {
+  if (!data) {
+    return null;
+  }
+
+  const note = data.note?.trim() ?? '';
+  if (note && note.toLowerCase() !== 'нет дополнительных рекомендаций') {
+    return note;
+  }
+
+  if (data.additives?.length) {
+    return `Добавки: ${data.additives.slice(0, 3).join(', ')}.`;
+  }
+
+  if (data.soilComposition?.length) {
+    return `Грунт: ${data.soilComposition.slice(0, 4).join(', ')}.`;
+  }
+
+  const soilType = data.soilType?.trim();
+  if (soilType && soilType.toLowerCase() !== 'не указано') {
+    return `Подходящий грунт: ${soilType}.`;
+  }
+
+  return null;
+}
+
 export function PlantDetailSheet() {
   const queryClient = useQueryClient();
   const selectedPlantId = useUiStore((s) => s.selectedPlantId);
@@ -64,7 +90,20 @@ export function PlantDetailSheet() {
   const careAdviceQuery = useQuery({
     queryKey: ['plant-care-advice', selectedPlantId],
     queryFn: () => getPlantCareAdvice(selectedPlantId as number),
-    enabled: selectedPlantId !== null
+    enabled: selectedPlantId !== null,
+    staleTime: 60_000,
+    retry: 1
+  });
+
+  const refreshAdviceMutation = useMutation({
+    mutationFn: (id: number) => getPlantCareAdvice(id, true),
+    onSuccess: (data, id) => {
+      queryClient.setQueryData(['plant-care-advice', id], data);
+      hapticNotify('success');
+    },
+    onError: () => {
+      hapticNotify('error');
+    }
   });
 
   const waterMutation = useMutation({
@@ -106,6 +145,10 @@ export function PlantDetailSheet() {
   const plant = useMemo(() => plantQuery.data ?? null, [plantQuery.data]);
   const isOverdue = useMemo(() => (plant ? getIsOverdue(plant) : false), [plant]);
 
+  const adviceSource = careAdviceQuery.data?.source ?? null;
+  const adviceText = normalizeAdviceText(careAdviceQuery.data);
+  const hasAiAdvice = Boolean(adviceSource?.toLowerCase().startsWith('openrouter:') && adviceText);
+
   useEffect(() => {
     if (selectedPlantId === null) {
       setPreviewDataUrl(null);
@@ -122,7 +165,7 @@ export function PlantDetailSheet() {
   return (
     <BottomSheet open={selectedPlantId !== null} onClose={closePlantDetail}>
       {plantQuery.isLoading ? (
-        <div className="py-6 text-center text-ios-subtext">Загружаем детали...</div>
+        <div className="py-6 text-center text-ios-subtext">Загружаем карточку растения...</div>
       ) : null}
 
       {plant ? (
@@ -132,10 +175,6 @@ export function PlantDetailSheet() {
             previewDataUrl={previewDataUrl}
             photoUploading={photoMutation.isPending}
             wateringPulse={wateringPulse}
-            onRequestDelete={() => {
-              hapticImpact('rigid');
-              setDeleteConfirmOpen(true);
-            }}
             onPickPhoto={async (file) => {
               if (!selectedPlantId) {
                 return;
@@ -147,7 +186,7 @@ export function PlantDetailSheet() {
               photoMutation.mutate({ id: selectedPlantId, dataUrl });
             }}
           >
-            <WaterCard
+            <WaterStatusBlock
               plant={plant}
               progress={getProgress(plant)}
               isOverdue={isOverdue}
@@ -160,43 +199,32 @@ export function PlantDetailSheet() {
               }}
             />
 
-            <GrowthCard
-              plant={plant}
-              onAddPhoto={async (file) => {
-                if (!selectedPlantId) return;
-                hapticImpact('medium');
-                navigator.vibrate?.(80);
-                const dataUrl = await toDataUrl(file);
-                setPreviewDataUrl(dataUrl);
-                photoMutation.mutate({ id: selectedPlantId, dataUrl });
-              }}
-            />
+            <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
 
-            <AIShortAdvice
-              loading={careAdviceQuery.isLoading || careAdviceQuery.isFetching}
-              advice={
-                careAdviceQuery.data?.note ??
-                (careAdviceQuery.data?.soilComposition?.length ? careAdviceQuery.data.soilComposition.join(', ') : null)
-              }
-              onRefresh={() => void careAdviceQuery.refetch()}
+            <AIAdviceCard
+              loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
+              refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
+              error={careAdviceQuery.isError && !careAdviceQuery.data}
+              refreshError={refreshAdviceMutation.isError}
+              hasAiAdvice={hasAiAdvice}
+              advice={adviceText}
+              source={adviceSource}
+              onRefresh={() => {
+                if (!selectedPlantId || refreshAdviceMutation.isPending) {
+                  return;
+                }
+                refreshAdviceMutation.mutate(selectedPlantId);
+              }}
             />
 
             <LeafDiagnosis plant={plant} />
 
-            <div className="flex items-center justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10 rounded-2xl border border-red-300/70 bg-red-50/70 px-3 text-red-600 hover:bg-red-100/70 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300"
-                onClick={() => {
-                  hapticImpact('rigid');
-                  setDeleteConfirmOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                <span className="ml-1 text-sm">Удалить</span>
-              </Button>
-            </div>
+            <DangerZoneSection
+              onDeleteClick={() => {
+                hapticImpact('rigid');
+                setDeleteConfirmOpen(true);
+              }}
+            />
           </PlantDetailPage>
 
           <Dialog
@@ -266,7 +294,7 @@ function toDataUrl(file: File): Promise<string> {
   });
 }
 
-function WaterCard({
+function WaterStatusBlock({
   plant,
   progress,
   nextWateringDate,
@@ -282,116 +310,178 @@ function WaterCard({
   onWater: () => Promise<void> | void;
 }) {
   const moistureLeft = Math.max(0, Math.min(100, 100 - Math.round(progress)));
-  const nextLabel =
-    nextWateringDate.toDateString() === new Date().toDateString()
+  const now = new Date();
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((nextWateringDate.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000)
+  );
+  const nextLabel = isOverdue
+    ? 'Полив просрочен'
+    : daysLeft === 0
       ? 'Полив сегодня'
-      : `Полив ${nextWateringDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}`;
+      : `Через ${daysLeft} дн.`;
 
   return (
-    <section className="rounded-2xl border border-ios-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/70">
-      <div className="flex items-center justify-between gap-2">
+    <section className="space-y-4 rounded-3xl border border-ios-border/60 bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-ios-subtext">Сегодня</p>
-          <p className="mt-1 text-2xl font-semibold text-ios-text">{plant.name}</p>
-          <p className="text-sm text-ios-subtext">{plant.category === 'HOME' ? 'Домашнее' : 'Уличное/садовое'}</p>
-        </div>
-        <div className="rounded-full bg-emerald-100/70 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-          {moistureLeft}% влаги
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-ios-subtext">
-        <div className="rounded-xl border border-ios-border/50 bg-white/70 px-3 py-2 dark:bg-zinc-900/60">
-          <p className="text-[12px] uppercase tracking-wide">Статус</p>
-          <p className={`mt-1 text-base font-semibold ${isOverdue ? 'text-red-500' : 'text-ios-text'}`}>
-            {isOverdue ? 'Нужно полить' : nextLabel}
+          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Сегодня</p>
+          <p className="mt-1 text-lg font-semibold text-ios-text">
+            {isOverdue ? 'Растению нужен полив' : 'Состояние стабильное'}
+          </p>
+          <p className="text-sm text-ios-subtext">
+            Следующий полив: {nextWateringDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
           </p>
         </div>
-        <div className="rounded-xl border border-ios-border/50 bg-white/70 px-3 py-2 dark:bg-zinc-900/60">
-          <p className="text-[12px] uppercase tracking-wide">Прогресс цикла</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{Math.round(progress)}%</p>
+        <span
+          className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${
+            isOverdue
+              ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300'
+              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+          }`}
+        >
+          {isOverdue ? 'Срочно' : 'В порядке'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+          <p className="text-xs text-ios-subtext">Влага</p>
+          <p className="mt-1 text-xl font-semibold text-ios-text">{moistureLeft}%</p>
+        </div>
+        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+          <p className="text-xs text-ios-subtext">Полив</p>
+          <p className="mt-1 text-xl font-semibold text-ios-text">{nextLabel}</p>
         </div>
       </div>
 
-      <div className="mt-4">
-        <QuickWaterButton
-          isLoading={isLoading}
-          isOverdue={isOverdue}
-          onWater={onWater}
-          onSuccess={() => undefined}
-        />
+      <div>
+        <div className="mb-2 flex items-center justify-between text-xs text-ios-subtext">
+          <span>Прогресс цикла</span>
+          <span>{Math.round(progress)}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-ios-border/40">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${
+              isOverdue ? 'bg-red-400 dark:bg-red-500' : 'bg-emerald-500 dark:bg-emerald-400'
+            }`}
+            style={{ width: `${Math.max(8, Math.round(progress))}%` }}
+          />
+        </div>
       </div>
+
+      <QuickWaterButton isLoading={isLoading} isOverdue={isOverdue} onWater={onWater} onSuccess={() => undefined} />
+
+      <p className="text-xs text-ios-subtext">
+        Цикл полива: {Math.max(1, plant.baseIntervalDays ?? 7)} дн.
+      </p>
     </section>
   );
 }
 
-function GrowthCard({ plant, onAddPhoto }: { plant: PlantDto; onAddPhoto: (file: File) => void | Promise<void> }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  return (
-    <section className="space-y-3 rounded-2xl border border-ios-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/70">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-ios-text">Камера роста</p>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-10 rounded-xl"
-          onClick={() => inputRef.current?.click()}
-        >
-          <Camera className="mr-2 h-4 w-4" />
-          Добавить фото
-        </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              void onAddPhoto(file);
-            }
-          }}
-        />
-      </div>
-      <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
-    </section>
-  );
-}
-
-function AIShortAdvice({
+function AIAdviceCard({
   loading,
+  refreshing,
+  error,
+  refreshError,
+  hasAiAdvice,
   advice,
+  source,
   onRefresh
 }: {
   loading: boolean;
+  refreshing: boolean;
+  error: boolean;
+  refreshError: boolean;
+  hasAiAdvice: boolean;
   advice: string | null;
+  source: string | null;
   onRefresh: () => void;
 }) {
   return (
-    <section className="rounded-2xl border border-ios-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/70">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Leaf className="h-4 w-4 text-ios-accent" />
-          <p className="text-sm font-semibold text-ios-text">AI советы</p>
+    <section className="space-y-3 rounded-3xl border border-ios-border/60 bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75">
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex items-center gap-2">
+          <div className="rounded-full bg-emerald-100/70 p-2 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
+            <Leaf className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ios-text">AI советы</p>
+            <p className="text-xs text-ios-subtext">Персональная рекомендация на сегодня</p>
+          </div>
         </div>
-        <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" onClick={onRefresh} disabled={loading}>
-          <RefreshCcw className="mr-1 h-4 w-4" />
+        <Button type="button" variant="ghost" className="h-11 rounded-xl px-3 text-xs" disabled={refreshing} onClick={onRefresh}>
+          {refreshing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
           Обновить
         </Button>
       </div>
-      <div className="flex items-start gap-2 text-sm text-ios-text">
-        <Droplets className="mt-0.5 h-4 w-4 text-ios-subtext" />
-        {loading ? (
-          <span className="inline-flex items-center gap-1 text-ios-subtext">
-            <Loader2 className="h-4 w-4 animate-spin" /> Получаем совет...
-          </span>
-        ) : advice ? (
-          <p>{advice}</p>
-        ) : (
-          <p className="text-ios-subtext">Совет недоступен — попробуйте обновить.</p>
-        )}
-      </div>
+
+      {loading ? (
+        <div className="space-y-2 rounded-2xl border border-ios-border/50 bg-white/70 p-3 dark:bg-zinc-900/55">
+          <div className="h-3 w-1/3 animate-pulse rounded bg-ios-border/70" />
+          <div className="h-3 w-full animate-pulse rounded bg-ios-border/70" />
+          <div className="h-3 w-2/3 animate-pulse rounded bg-ios-border/70" />
+        </div>
+      ) : null}
+
+      {!loading && error ? (
+        <div className="rounded-2xl border border-red-300/60 bg-red-50/70 p-3 text-sm dark:border-red-700/50 dark:bg-red-950/30">
+          <p className="font-medium text-red-700 dark:text-red-300">Не удалось загрузить AI советы.</p>
+          <p className="mt-1 text-xs text-red-600/90 dark:text-red-200/90">Проверьте сеть и повторите запрос.</p>
+          <Button type="button" variant="secondary" className="mt-3 h-10 rounded-xl" onClick={onRefresh}>
+            Повторить
+          </Button>
+        </div>
+      ) : null}
+
+      {!loading && !error && hasAiAdvice && advice ? (
+        <div className="rounded-2xl border border-emerald-300/50 bg-emerald-50/75 p-3 dark:border-emerald-700/40 dark:bg-emerald-950/25">
+          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <Bot className="h-4 w-4" />
+            Источник: {source ?? 'OpenRouter'}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ios-text">{advice}</p>
+        </div>
+      ) : null}
+
+      {!loading && !error && !hasAiAdvice ? (
+        <div className="rounded-2xl border border-amber-300/55 bg-amber-50/70 p-3 dark:border-amber-700/45 dark:bg-amber-950/25">
+          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+            AI временно недоступен, показан базовый совет.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ios-text">
+            {advice ?? 'Пока нет дополнительных рекомендаций. Попробуйте обновить позже.'}
+          </p>
+        </div>
+      ) : null}
+
+      {refreshError && !loading ? (
+        <p className="inline-flex items-center gap-1 text-xs text-red-500">
+          <Droplets className="h-3.5 w-3.5" />
+          Не удалось обновить совет, попробуйте ещё раз.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
+  return (
+    <section className="rounded-3xl border border-red-300/50 bg-red-50/60 p-4 dark:border-red-700/40 dark:bg-red-950/25">
+      <p className="text-sm font-semibold text-red-700 dark:text-red-300">Опасная зона</p>
+      <p className="mt-1 text-xs text-red-600/90 dark:text-red-200/90">
+        Удаление стирает растение, фото роста и связанную историю.
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        className="mt-3 h-11 w-full rounded-2xl border border-red-300/70 bg-red-50/70 px-3 text-red-600 hover:bg-red-100/70 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300"
+        onClick={onDeleteClick}
+      >
+        <Trash2 className="mr-2 h-4 w-4" />
+        Удалить растение
+      </Button>
     </section>
   );
 }

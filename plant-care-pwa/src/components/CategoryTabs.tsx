@@ -26,7 +26,7 @@ export function CategoryTabs({
 }) {
   return (
     <div className="ios-blur-card p-1.5">
-      <div className="grid grid-cols-4 gap-1">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
         {TABS.map((tab) => {
           const active = tab.key === value;
           const Icon = tab.icon;
@@ -36,14 +36,14 @@ export function CategoryTabs({
               type="button"
               onClick={() => onChange(tab.key)}
               className={cn(
-                'touch-target relative min-h-11 rounded-ios-button px-2 py-2.5 text-[13px] font-medium transition-colors',
+                'touch-target relative min-h-11 shrink-0 rounded-ios-button px-3 py-2.5 text-[13px] font-medium transition-colors',
                 active ? 'text-ios-text' : 'text-ios-subtext'
               )}
             >
               {active ? (
                 <motion.span
                   layoutId="plants-category-tab-indicator"
-                  className="absolute inset-0 rounded-ios-button bg-white/80 shadow-ios dark:bg-zinc-900/75"
+                  className="absolute inset-0 rounded-ios-button bg-white/85 shadow-ios dark:bg-zinc-900/75"
                   transition={{ type: 'spring', stiffness: 360, damping: 30, mass: 1 }}
                 />
               ) : null}

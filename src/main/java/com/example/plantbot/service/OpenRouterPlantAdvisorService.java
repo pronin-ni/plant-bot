@@ -79,6 +79,9 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.cache-max-entries:5000}")
   private int cacheMaxEntries;
 
+  @Value("${openrouter.cache-negative-ttl-seconds:90}")
+  private int negativeCacheTtlSeconds;
+
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     return suggestIntervalDays(null, plantName);
   }
@@ -134,84 +137,95 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays) {
+    return suggestCareAdvice(plant, recommendedIntervalDays, false);
+  }
+
+  public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays, boolean forceRefresh) {
     User user = plant == null ? null : plant.getUser();
-    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plant == null || plant.getName() == null || plant.getName().isBlank()) {
       return Optional.empty();
     }
-    if (apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+    if (apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
 
-    String cacheKey = buildCareCacheKey(modelToUse, plant, recommendedIntervalDays);
-    Optional<PlantCareAdvice> cached = getCareAdviceCache(cacheKey);
-    if (cached != null) {
-      return cached;
-    }
-
-    try {
-      JsonNode body = postMessages(apiKey, modelToUse, List.of(
-          Map.of("role", "system", "content", careAdviceSystemPrompt()),
-          Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
-      ));
-      if (body == null) {
-        putCareAdviceCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-
-      String content = extractContent(body);
-      if (content.isEmpty()) {
-        putCareAdviceCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-
-      String jsonPayload = sanitizeJsonPayload(content);
-      JsonNode advice = objectMapper.readTree(jsonPayload);
-
-      int cycle = advice.path("watering_cycle_days").asInt((int) Math.round(recommendedIntervalDays));
-      cycle = Math.max(1, Math.min(30, cycle));
-
-      List<String> additives = new ArrayList<>();
-      JsonNode additivesNode = advice.path("additives");
-      if (additivesNode.isArray()) {
-        for (JsonNode node : additivesNode) {
-          String value = node.asText("").trim();
-          if (!value.isEmpty()) {
-            additives.add(value);
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      String cacheKey = buildCareCacheKey(modelToUse, plant, recommendedIntervalDays);
+      if (!forceRefresh) {
+        Optional<PlantCareAdvice> cached = getCareAdviceCache(cacheKey);
+        if (cached != null) {
+          if (cached.isPresent()) {
+            return cached;
           }
-          if (additives.size() >= 3) {
-            break;
-          }
+          continue;
         }
       }
 
-      String soilType = normalizeAdviceNote(advice.path("soil_type").asText("").trim());
-      List<String> soilComposition = new ArrayList<>();
-      JsonNode soilCompositionNode = advice.path("soil_composition");
-      if (soilCompositionNode.isArray()) {
-        for (JsonNode node : soilCompositionNode) {
-          String value = normalizeAdviceNote(node.asText("").trim());
-          if (!value.isEmpty()) {
-            soilComposition.add(value);
-          }
-          if (soilComposition.size() >= 5) {
-            break;
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", careAdviceSystemPrompt()),
+            Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
+        ));
+        if (body == null) {
+          putCareAdviceCache(cacheKey, Optional.empty());
+          continue;
+        }
+
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          putCareAdviceCache(cacheKey, Optional.empty());
+          continue;
+        }
+
+        String jsonPayload = sanitizeJsonPayload(content);
+        JsonNode advice = objectMapper.readTree(jsonPayload);
+
+        int cycle = advice.path("watering_cycle_days").asInt((int) Math.round(recommendedIntervalDays));
+        cycle = Math.max(1, Math.min(30, cycle));
+
+        List<String> additives = new ArrayList<>();
+        JsonNode additivesNode = advice.path("additives");
+        if (additivesNode.isArray()) {
+          for (JsonNode node : additivesNode) {
+            String value = node.asText("").trim();
+            if (!value.isEmpty()) {
+              additives.add(value);
+            }
+            if (additives.size() >= 3) {
+              break;
+            }
           }
         }
-      }
 
-      String note = normalizeAdviceNote(advice.path("note").asText("").trim());
-      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + modelToUse);
-      putCareAdviceCache(cacheKey, Optional.of(result));
-      log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
-          plant.getName(), cycle, additives, soilType, soilComposition, result.source());
-      return Optional.of(result);
-    } catch (Exception ex) {
-      putCareAdviceCache(cacheKey, Optional.empty());
-      log.warn("OpenRouter care advice failed for '{}': {}", plant.getName(), ex.getMessage());
-      return Optional.empty();
+        String soilType = normalizeAdviceNote(advice.path("soil_type").asText("").trim());
+        List<String> soilComposition = new ArrayList<>();
+        JsonNode soilCompositionNode = advice.path("soil_composition");
+        if (soilCompositionNode.isArray()) {
+          for (JsonNode node : soilCompositionNode) {
+            String value = normalizeAdviceNote(node.asText("").trim());
+            if (!value.isEmpty()) {
+              soilComposition.add(value);
+            }
+            if (soilComposition.size() >= 5) {
+              break;
+            }
+          }
+        }
+
+        String note = normalizeAdviceNote(advice.path("note").asText("").trim());
+        PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + modelToUse);
+        putCareAdviceCache(cacheKey, Optional.of(result));
+        log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
+            plant.getName(), cycle, additives, soilType, soilComposition, result.source());
+        return Optional.of(result);
+      } catch (Exception ex) {
+        putCareAdviceCache(cacheKey, Optional.empty());
+        log.warn("OpenRouter care advice failed for '{}'. model='{}': {}", plant.getName(), modelToUse, ex.getMessage());
+      }
     }
+
+    return Optional.empty();
   }
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
@@ -661,6 +675,37 @@ public class OpenRouterPlantAdvisorService {
     return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
   }
 
+  private List<String> resolveTextModelCandidates(User user) {
+    String primary = resolveTextModel(user);
+    if (!chatFallbackEnabled) {
+      return primary == null || primary.isBlank() ? List.of() : List.of(primary);
+    }
+
+    List<String> models = new ArrayList<>();
+    if (primary != null && !primary.isBlank()) {
+      models.add(normalizeModelId(primary));
+    }
+    models.add(normalizeModelId(OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL));
+    if (chatModel != null && !chatModel.isBlank()) {
+      models.add(normalizeModelId(chatModel));
+    }
+    if (model != null && !model.isBlank()) {
+      models.add(normalizeModelId(model));
+    }
+
+    List<String> dedup = new ArrayList<>();
+    for (String candidate : models) {
+      if (candidate == null || candidate.isBlank()) {
+        continue;
+      }
+      boolean exists = dedup.stream().anyMatch(item -> item.equalsIgnoreCase(candidate));
+      if (!exists) {
+        dedup.add(candidate);
+      }
+    }
+    return dedup;
+  }
+
   private String resolveChatModel(User user, boolean hasPhoto) {
     if (hasPhoto) {
       return resolvePhotoModel(user);
@@ -762,7 +807,9 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private void putCareAdviceCache(String key, Optional<PlantCareAdvice> value) {
-    long ttlSeconds = Math.max(1, careCacheTtlMinutes) * 60L;
+    long ttlSeconds = value.isPresent()
+        ? Math.max(1, careCacheTtlMinutes) * 60L
+        : Math.max(30, negativeCacheTtlSeconds);
     OpenRouterCacheEntry row = openRouterCacheRepository.findByCacheKey(key).orElseGet(OpenRouterCacheEntry::new);
     row.setCacheKey(key);
     row.setNamespace(NS_CARE);
@@ -801,7 +848,9 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private void putWateringProfileCache(String key, Optional<AIWateringProfile> value) {
-    long ttlSeconds = Math.max(1, wateringCacheTtlMinutes) * 60L;
+    long ttlSeconds = value.isPresent()
+        ? Math.max(1, wateringCacheTtlMinutes) * 60L
+        : Math.max(30, negativeCacheTtlSeconds);
     OpenRouterCacheEntry row = openRouterCacheRepository.findByCacheKey(key).orElseGet(OpenRouterCacheEntry::new);
     row.setCacheKey(key);
     row.setNamespace(NS_WATERING);

@@ -161,7 +161,7 @@ export function QuickWaterButton({
       <Button
         variant="secondary"
         size="sm"
-        className="w-full rounded-2xl bg-ios-accent/14 text-ios-accent shadow-[0_8px_24px_rgba(52,199,89,0.16)] hover:bg-ios-accent/22 android:rounded-[16px]"
+        className="h-11 w-full rounded-2xl bg-ios-accent/14 text-ios-accent shadow-[0_8px_24px_rgba(52,199,89,0.16)] hover:bg-ios-accent/22 android:rounded-[16px]"
         disabled={isLoading || isRunning}
         onClick={handleClick}
       >

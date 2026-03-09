@@ -317,13 +317,14 @@ public class MiniAppController {
   public PlantCareAdviceResponse getCareAdvice(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
       Authentication authentication,
-      @PathVariable("id") Long plantId
+      @PathVariable("id") Long plantId,
+      @RequestParam(name = "refresh", required = false, defaultValue = "false") boolean refresh
   ) {
     User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
     WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
     PlantCareAdvice advice = openRouterPlantAdvisorService
-        .suggestCareAdvice(plant, rec.intervalDays())
+        .suggestCareAdvice(plant, rec.intervalDays(), refresh)
         .orElse(new PlantCareAdvice(
             Math.max(1, (int) Math.round(rec.intervalDays())),
             List.of(),
