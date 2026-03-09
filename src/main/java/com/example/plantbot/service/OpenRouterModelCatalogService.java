@@ -12,6 +12,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -110,6 +111,42 @@ public class OpenRouterModelCatalogService {
     } catch (Exception ex) {
       log.warn("Unable to load OpenRouter model list: {}", ex.getMessage());
       return fallbackModels();
+    }
+  }
+
+  public KeyValidationResult validateApiKey(String apiKey) {
+    if (apiKey == null || apiKey.isBlank()) {
+      return new KeyValidationResult(false, "API-ключ не задан");
+    }
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(apiKey.trim());
+
+    try {
+      ResponseEntity<JsonNode> response = restTemplate.exchange(
+          modelsUrl,
+          HttpMethod.GET,
+          new HttpEntity<>(headers),
+          JsonNode.class
+      );
+      int statusCode = response.getStatusCode().value();
+      if (statusCode >= 200 && statusCode < 300) {
+        return new KeyValidationResult(true, "Ключ валиден");
+      }
+      return new KeyValidationResult(false, "OpenRouter вернул статус: " + statusCode);
+    } catch (HttpStatusCodeException ex) {
+      int code = ex.getStatusCode().value();
+      if (code == 401 || code == 403) {
+        return new KeyValidationResult(false, "Ключ отклонён OpenRouter (401/403)");
+      }
+      if (code == 429) {
+        return new KeyValidationResult(true, "Ключ валиден, но исчерпан лимит запросов (429)");
+      }
+      return new KeyValidationResult(false, "OpenRouter вернул ошибку: HTTP " + code);
+    } catch (Exception ex) {
+      log.warn("OpenRouter key validation failed: {}", ex.getMessage());
+      return new KeyValidationResult(false, "Не удалось проверить ключ: " + ex.getMessage());
     }
   }
 
@@ -225,6 +262,12 @@ public class OpenRouterModelCatalogService {
       String id,
       boolean free,
       boolean supportsImageToText
+  ) {
+  }
+
+  public record KeyValidationResult(
+      boolean ok,
+      String message
   ) {
   }
 }

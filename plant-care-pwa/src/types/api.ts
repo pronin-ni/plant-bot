@@ -131,24 +131,6 @@ export interface OpenRouterModelsDto {
   models: OpenRouterModelOption[];
 }
 
-export interface OpenRouterPreferencesDto {
-  plantModel?: string | null;
-  chatModel?: string | null;
-  photoIdentifyModel?: string | null;
-  photoDiagnoseModel?: string | null;
-  hasApiKey?: boolean;
-  apiKey?: string | null;
-}
-
-export interface AdminOpenRouterSettingsDto {
-  hasApiKey: boolean;
-  apiKeyMasked: string;
-  chatModel?: string | null;
-  photoRecognitionModel?: string | null;
-  photoDiagnosisModel?: string | null;
-  updatedAt?: string | null;
-}
-
 export interface AdminOpenRouterModelsDto {
   textModel?: string | null;
   photoModel?: string | null;
@@ -160,13 +142,6 @@ export interface OpenRouterRuntimeSettingsDto {
   textModel?: string | null;
   photoModel?: string | null;
   hasApiKey: boolean;
-}
-
-export interface AdminOpenRouterTestDto {
-  ok: boolean;
-  answer?: string | null;
-  model?: string | null;
-  message: string;
 }
 
 export interface OpenRouterTypedTestDto {

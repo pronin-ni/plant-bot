@@ -9,7 +9,8 @@ import {
   fetchAdminOpenRouterModels,
   fetchOpenRouterCatalog,
   runOpenRouterTypedTest,
-  updateAdminOpenRouterModels
+  updateAdminOpenRouterModels,
+  validateOpenRouterApiKey
 } from '@/lib/api/openrouter';
 import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
@@ -63,8 +64,7 @@ function ensureOption(options: OpenRouterModelOption[], value: string, supportsI
 export function OpenRouterSettings() {
   const queryClient = useQueryClient();
   const runtimeModels = useOpenRouterModelsStore((s) => s);
-  const roles = useAuthStore((s) => s.roles);
-  const isAdmin = roles.includes('ROLE_ADMIN');
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const prefersReducedMotion = useReducedMotion();
 
   const [loading, setLoading] = useState(true);
@@ -72,6 +72,8 @@ export function OpenRouterSettings() {
   const [testingType, setTestingType] = useState<'text' | 'photo' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [showPaid, setShowPaid] = useState(false);
+  const [keyToValidate, setKeyToValidate] = useState('');
+  const [validatingKey, setValidatingKey] = useState(false);
   const [successPulse, setSuccessPulse] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
@@ -180,6 +182,31 @@ export function OpenRouterSettings() {
     }
   };
 
+  const handleValidateKey = async () => {
+    const normalized = keyToValidate.trim();
+    if (!normalized) {
+      setStatus('Введите API ключ для проверки.');
+      return;
+    }
+    setValidatingKey(true);
+    setStatus('Проверяем API ключ через OpenRouter...');
+    try {
+      const res = await validateOpenRouterApiKey(normalized);
+      if (res.ok) {
+        setStatus(res.message || 'Ключ валиден');
+        hapticImpact('medium');
+      } else {
+        setStatus(res.message || 'Ключ не прошёл проверку');
+        hapticImpact('light');
+      }
+    } catch (error) {
+      console.error(error);
+      setStatus('Не удалось проверить ключ');
+    } finally {
+      setValidatingKey(false);
+    }
+  };
+
   const handleTest = async (type: 'text' | 'photo') => {
     setTestingType(type);
     setStatus(type === 'text' ? 'Тестируем text-модель...' : 'Тестируем photo-модель...');
@@ -244,6 +271,25 @@ export function OpenRouterSettings() {
           <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
             Синхр.: {formatSyncTime(lastSavedAt ?? runtimeModels.updatedAt)}
           </span>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-950/70 dark:to-emerald-950/20">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-ios-text">Проверка API ключа</p>
+          <span className="text-[11px] text-ios-subtext">Не сохраняется, только проверка</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            type="password"
+            value={keyToValidate}
+            onChange={(event) => setKeyToValidate(event.target.value)}
+            placeholder="sk-or-v1-..."
+            className="h-11 min-w-[220px] flex-1 rounded-ios-button border border-ios-border/60 bg-white/75 px-3 text-sm outline-none backdrop-blur-ios dark:border-emerald-500/25 dark:bg-zinc-900/60"
+          />
+          <Button variant="secondary" onClick={handleValidateKey} disabled={validatingKey || !keyToValidate.trim()}>
+            {validatingKey ? 'Проверяем...' : 'Проверить ключ'}
+          </Button>
         </div>
       </div>
 

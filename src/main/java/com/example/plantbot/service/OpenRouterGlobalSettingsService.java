@@ -1,6 +1,5 @@
 package com.example.plantbot.service;
 
-import com.example.plantbot.controller.dto.admin.AdminOpenRouterSettingsUpdateRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequest;
 import com.example.plantbot.domain.GlobalSettings;
 import com.example.plantbot.repository.GlobalSettingsRepository;
@@ -37,55 +36,6 @@ public class OpenRouterGlobalSettingsService {
       settings = globalSettingsRepository.save(settings);
     }
     return settings;
-  }
-
-  @Transactional
-  public UpdateResult update(AdminOpenRouterSettingsUpdateRequest request) {
-    GlobalSettings settings = globalSettingsRepository.findById(SINGLETON_ID).orElseGet(() -> {
-      GlobalSettings created = new GlobalSettings();
-      created.setId(SINGLETON_ID);
-      return created;
-    });
-
-    migrateLegacyPlainApiKey(settings);
-
-    List<String> changedFields = new ArrayList<>();
-
-    if (request != null && request.apiKey() != null) {
-      String currentPlain = decryptStoredApiKey(settings.getOpenrouterApiKey());
-      String nextPlain = normalizeApiKey(request.apiKey());
-      if (!Objects.equals(currentPlain, nextPlain)) {
-        settings.setOpenrouterApiKey(nextPlain == null ? null : encryptApiKey(nextPlain));
-        changedFields.add("apiKey");
-      }
-    }
-
-    if (request != null && request.chatModel() != null) {
-      String next = normalizeModel(request.chatModel());
-      if (!Objects.equals(settings.getChatModel(), next)) {
-        settings.setChatModel(next);
-        changedFields.add("chatModel");
-      }
-    }
-
-    if (request != null && request.photoRecognitionModel() != null) {
-      String next = normalizeModel(request.photoRecognitionModel());
-      if (!Objects.equals(settings.getPhotoRecognitionModel(), next)) {
-        settings.setPhotoRecognitionModel(next);
-        changedFields.add("photoRecognitionModel");
-      }
-    }
-
-    if (request != null && request.photoDiagnosisModel() != null) {
-      String next = normalizeModel(request.photoDiagnosisModel());
-      if (!Objects.equals(settings.getPhotoDiagnosisModel(), next)) {
-        settings.setPhotoDiagnosisModel(next);
-        changedFields.add("photoDiagnosisModel");
-      }
-    }
-
-    GlobalSettings saved = globalSettingsRepository.save(settings);
-    return new UpdateResult(saved, List.copyOf(changedFields), hasApiKey(saved));
   }
 
   public String resolveApiKey(GlobalSettings settings) {
@@ -241,14 +191,6 @@ public class OpenRouterGlobalSettingsService {
     }
   }
 
-  private String normalizeApiKey(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
   private String normalizeModel(String value) {
     if (value == null) {
       return null;
@@ -272,13 +214,6 @@ public class OpenRouterGlobalSettingsService {
       String chatModel,
       String photoRecognitionModel,
       String photoDiagnosisModel
-  ) {
-  }
-
-  public record UpdateResult(
-      GlobalSettings settings,
-      List<String> changedFields,
-      boolean hasApiKey
   ) {
   }
 

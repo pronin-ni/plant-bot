@@ -12,6 +12,7 @@ import com.example.plantbot.util.WeatherData;
 import com.example.plantbot.util.WeatherForecastDay;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -70,7 +72,11 @@ public class WeatherController {
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
     WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
     Optional<WeatherData> data = weatherService.getCurrent(targetCity, user.getCityLat(), user.getCityLon(), provider);
-    WeatherData payload = data.orElse(new WeatherData(Double.NaN, Double.NaN, 0.0));
+    if (data.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+          "Не удалось получить текущую погоду для города: " + (targetCity == null ? "не задан" : targetCity));
+    }
+    WeatherData payload = data.get();
     return new WeatherCurrentResponse(
         targetCity == null ? "" : targetCity,
         payload.temperatureC(),
@@ -92,6 +98,10 @@ public class WeatherController {
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
     WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
     List<WeatherForecastDay> items = weatherService.getForecast(targetCity, user.getCityLat(), user.getCityLon(), days, provider);
+    if (items.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+          "Не удалось получить прогноз погоды для города: " + (targetCity == null ? "не задан" : targetCity));
+    }
     List<WeatherForecastResponse.WeatherForecastDayResponse> mapped = items.stream()
         .map(day -> new WeatherForecastResponse.WeatherForecastDayResponse(
             day.dateIso(),

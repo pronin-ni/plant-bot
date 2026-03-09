@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   Bot,
@@ -27,7 +28,6 @@ import { Dialog } from '@/components/ui/dialog';
 import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import {
-  AiDiagnosticsPanel,
   AppStatusPanel,
   BackupsPanel,
   CalendarPanel,
@@ -48,7 +48,6 @@ type SettingsDetailId =
   | 'weather'
   | 'home-assistant'
   | 'calendar'
-  | 'ai-diagnostics'
   | 'export-data'
   | 'import-data'
   | 'backups'
@@ -142,7 +141,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       {
         id: 'export',
         title: 'Экспорт данных',
-        subtitle: 'Скачать резервную копию в PDF',
+        subtitle: 'Скачать JSON-экспорт растений',
         icon: Download,
         detailId: 'export-data',
         action: 'dialog'
@@ -150,7 +149,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       {
         id: 'import',
         title: 'Импорт данных',
-        subtitle: 'Восстановление из Drive/Dropbox',
+        subtitle: 'Импорт данных из JSON-файла',
         icon: Upload,
         detailId: 'import-data',
         action: 'dialog'
@@ -158,7 +157,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       {
         id: 'backups',
         title: 'Резервные копии',
-        subtitle: 'Быстрый бэкап в Telegram',
+        subtitle: 'Серверные бэкапы (только админ)',
         icon: HardDrive,
         detailId: 'backups',
         action: 'dialog'
@@ -263,21 +262,17 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
     title: 'Календарь',
     description: 'Включите ICS-синхронизацию для внешнего календаря.'
   },
-  'ai-diagnostics': {
-    title: 'AI диагностика',
-    description: 'Инструменты диагностики находятся на отдельном AI-экране.'
-  },
   'export-data': {
     title: 'Экспорт данных',
-    description: 'Скачайте актуальную копию данных пользователя.'
+    description: 'Скачайте актуальную копию растений в JSON.'
   },
   'import-data': {
     title: 'Импорт данных',
-    description: 'Восстановите данные из облака с выбором провайдера.'
+    description: 'Восстановите растения из JSON-файла экспорта.'
   },
   backups: {
     title: 'Резервные копии',
-    description: 'Создайте быстрый серверный бэкап в Telegram.'
+    description: 'Создайте серверный бэкап (доступно только администратору).'
   },
   'install-pwa': {
     title: 'Установка PWA',
@@ -306,11 +301,17 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
 };
 
 export function SettingsPage() {
-  const roles = useAuthStore((s) => s.roles);
-  const isAdmin = roles.includes('ROLE_ADMIN');
+  const queryClient = useQueryClient();
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
 
   const [activeDetail, setActiveDetail] = useState<SettingsDetailId | null>(null);
+
+  const handleRefresh = async () => {
+    hapticImpact('light');
+    await queryClient.invalidateQueries();
+    await queryClient.refetchQueries({ type: 'active' });
+  };
 
   const visibleGroups = useMemo(() => {
     return SETTINGS_GROUPS
@@ -340,7 +341,7 @@ export function SettingsPage() {
   };
 
   return (
-    <PlatformPullToRefresh onRefresh={() => window.location.reload()}>
+    <PlatformPullToRefresh onRefresh={handleRefresh}>
       <section className="settings-premium-shell space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <header className="space-y-2 px-1">
           <p className="text-ios-caption uppercase tracking-wide text-ios-subtext">Настройки</p>
@@ -361,7 +362,7 @@ export function SettingsPage() {
           </SettingsGroupCard>
         ))}
 
-        <SettingsDetailDialog detailId={activeDetail} onClose={() => setActiveDetail(null)} />
+        <SettingsDetailDialog detailId={activeDetail} isAdmin={isAdmin} onClose={() => setActiveDetail(null)} />
       </section>
     </PlatformPullToRefresh>
   );
@@ -399,7 +400,15 @@ function SettingsRow({ item, withDivider, onClick }: { item: SettingsItem; withD
   );
 }
 
-function SettingsDetailDialog({ detailId, onClose }: { detailId: SettingsDetailId | null; onClose: () => void }) {
+function SettingsDetailDialog({
+  detailId,
+  isAdmin,
+  onClose
+}: {
+  detailId: SettingsDetailId | null;
+  isAdmin: boolean;
+  onClose: () => void;
+}) {
   if (!detailId) {
     return null;
   }
@@ -424,7 +433,6 @@ function SettingsDetailDialog({ detailId, onClose }: { detailId: SettingsDetailI
         {detailId === 'weather' ? <WeatherPanel /> : null}
         {detailId === 'home-assistant' ? <HomeAssistantPanel /> : null}
         {detailId === 'calendar' ? <CalendarPanel /> : null}
-        {detailId === 'ai-diagnostics' ? <AiDiagnosticsPanel /> : null}
         {detailId === 'export-data' ? <ExportDataPanel /> : null}
         {detailId === 'import-data' ? <ImportDataPanel /> : null}
         {detailId === 'backups' ? <BackupsPanel /> : null}
@@ -433,7 +441,7 @@ function SettingsDetailDialog({ detailId, onClose }: { detailId: SettingsDetailI
         {detailId === 'diagnostics' ? <DiagnosticsPanel /> : null}
         {detailId === 'version' ? <VersionPanel /> : null}
         {detailId === 'support' ? <SupportPanel /> : null}
-        {detailId === 'openrouter' ? <OpenRouterSettings /> : null}
+        {detailId === 'openrouter' && isAdmin ? <OpenRouterSettings /> : null}
       </div>
     </Dialog>
   );

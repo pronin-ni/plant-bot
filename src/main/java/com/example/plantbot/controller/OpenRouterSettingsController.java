@@ -1,21 +1,18 @@
 package com.example.plantbot.controller;
 
 import com.example.plantbot.controller.dto.OpenRouterModelOptionResponse;
-import com.example.plantbot.controller.dto.OpenRouterModelPreferencesRequest;
-import com.example.plantbot.controller.dto.OpenRouterModelPreferencesResponse;
 import com.example.plantbot.controller.dto.OpenRouterModelsResponse;
 import com.example.plantbot.controller.dto.OpenRouterTestResponse;
+import com.example.plantbot.controller.dto.OpenRouterValidateKeyRequest;
+import com.example.plantbot.controller.dto.OpenRouterValidateKeyResponse;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.CurrentUserService;
-import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
-import com.example.plantbot.service.OpenRouterUserSettingsService;
-import com.example.plantbot.service.UserService;
+import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,9 +34,7 @@ public class OpenRouterSettingsController {
           + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6pY8kAAAAASUVORK5CYII=";
 
   private final CurrentUserService currentUserService;
-  private final UserService userService;
   private final OpenRouterModelCatalogService modelCatalogService;
-  private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
 
   @GetMapping("/models")
@@ -50,43 +45,6 @@ public class OpenRouterSettingsController {
     User user = currentUserService.resolve(authentication, initData);
     List<OpenRouterModelOptionResponse> models = modelCatalogService.fetchModels(user);
     return new OpenRouterModelsResponse(models);
-  }
-
-  @GetMapping("/preferences")
-  public OpenRouterModelPreferencesResponse preferences(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-      Authentication authentication
-  ) {
-    User user = currentUserService.resolve(authentication, initData);
-    return toResponse(user);
-  }
-
-  @PostMapping("/preferences")
-  public OpenRouterModelPreferencesResponse savePreferences(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-      Authentication authentication,
-      @RequestBody(required = false) OpenRouterModelPreferencesRequest request
-  ) {
-    User user = currentUserService.resolve(authentication, initData);
-    user.setOpenrouterModelPlant(normalize(request == null ? null : request.plantModel()));
-    user.setOpenrouterModelChat(normalize(request == null ? null : request.chatModel()));
-    user.setOpenrouterModelPhotoIdentify(normalize(request == null ? null : request.photoIdentifyModel()));
-    user.setOpenrouterModelPhotoDiagnose(normalize(request == null ? null : request.photoDiagnoseModel()));
-    userService.save(user);
-    if (request != null && request.apiKey() != null) {
-      openRouterUserSettingsService.updateUserApiKey(user, request.apiKey());
-    }
-    return toResponse(user);
-  }
-
-  @DeleteMapping("/preferences/api-key")
-  public OpenRouterModelPreferencesResponse clearApiKey(
-      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-      Authentication authentication
-  ) {
-    User user = currentUserService.resolve(authentication, initData);
-    openRouterUserSettingsService.updateUserApiKey(user, "");
-    return toResponse(user);
   }
 
   @PostMapping("/test")
@@ -131,29 +89,19 @@ public class OpenRouterSettingsController {
     );
   }
 
-  private OpenRouterModelPreferencesResponse toResponse(User user) {
-    return new OpenRouterModelPreferencesResponse(
-        user.getOpenrouterModelPlant(),
-        user.getOpenrouterModelChat(),
-        user.getOpenrouterModelPhotoIdentify(),
-        user.getOpenrouterModelPhotoDiagnose(),
-        openRouterUserSettingsService.hasUserApiKey(user)
-    );
-  }
+  @PostMapping("/validate-key")
+  public OpenRouterValidateKeyResponse validateKey(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @RequestBody(required = false) OpenRouterValidateKeyRequest request
+  ) {
+    currentUserService.resolve(authentication, initData);
+    String apiKey = request == null ? null : request.apiKey();
+    if (apiKey == null || apiKey.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "apiKey обязателен");
+    }
 
-  private String normalize(String value) {
-    if (value == null || value.isBlank()) {
-      return null;
-    }
-    String cleaned = value.trim();
-    String[] commaParts = cleaned.split(",");
-    if (commaParts.length > 0) {
-      cleaned = commaParts[0].trim();
-    }
-    String[] lineParts = cleaned.split("\\s+");
-    if (lineParts.length > 0) {
-      cleaned = lineParts[0].trim();
-    }
-    return cleaned.isBlank() ? null : cleaned;
+    var validation = modelCatalogService.validateApiKey(apiKey);
+    return new OpenRouterValidateKeyResponse(validation.ok(), validation.message());
   }
 }

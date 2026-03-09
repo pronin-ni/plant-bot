@@ -8,8 +8,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class OpenRouterUserSettingsService {
-  private final OpenRouterApiKeyCryptoService cryptoService;
-  private final UserService userService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
 
   @Value("${openrouter.api-key:}")
@@ -31,18 +29,5 @@ public class OpenRouterUserSettingsService {
 
   public OpenRouterGlobalSettingsService.ResolvedModels resolveGlobalModels() {
     return openRouterGlobalSettingsService.resolveModels(openRouterGlobalSettingsService.getOrCreate());
-  }
-
-  public boolean hasUserApiKey(User user) {
-    return user != null && user.getOpenrouterApiKeyEncrypted() != null && !user.getOpenrouterApiKeyEncrypted().isBlank();
-  }
-
-  public void updateUserApiKey(User user, String rawApiKey) {
-    if (rawApiKey == null || rawApiKey.isBlank()) {
-      user.setOpenrouterApiKeyEncrypted(null);
-    } else {
-      user.setOpenrouterApiKeyEncrypted(cryptoService.encrypt(rawApiKey.trim()));
-    }
-    userService.save(user);
   }
 }

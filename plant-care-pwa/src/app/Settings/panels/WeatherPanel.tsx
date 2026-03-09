@@ -2,13 +2,23 @@ import { useEffect, useState } from 'react';
 
 import { WeatherProviderSelector } from '@/components/WeatherProviderSelector';
 import { Button } from '@/components/ui/button';
-import { getWeatherCurrent, getWeatherForecast, getWeatherProviders, setWeatherProvider } from '@/lib/api';
+import {
+  getWeatherCurrent,
+  getWeatherForecast,
+  getWeatherProviders,
+  setWeatherProvider,
+  updateCity,
+  validateTelegramAuth
+} from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 import { hapticImpact } from '@/lib/telegram';
 import type { WeatherCurrentDto, WeatherForecastDto, WeatherProvidersResponse } from '@/types/api';
 
 import { fetchOpenMeteoCities, SETTINGS_CITY_KEY } from './panel-shared';
 
 export function WeatherPanel() {
+  const setAuth = useAuthStore((s) => s.setAuth);
+
   const [providers, setProviders] = useState<WeatherProvidersResponse['providers']>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [city, setCity] = useState<string>(() => localStorage.getItem(SETTINGS_CITY_KEY) ?? '');
@@ -18,6 +28,21 @@ export function WeatherPanel() {
   const [saving, setSaving] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [status, setStatus] = useState<string>('');
+
+  const syncAuthCity = (payload: { userId?: string; username?: string; firstName?: string; city?: string; isAdmin?: boolean; ok?: boolean }) => {
+    const currentAuth = useAuthStore.getState();
+    setAuth({
+      telegramUserId: payload.userId ? Number(payload.userId) : currentAuth.telegramUserId,
+      username: payload.username ?? currentAuth.username,
+      firstName: payload.firstName ?? currentAuth.firstName,
+      email: currentAuth.email,
+      city: payload.city ?? currentAuth.city,
+      isAdmin: payload.isAdmin ?? currentAuth.isAdmin,
+      roles: currentAuth.roles,
+      accessToken: currentAuth.accessToken,
+      isAuthorized: payload.ok ?? currentAuth.isAuthorized
+    });
+  };
 
   const loadProviders = async () => {
     try {
@@ -32,6 +57,31 @@ export function WeatherPanel() {
 
   useEffect(() => {
     void loadProviders();
+  }, []);
+
+  useEffect(() => {
+    const storedCity = localStorage.getItem(SETTINGS_CITY_KEY);
+    if (storedCity) {
+      setCity(storedCity);
+      return;
+    }
+    const authCity = useAuthStore.getState().city;
+    if (authCity) {
+      setCity(authCity);
+      localStorage.setItem(SETTINGS_CITY_KEY, authCity);
+      return;
+    }
+
+    void validateTelegramAuth()
+      .then((res) => {
+        if (res?.city) {
+          const normalized = res.city.trim();
+          setCity(normalized);
+          localStorage.setItem(SETTINGS_CITY_KEY, normalized);
+          syncAuthCity(res);
+        }
+      })
+      .catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -70,21 +120,25 @@ export function WeatherPanel() {
   };
 
   const preview = async () => {
-    if (!city.trim()) {
+    const normalizedCity = city.trim();
+    if (!normalizedCity) {
       setStatus('Укажите город для предпросмотра.');
       return;
     }
     setLoadingPreview(true);
     setStatus('');
     try {
-      localStorage.setItem(SETTINGS_CITY_KEY, city.trim());
-      const [nextCurrent, nextForecast] = await Promise.all([getWeatherCurrent(city.trim()), getWeatherForecast(city.trim())]);
+      const updated = await updateCity(normalizedCity);
+      syncAuthCity(updated);
+      localStorage.setItem(SETTINGS_CITY_KEY, normalizedCity);
+      const [nextCurrent, nextForecast] = await Promise.all([getWeatherCurrent(normalizedCity), getWeatherForecast(normalizedCity)]);
       setCurrent(nextCurrent);
       setForecast(nextForecast);
-      setStatus('Погода обновлена.');
+      setStatus('Город сохранён, погода обновлена.');
+      hapticImpact('light');
     } catch (error) {
       console.error(error);
-      setStatus('Не удалось загрузить погоду.');
+      setStatus('Не удалось сохранить город или загрузить погоду.');
     } finally {
       setLoadingPreview(false);
     }

@@ -83,7 +83,7 @@ export function CalendarStrip({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="touch-target android-ripple inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
+            className="touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
             onClick={() => {
               hapticSelectionChanged();
               onShiftWindow(-7);
@@ -94,7 +94,7 @@ export function CalendarStrip({
           </button>
           <button
             type="button"
-            className="touch-target android-ripple inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
+            className="touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
             onClick={() => {
               hapticSelectionChanged();
               onShiftWindow(7);

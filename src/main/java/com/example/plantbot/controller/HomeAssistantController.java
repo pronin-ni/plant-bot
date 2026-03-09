@@ -51,12 +51,18 @@ public class HomeAssistantController {
     }
 
     var probe = haApiService.probe(request.baseUrl().trim(), request.token().trim());
+    if (!probe.connected()) {
+      String message = probe.message() == null || probe.message().isBlank()
+          ? "Не удалось подключиться к Home Assistant. Проверьте URL и токен."
+          : probe.message();
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
     haIntegrationService.upsertConnection(
         user,
         request.baseUrl().trim(),
         request.token().trim(),
         probe.instanceName(),
-        probe.connected()
+        true
     );
 
     return new HomeAssistantConfigResponse(probe.connected(), probe.message(), probe.instanceName());

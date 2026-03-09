@@ -19,10 +19,7 @@ import type {
   OpenRouterDiagnoseResult,
   AchievementsDto,
   OpenRouterModelsDto,
-  OpenRouterPreferencesDto,
-  AdminOpenRouterSettingsDto,
   AdminOpenRouterModelsDto,
-  AdminOpenRouterTestDto,
   OpenRouterRuntimeSettingsDto,
   OpenRouterTypedTestDto,
   ChatAskResponse,
@@ -657,23 +654,6 @@ export async function getOpenRouterModels(): Promise<OpenRouterModelsDto> {
   return apiFetch<OpenRouterModelsDto>('/api/openrouter/models', { method: 'GET' });
 }
 
-export async function getOpenRouterPreferences(): Promise<OpenRouterPreferencesDto> {
-  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences', { method: 'GET' });
-}
-
-export async function saveOpenRouterPreferences(payload: OpenRouterPreferencesDto): Promise<OpenRouterPreferencesDto> {
-  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function clearOpenRouterApiKey(): Promise<OpenRouterPreferencesDto> {
-  return apiFetch<OpenRouterPreferencesDto>('/api/openrouter/preferences/api-key', {
-    method: 'DELETE'
-  });
-}
-
 export async function validateOpenRouterKey(apiKey: string): Promise<{ ok: boolean; message?: string }> {
   return apiFetch<{ ok: boolean; message?: string }>('/api/openrouter/validate-key', {
     method: 'POST',
@@ -681,33 +661,8 @@ export async function validateOpenRouterKey(apiKey: string): Promise<{ ok: boole
   });
 }
 
-export async function sendOpenRouterTest(payload: { message: string; imageBase64?: string }): Promise<ChatAskResponse> {
-  return apiFetch<ChatAskResponse>('/api/openrouter/send', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-}
-
 export async function getOpenRouterRuntimeSettings(): Promise<OpenRouterRuntimeSettingsDto> {
   return apiFetch<OpenRouterRuntimeSettingsDto>('/api/settings/openrouter', { method: 'GET' });
-}
-
-export async function getAdminOpenRouterSettings(): Promise<AdminOpenRouterSettingsDto> {
-  return apiFetch<AdminOpenRouterSettingsDto>('/api/admin/openrouter/settings', { method: 'GET' });
-}
-
-export async function saveAdminOpenRouterSettings(
-  payload: {
-    apiKey?: string | null;
-    chatModel?: string | null;
-    photoRecognitionModel?: string | null;
-    photoDiagnosisModel?: string | null;
-  }
-): Promise<AdminOpenRouterSettingsDto> {
-  return apiFetch<AdminOpenRouterSettingsDto>('/api/admin/openrouter/settings', {
-    method: 'PUT',
-    body: JSON.stringify(payload)
-  });
 }
 
 export async function getAdminOpenRouterModels(): Promise<AdminOpenRouterModelsDto> {
@@ -729,14 +684,6 @@ export async function testOpenRouterModel(type: 'text' | 'photo'): Promise<OpenR
     method: 'POST'
   });
 }
-
-export async function sendAdminOpenRouterTest(payload?: { message?: string }): Promise<AdminOpenRouterTestDto> {
-  return apiFetch<AdminOpenRouterTestDto>('/api/admin/openrouter/test', {
-    method: 'POST',
-    body: JSON.stringify({ message: payload?.message ?? '' })
-  });
-}
-
 
 export async function askAssistant(question: string): Promise<ChatAskResponse> {
   return apiFetch<ChatAskResponse>('/api/assistant/chat', {
@@ -862,26 +809,6 @@ export async function getAdminMonitoring(): Promise<AdminMonitoringDto> {
 export async function getAdminActivityLogs(limit = 50): Promise<AdminActivityLogItemDto[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   return apiFetch<AdminActivityLogItemDto[]>(`/api/admin/activity/logs?${params.toString()}`, { method: 'GET' });
-}
-
-// Экспорт / импорт / бэкап
-export async function exportPdf(): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/export/pdf`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY) ?? ''}` }
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, await parseErrorMessage(response));
-  }
-  return await response.blob();
-}
-
-export async function importFromCloud(provider: 'drive' | 'dropbox'): Promise<{ imported: number }> {
-  return apiFetch<{ imported: number }>(`/api/import/${provider}`, { method: 'POST' });
-}
-
-export async function backupToTelegram(): Promise<{ ok: boolean; file?: string }> {
-  return apiFetch<{ ok: boolean; file?: string }>('/api/backup/telegram', { method: 'POST' });
 }
 
 export async function suggestPlantProfile(name: string): Promise<PlantProfileSuggestionDto> {

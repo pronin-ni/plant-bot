@@ -9,7 +9,8 @@ import {
   getOpenRouterModels,
   getOpenRouterRuntimeSettings,
   saveAdminOpenRouterModels,
-  testOpenRouterModel
+  testOpenRouterModel,
+  validateOpenRouterKey
 } from '@/lib/api';
 
 // ORB6: единая точка входа для OpenRouter API на фронте.
@@ -34,4 +35,8 @@ export async function runOpenRouterTypedTest(type: 'text' | 'photo'): Promise<Op
 
 export async function fetchOpenRouterRuntimeSettings(): Promise<OpenRouterRuntimeSettingsDto> {
   return getOpenRouterRuntimeSettings();
+}
+
+export async function validateOpenRouterApiKey(apiKey: string): Promise<{ ok: boolean; message?: string }> {
+  return validateOpenRouterKey(apiKey);
 }

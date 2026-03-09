@@ -224,7 +224,7 @@ export function CalendarPage() {
 
   return (
     <PlatformPullToRefresh onRefresh={() => calendarQuery.refetch()}>
-      <section className="calendar-premium-shell relative space-y-3 overflow-hidden pb-[calc(8rem+env(safe-area-inset-bottom))]">
+      <section className="calendar-premium-shell relative space-y-3 overflow-hidden pt-[max(12px,env(safe-area-inset-top))] pb-[calc(9rem+env(safe-area-inset-bottom))]">
         <AnimatePresence>
           {wateringWavePulse > 0 ? (
             <motion.div

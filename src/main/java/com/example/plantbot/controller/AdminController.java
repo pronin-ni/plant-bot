@@ -23,8 +23,6 @@ import com.example.plantbot.controller.dto.admin.AdminUsersResponse;
 import com.example.plantbot.controller.dto.admin.AdminActivityLogItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminMagicLinkAuditItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminMonitoringResponse;
-import com.example.plantbot.controller.dto.admin.AdminOpenRouterSettingsResponse;
-import com.example.plantbot.controller.dto.admin.AdminOpenRouterSettingsUpdateRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
@@ -190,52 +188,6 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     log.info("Admin magic-link logs requested: userId={} telegramId={} limit={}", admin.getId(), admin.getTelegramId(), limit);
     return magicLinkAuditService.latest(limit);
-  }
-
-  @GetMapping("/openrouter/settings")
-  public AdminOpenRouterSettingsResponse openRouterSettings(Authentication authentication) {
-    User admin = requireAdmin(authentication);
-    var settings = openRouterGlobalSettingsService.getOrCreate();
-    var models = openRouterGlobalSettingsService.resolveModels(settings);
-    log.info("Admin openrouter settings requested: userId={} telegramId={} hasApiKey={}",
-        admin.getId(), admin.getTelegramId(), openRouterGlobalSettingsService.hasApiKey(settings));
-    return new AdminOpenRouterSettingsResponse(
-        openRouterGlobalSettingsService.hasApiKey(settings),
-        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
-        models.chatModel(),
-        models.photoRecognitionModel(),
-        models.photoDiagnosisModel(),
-        settings.getUpdatedAt()
-    );
-  }
-
-  @PutMapping("/openrouter/settings")
-  public AdminOpenRouterSettingsResponse updateOpenRouterSettings(
-      Authentication authentication,
-      @RequestBody(required = false) AdminOpenRouterSettingsUpdateRequest request
-  ) {
-    User admin = requireAdmin(authentication);
-    var result = openRouterGlobalSettingsService.update(request);
-    var settings = result.settings();
-    var models = openRouterGlobalSettingsService.resolveModels(settings);
-    log.warn(
-        "Admin openrouter settings updated: userId={} telegramId={} changedFields={} hasApiKey={} chatModel={} photoRecognitionModel={} photoDiagnosisModel={}",
-        admin.getId(),
-        admin.getTelegramId(),
-        result.changedFields(),
-        result.hasApiKey(),
-        models.chatModel(),
-        models.photoRecognitionModel(),
-        models.photoDiagnosisModel()
-    );
-    return new AdminOpenRouterSettingsResponse(
-        result.hasApiKey(),
-        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
-        models.chatModel(),
-        models.photoRecognitionModel(),
-        models.photoDiagnosisModel(),
-        settings.getUpdatedAt()
-    );
   }
 
   @GetMapping("/openrouter/models")

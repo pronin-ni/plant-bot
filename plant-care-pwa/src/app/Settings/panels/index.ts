@@ -2,7 +2,6 @@ export { NotificationsPanel } from './NotificationsPanel';
 export { WeatherPanel } from './WeatherPanel';
 export { HomeAssistantPanel } from './HomeAssistantPanel';
 export { CalendarPanel } from './CalendarPanel';
-export { AiDiagnosticsPanel } from './AiDiagnosticsPanel';
 export { ExportDataPanel } from './ExportDataPanel';
 export { ImportDataPanel } from './ImportDataPanel';
 export { BackupsPanel } from './BackupsPanel';

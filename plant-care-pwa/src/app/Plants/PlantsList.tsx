@@ -7,11 +7,10 @@ import { PlantCard } from '@/components/PlantCard';
 import { CategoryTabs, type PlantCategoryFilter } from '@/components/CategoryTabs';
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { Button } from '@/components/ui/button';
-import { getPlantConditions, getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
+import { getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useAuthStore, useOfflineStore, useUiStore } from '@/lib/store';
 import type { PlantDto, WeatherCurrentDto } from '@/types/api';
-import type { PlantConditionsResponse } from '@/types/home-assistant';
 
 type SortMode = 'needs_water' | 'created_desc' | 'alpha' | 'category';
 
@@ -158,37 +157,6 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function buildConditionsHint(data?: PlantConditionsResponse | null, weather?: WeatherCurrentDto | null): string {
-  const temperature = isFiniteNumber(data?.temperatureC) ? data?.temperatureC : weather?.tempC;
-  const humidity = isFiniteNumber(data?.humidityPercent) ? data?.humidityPercent : weather?.humidity;
-
-  if (!isFiniteNumber(temperature) && !isFiniteNumber(humidity)) {
-    return 'Укажите город и провайдера погоды в Настройках — получим подсказки автоматически.';
-  }
-
-  if (isFiniteNumber(temperature) && isFiniteNumber(humidity)) {
-    if (temperature >= 28 && humidity <= 40) {
-      return 'Жарко и сухо — проверяйте грунт чаще.';
-    }
-    if (temperature <= 12) {
-      return 'Прохладно — поливайте аккуратно, без переувлажнения.';
-    }
-    if (humidity >= 70) {
-      return 'Влажность высокая — можно увеличить интервал полива.';
-    }
-  }
-
-  if (isFiniteNumber(temperature) && temperature >= 26) {
-    return 'Тёплая погода — наблюдайте за пересыханием верхнего слоя.';
-  }
-
-  if (isFiniteNumber(humidity) && humidity <= 35) {
-    return 'Низкая влажность — добавьте опрыскивание или поливайте немного чаще.';
-  }
-
-  return 'Условия стабильные — придерживайтесь базового графика полива.';
-}
-
 function WeatherIcon({ code }: { code?: string | null }) {
   const icon = (code ?? '').toLowerCase();
   const cls = 'h-4 w-4 text-ios-accent';
@@ -312,14 +280,6 @@ export function PlantsList() {
     setWeatherCity(next || null);
   }, [authCity]);
 
-  const conditionsQuery = useQuery({
-    queryKey: ['home-conditions-widget', priorityPlantId],
-    queryFn: () => getPlantConditions(priorityPlantId!),
-    enabled: priorityPlantId !== null,
-    staleTime: 2 * 60_000,
-    retry: 1
-  });
-
   const weatherQuery = useQuery({
     queryKey: ['weather-current-home', weatherCity],
     queryFn: () => getWeatherCurrent(weatherCity as string),
@@ -333,7 +293,6 @@ export function PlantsList() {
     onSuccess: () => {
       hapticNotify('success');
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
-      void queryClient.invalidateQueries({ queryKey: ['home-conditions-widget'] });
     },
     onError: () => {
       hapticNotify('error');
@@ -343,7 +302,7 @@ export function PlantsList() {
   const plants = useMemo(() => {
     const base = plantsQuery.data ?? [];
     const byCategory = filterByCategory(base, categoryFilter);
-    const byOverdue = onlyOverdue ? byCategory.filter((plant) => getDaysLeft(plant) <= 0) : byCategory;
+    const byOverdue = onlyOverdue ? byCategory.filter((plant) => getDaysLeft(plant) < 0) : byCategory;
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const bySearch = normalizedSearch
       ? byOverdue.filter((plant) => {
@@ -356,6 +315,14 @@ export function PlantsList() {
   }, [plantsQuery.data, categoryFilter, onlyOverdue, searchQuery, sortMode]);
 
   const overdueCount = useMemo(
+    () => (plantsQuery.data ?? []).filter((plant) => getDaysLeft(plant) < 0).length,
+    [plantsQuery.data]
+  );
+  const dueTodayCount = useMemo(
+    () => (plantsQuery.data ?? []).filter((plant) => getDaysLeft(plant) === 0).length,
+    [plantsQuery.data]
+  );
+  const needWaterCount = useMemo(
     () => (plantsQuery.data ?? []).filter((plant) => getDaysLeft(plant) <= 0).length,
     [plantsQuery.data]
   );
@@ -366,13 +333,11 @@ export function PlantsList() {
     [plantsQuery.data]
   );
 
-  const conditionsData = conditionsQuery.data;
   const weatherData = weatherQuery.data;
 
   const refreshAll = async () => {
     await Promise.all([
       plantsQuery.refetch(),
-      conditionsQuery.refetch(),
       weatherCity ? weatherQuery.refetch() : Promise.resolve()
     ]);
     setLastSyncAt(new Date());
@@ -413,58 +378,119 @@ export function PlantsList() {
         transition={{ type: 'spring', stiffness: 340, damping: 27, mass: 1 }}
       >
         <Sprout className="mb-3 h-9 w-9 text-ios-accent" />
-        <h3 className="text-ios-title-2">Растений пока нет</h3>
-        <p className="mt-1 text-ios-body text-ios-subtext">Нажми вкладку «Добавить», чтобы создать первое растение.</p>
+        <h3 className="text-ios-title-2">У вас пока нет растений 🌱</h3>
+        <p className="mt-1 text-ios-body text-ios-subtext">Добавьте первое растение, чтобы отслеживать полив.</p>
       </motion.div>
     );
   }
 
   return (
     <PlatformPullToRefresh onRefresh={refreshAll}>
-      <section className="space-y-3 pb-2 dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
-        <motion.div
-          className="ios-blur-card sticky top-1 z-20 flex items-center gap-2 p-2.5"
-          initial={{ opacity: 0, y: -8, scale: 0.985 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: 'spring', stiffness: 350, damping: 29 }}
-        >
-          <Search className="ml-1 h-4 w-4 text-ios-subtext" />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Быстрый поиск по растениям"
-            className="h-11 w-full rounded-ios-button border border-ios-border/50 bg-white/55 px-3 text-sm outline-none backdrop-blur-[20px] dark:bg-zinc-900/55"
-          />
-        </motion.div>
+      <section className="space-y-4 pb-3 dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
+        <div className="px-1">
+          <p className="text-xs uppercase tracking-[0.08em] text-ios-subtext">Главное</p>
+          <h1 className="text-2xl font-semibold text-ios-text">Мои растения</h1>
+        </div>
 
         <motion.div
-          className="ios-blur-card relative overflow-hidden p-3"
+          className="ios-blur-card grid grid-cols-1 gap-3 p-3 sm:grid-cols-2"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 28 }}
         >
-          <div className="pointer-events-none absolute right-2 top-2 opacity-60 dark:opacity-100">
-            <Sparkles className="h-4 w-4 text-ios-accent" />
+          <div className="space-y-2 rounded-2xl border border-ios-border/45 bg-white/60 p-3 shadow-sm dark:bg-zinc-950/55">
+            <div className="flex items-center gap-2 text-sm font-semibold text-ios-text">
+              <Sparkles className="h-4 w-4 text-ios-accent" />
+              Сегодня
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs text-ios-subtext">
+              <div className="rounded-xl border border-ios-border/50 bg-white/70 px-2 py-2 text-center dark:bg-zinc-900/60">
+                <p className="text-[11px]">Нужно полить</p>
+                <p className="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-300">
+                  <AnimatedCount value={needWaterCount} />
+                </p>
+              </div>
+              <div className="rounded-xl border border-ios-border/50 bg-white/70 px-2 py-2 text-center dark:bg-zinc-900/60">
+                <p className="text-[11px]">Просрочено</p>
+                <p className="mt-1 text-lg font-semibold text-red-500">
+                  <AnimatedCount value={overdueCount} />
+                </p>
+              </div>
+              <div className="rounded-xl border border-ios-border/50 bg-white/70 px-2 py-2 text-center dark:bg-zinc-900/60">
+                <p className="text-[11px]">Полито сегодня</p>
+                <p className="mt-1 text-lg font-semibold text-ios-text">
+                  <AnimatedCount value={wateredTodayCount} />
+                </p>
+              </div>
+            </div>
+            <p className="text-[11px] text-ios-subtext">
+              {lastSyncAt ? `Обновлено в ${formatTimeRu(lastSyncAt)}` : 'Ожидаем первую синхронизацию...'}
+            </p>
           </div>
-          <p className="text-xs text-ios-subtext">Сегодняшняя сводка</p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <div className="rounded-2xl border border-ios-border/45 bg-white/45 px-2 py-2 text-center dark:bg-zinc-900/45">
-              <p className="text-[11px] text-ios-subtext">Всего</p>
-              <p className="text-lg font-semibold text-ios-text"><AnimatedCount value={totalPlantsCount} /></p>
+
+          <div className="flex flex-col justify-between rounded-2xl border border-ios-border/45 bg-white/60 p-3 shadow-sm dark:bg-zinc-950/55">
+            <div className="flex items-start gap-2">
+              <div className="rounded-full bg-ios-accent/14 p-2 text-ios-accent">
+                <CloudSun className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ios-text">{weatherCity || 'Ваш город'}</p>
+                <p className="text-xs text-ios-subtext">
+                  {isFiniteNumber(weatherData?.tempC) ? `${Math.round(weatherData.tempC)}°C` : '—'} ·{' '}
+                  {isFiniteNumber(weatherData?.humidity) ? `${Math.round(weatherData.humidity)}% влажность` : '—'}
+                </p>
+                <p className="mt-1 text-[11px] text-ios-subtext/90">
+                  {translateWeather(weatherData?.icon, weatherData?.description) ?? 'Совет: поливайте осторожно'}
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-ios-border/45 bg-white/45 px-2 py-2 text-center dark:bg-zinc-900/45">
-              <p className="text-[11px] text-ios-subtext">Спасено</p>
-              <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400"><AnimatedCount value={rescuedCount} /></p>
-            </div>
-            <div className="rounded-2xl border border-ios-border/45 bg-white/45 px-2 py-2 text-center dark:bg-zinc-900/45">
-              <p className="text-[11px] text-ios-subtext">Полито сегодня</p>
-              <p className="text-lg font-semibold text-ios-text"><AnimatedCount value={wateredTodayCount} /></p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+              <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
+                {sourceLabel(weatherData?.source) ?? 'Погода'}
+              </span>
+              {weatherCity ? (
+                <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
+                  {weatherCity}
+                </span>
+              ) : null}
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-ios-subtext">
-            {lastSyncAt ? `Обновлено в ${formatTimeRu(lastSyncAt)}` : 'Ожидаем первую синхронизацию...'}
-          </p>
         </motion.div>
+
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <CategoryTabs
+            value={categoryFilter}
+            onChange={(next) => {
+              setCategoryFilter(next);
+              localStorage.setItem(categoryStorageKey, next);
+              hapticImpact('light');
+            }}
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden sm:block text-[11px] text-ios-subtext">Поиск</div>
+            <div className="flex items-center gap-2 rounded-ios-button border border-ios-border/60 bg-white/70 px-2 py-1.5">
+              <Search className="h-4 w-4 text-ios-subtext" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Найти растение"
+                className="h-8 w-[150px] bg-transparent text-sm outline-none"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 px-3 text-ios-subtext"
+              onClick={() => {
+                hapticImpact('light');
+                void refreshAll();
+              }}
+            >
+              <RefreshCw className="mr-1 h-4 w-4" />
+              Обновить
+            </Button>
+          </div>
+        </div>
 
         <AnimatePresence>
           {isOffline ? (
@@ -480,44 +506,6 @@ export function PlantsList() {
             </motion.div>
           ) : null}
         </AnimatePresence>
-
-        <motion.div
-          className="ios-blur-card flex items-start gap-3 p-3"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        >
-          <div className="mt-0.5 rounded-full bg-ios-accent/14 p-2 text-ios-accent">
-            <CloudSun className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-ios-subtext">
-              Условия сегодня · {sourceLabel(conditionsData?.source ?? weatherData?.source)}{' '}
-              {weatherCity ? `· ${weatherCity}` : ''}
-            </p>
-            <p className="mt-1 text-sm text-ios-text">
-              {isFiniteNumber(conditionsData?.temperatureC)
-                ? `${Math.round(conditionsData.temperatureC)}°C`
-                : isFiniteNumber(weatherData?.tempC)
-                  ? `${Math.round(weatherData.tempC)}°C`
-                  : '—'}{' '}
-              ·{' '}
-              {isFiniteNumber(conditionsData?.humidityPercent)
-                ? `${Math.round(conditionsData.humidityPercent)}% влажность`
-                : isFiniteNumber(weatherData?.humidity)
-                  ? `${Math.round(weatherData.humidity)}% влажность`
-                  : 'влажность —'}
-            </p>
-            <p className="mt-1 text-xs text-ios-subtext">{buildConditionsHint(conditionsData, weatherData)}</p>
-          </div>
-          {weatherData ? (
-            <div className="flex min-w-0 max-w-[42%] items-center gap-2 rounded-xl border border-ios-border/50 bg-white/60 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
-              <WeatherIcon code={weatherData.icon} />
-              <span className="truncate">{translateWeather(weatherData.icon, weatherData.description) ?? 'Погода'}</span>
-              {weatherCity ? <span className="truncate text-ios-subtext/70">· {weatherCity}</span> : null}
-            </div>
-          ) : null}
-        </motion.div>
 
         <div className="ios-blur-card flex flex-wrap items-center gap-2 p-3">
           <button
@@ -553,18 +541,6 @@ export function PlantsList() {
               <option value="alpha">По алфавиту</option>
               <option value="category">По категории</option>
             </select>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-11 px-3 text-ios-subtext"
-              onClick={() => {
-                hapticImpact('light');
-                void refreshAll();
-              }}
-            >
-              <RefreshCw className="mr-1 h-4 w-4" />
-              Обновить
-            </Button>
           </div>
         </div>
 
@@ -585,7 +561,7 @@ export function PlantsList() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.99 }}
             transition={{ type: 'spring', stiffness: 330, damping: 28, mass: 1 }}
-            className="grid grid-cols-2 gap-3"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
           >
             {plants.map((plant) => {
               const isPlantOverdue = getDaysLeft(plant) <= 0;
@@ -600,7 +576,6 @@ export function PlantsList() {
                     progress={getProgress(plant)}
                     daysLeft={getDaysLeft(plant)}
                     nextWateringText={getNextWateringText(plant)}
-                    nextDateLabel={`Следующий полив: ${formatDateRu(getNextWateringDate(plant))}`}
                     isWatering={waterMutation.isPending && waterMutation.variables === plant.id}
                     onWater={async () => {
                       await waterMutation.mutateAsync(plant.id);
@@ -630,7 +605,9 @@ export function PlantsList() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
           >
-            По запросу «{searchQuery}» ничего не найдено.
+            {searchQuery.trim()
+              ? `По запросу «${searchQuery}» ничего не найдено.`
+              : 'Нет растений в этой выборке.'}
           </motion.div>
         ) : null}
       </section>

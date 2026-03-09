@@ -851,7 +851,7 @@ public class OpenRouterPlantAdvisorService {
 
   private void enforceCacheLimit() {
     try {
-      openRouterCacheRepository.deleteByExpiresAtBefore(Instant.now());
+      openRouterCacheRepository.deleteExpired(Instant.now());
       long max = Math.max(100, cacheMaxEntries);
       long count = openRouterCacheRepository.count();
       if (count <= max) {

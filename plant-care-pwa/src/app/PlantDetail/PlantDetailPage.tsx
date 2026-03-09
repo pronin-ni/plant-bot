@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertTriangle } from 'lucide-react';
 
 import { PlantHero } from '@/components/PlantHero';
 import { hapticImpact } from '@/lib/telegram';
@@ -113,21 +112,6 @@ export function PlantDetailPage({
         onRequestDelete={onRequestDelete}
         celebratePulse={wateringPulse}
       />
-
-      <AnimatePresence>
-        {isOverdue ? (
-          <motion.div
-            className="inline-flex w-full items-center gap-2 rounded-2xl border border-red-400/60 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-600 dark:border-red-500/55 dark:bg-red-500/15 dark:text-red-300"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            Полив просрочен — лучше полить сегодня
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
 
       <motion.div
         className="space-y-4"

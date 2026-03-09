@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MessageCircleHeart } from 'lucide-react';
 
@@ -19,10 +20,7 @@ function TypingBubble() {
       exit={{ opacity: 0, y: -6 }}
       className="flex items-end gap-2"
     >
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ios-border/60 bg-white/70 text-ios-accent dark:bg-zinc-900/60">
-        🌿
-      </span>
-      <div className="rounded-[24px] rounded-bl-[12px] border border-ios-border/55 bg-white/68 px-3 py-2 backdrop-blur-[14px] dark:bg-zinc-900/62">
+      <div className="rounded-xl border border-ios-border/55 bg-ios-card/80 px-4 py-2 shadow-sm dark:border-emerald-500/20 dark:bg-zinc-900/72">
         <div className="flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (
             <motion.span
@@ -41,11 +39,19 @@ function TypingBubble() {
 }
 
 export function ChatHistory({ messages, isTyping = false }: ChatHistoryProps) {
-  return (
-    <section className="ios-blur-card p-3">
-      <p className="mb-2 text-xs text-ios-subtext">Диалог</p>
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
-      <div className="max-h-[46dvh] space-y-2 overflow-y-auto pr-1">
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [messages, isTyping]);
+
+  return (
+    <section className="rounded-xl border border-ios-border/60 bg-white/55 p-2 shadow-sm dark:border-emerald-500/20 dark:bg-zinc-950/50">
+      <div ref={viewportRef} className="max-h-[54dvh] space-y-2 overflow-y-auto px-1 py-1">
         <AnimatePresence mode="popLayout" initial={false}>
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
@@ -54,9 +60,9 @@ export function ChatHistory({ messages, isTyping = false }: ChatHistoryProps) {
         </AnimatePresence>
 
         {!messages.length && !isTyping ? (
-          <div className="rounded-2xl border border-dashed border-ios-border/60 bg-white/45 p-4 text-center text-sm text-ios-subtext dark:bg-zinc-900/45">
+          <div className="rounded-xl border border-dashed border-ios-border/60 bg-white/45 p-4 text-center text-sm text-ios-subtext dark:bg-zinc-900/45">
             <MessageCircleHeart className="mx-auto mb-2 h-5 w-5 text-ios-accent" />
-            Спросите что-нибудь — и ботаник сразу подключится.
+            Задайте вопрос про уход за растениями.
           </div>
         ) : null}
       </div>

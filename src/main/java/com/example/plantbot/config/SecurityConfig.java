@@ -32,8 +32,7 @@ public class SecurityConfig {
             ).permitAll()
             .requestMatchers(
                 "/api/openrouter/models",
-                "/api/openrouter/preferences",
-                "/api/openrouter/preferences/**",
+                "/api/openrouter/validate-key",
                 "/api/openrouter/test"
             ).hasRole("ADMIN")
             .requestMatchers("/api/admin/**").hasRole("ADMIN")

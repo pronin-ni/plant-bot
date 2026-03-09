@@ -7,6 +7,7 @@ import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 export function PwaInstallPanel() {
   const [status, setStatus] = useState<string>('');
   const [checking, setChecking] = useState(false);
+  const [opening, setOpening] = useState(false);
   const pwaUrl = getConfiguredPwaUrl();
 
   const checkInstalled = () => {
@@ -22,6 +23,10 @@ export function PwaInstallPanel() {
   }, []);
 
   const openInstallFlow = async () => {
+    if (opening) {
+      return;
+    }
+    setOpening(true);
     try {
       await openPwaMigrationFlow();
       trackMigrationEvent({ type: 'migration_started' });
@@ -29,6 +34,8 @@ export function PwaInstallPanel() {
     } catch (error) {
       console.error(error);
       setStatus('Не удалось открыть поток установки.');
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -39,11 +46,11 @@ export function PwaInstallPanel() {
         <p className="mt-1 break-all">URL: {pwaUrl || 'VITE_PWA_URL не задан'}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={openInstallFlow} disabled={!pwaUrl}>
-          Открыть установку
+        <Button variant="secondary" onClick={openInstallFlow} disabled={!pwaUrl || opening}>
+          {opening ? 'Открываем...' : 'Открыть установку'}
         </Button>
-        <Button variant="ghost" onClick={checkInstalled} disabled={checking}>
-          Проверить статус
+        <Button variant="ghost" onClick={checkInstalled} disabled={checking || opening}>
+          {checking ? 'Проверяем...' : 'Проверить статус'}
         </Button>
       </div>
     </div>
