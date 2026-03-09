@@ -122,7 +122,7 @@ export function MagicLinkForm({
                 whileTap={{ scale: disabled || loading ? 1 : 0.98 }}
                 onClick={onResend}
                 disabled={disabled || loading}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(16,185,129,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="touch-target inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(16,185,129,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <>
@@ -140,7 +140,7 @@ export function MagicLinkForm({
               <button
                 type="button"
                 onClick={onResetSent}
-                className="h-10 rounded-xl border border-ios-border/70 bg-white/80 text-xs font-medium text-ios-subtext transition hover:bg-white/95 dark:border-zinc-700/70 dark:bg-zinc-900/75"
+                className="touch-target rounded-xl border border-ios-border/70 bg-white/80 text-xs font-medium text-ios-subtext transition hover:bg-white/95 dark:border-zinc-700/70 dark:bg-zinc-900/75"
               >
                 Изменить email
               </button>
@@ -170,7 +170,7 @@ export function MagicLinkForm({
                 value={email}
                 onChange={(event) => onEmailChange(event.target.value)}
                 disabled={disabled || loading}
-                className="h-11 w-full rounded-xl border border-ios-border/70 bg-white/85 px-3 text-sm text-ios-label outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700/70 dark:bg-zinc-900/80"
+                className="touch-target w-full rounded-xl border border-ios-border/70 bg-white/85 px-3 text-sm text-ios-label outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700/70 dark:bg-zinc-900/80"
               />
             </label>
 
@@ -178,7 +178,7 @@ export function MagicLinkForm({
               type="submit"
               whileTap={{ scale: submitDisabled ? 1 : 0.98 }}
               disabled={submitDisabled}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.30)] transition disabled:cursor-not-allowed disabled:opacity-55"
+              className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.30)] transition disabled:cursor-not-allowed disabled:opacity-55"
             >
               {loading ? (
                 <>

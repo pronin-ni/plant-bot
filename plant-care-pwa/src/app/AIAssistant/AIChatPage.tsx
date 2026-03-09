@@ -437,7 +437,7 @@ export function AIChatPage() {
     <section className="space-y-3 pb-28">
       <div className="ios-blur-card border border-ios-border/60 bg-white/60 p-4 dark:border-emerald-500/20 dark:bg-zinc-950/55">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-ios-caption uppercase tracking-wide text-ios-subtext">AI-ассистент по растениям</p>
             <h2 className="mt-1 text-[28px] font-semibold leading-[1.05] text-ios-text">Ваш ботаник-друг</h2>
             <p className="mt-1 text-sm text-ios-subtext">Спрашивайте что угодно: от болезней до черенкования.</p>
@@ -445,7 +445,7 @@ export function AIChatPage() {
 
           <button
             type="button"
-            className="android-ripple inline-flex h-9 items-center rounded-full border border-ios-border/60 bg-white/60 px-3 text-ios-caption text-ios-subtext dark:bg-zinc-900/55"
+            className="touch-target android-ripple inline-flex shrink-0 items-center rounded-full border border-ios-border/60 bg-white/60 px-3 text-ios-caption text-ios-subtext dark:bg-zinc-900/55"
             onClick={() => {
               void clearHistory();
             }}

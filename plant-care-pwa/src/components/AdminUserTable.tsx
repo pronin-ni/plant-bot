@@ -25,6 +25,7 @@ import { cn } from '@/lib/cn';
 import type { AdminUserDetailsDto, AdminUserItemDto } from '@/types/api';
 
 type UserSort = 'PLANTS_DESC' | 'ACTIVITY_DESC' | 'ALPHA';
+type MobileViewMode = 'table' | 'cards';
 
 interface AdminUserTableProps {
   search: string;
@@ -80,6 +81,8 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
   const queryClient = useQueryClient();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [detailsUserId, setDetailsUserId] = useState<number | null>(null);
+  const [isCompactMobile, setIsCompactMobile] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<MobileViewMode>('table');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const usersQuery = useInfiniteQuery({
@@ -169,10 +172,56 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
     const selected = new Set(Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)));
     return filteredItems.filter((item) => selected.has(item.id));
   }, [filteredItems, rowSelection]);
+  const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((item) => Boolean(rowSelection[String(item.id)]));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const media = window.matchMedia('(max-width: 374px)');
+    const apply = () => {
+      const compact = media.matches;
+      setIsCompactMobile(compact);
+      if (compact) {
+        setMobileViewMode((prev) => (prev === 'table' ? 'cards' : prev));
+      } else {
+        setMobileViewMode('table');
+      }
+    };
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, []);
 
   useEffect(() => {
     setRowSelection({});
   }, [search, registeredFrom, sort]);
+
+  const toggleUserSelection = (userId: number, checked: boolean) => {
+    setRowSelection((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[String(userId)] = true;
+      } else {
+        delete next[String(userId)];
+      }
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setRowSelection((prev) => {
+      const next = { ...prev };
+      filteredItems.forEach((item) => {
+        if (checked) {
+          next[String(item.id)] = true;
+        } else {
+          delete next[String(item.id)];
+        }
+      });
+      return next;
+    });
+  };
 
   const columns = useMemo(
     () => [
@@ -263,7 +312,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
             <div className="flex items-center justify-end gap-1">
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2"
+                className="h-10 min-w-10 rounded-lg px-2"
                 onClick={() => {
                   hapticImpact('light');
                   setDetailsUserId(user.id);
@@ -273,7 +322,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
               </Button>
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2"
+                className="h-10 min-w-10 rounded-lg px-2"
                 onClick={() => {
                   if (!confirmDangerousAction('Изменить статус блокировки?', blocked ? 'Разблокировать пользователя?' : 'Заблокировать пользователя?')) {
                     return;
@@ -286,7 +335,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
               </Button>
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2 text-red-500"
+                className="h-10 min-w-10 rounded-lg px-2 text-red-500"
                 onClick={() => {
                   if (
                     !confirmDangerousAction(
@@ -383,9 +432,33 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-ios-text">Пользователи ({filteredItems.length})</p>
         <div className="flex flex-wrap items-center gap-2">
+          {isCompactMobile ? (
+            <div className="inline-flex items-center gap-1 rounded-xl border border-ios-border/60 bg-white/70 p-1 dark:bg-zinc-900/60">
+              <button
+                type="button"
+                className={cn(
+                  'touch-target rounded-lg px-2 text-xs font-medium transition-colors',
+                  mobileViewMode === 'cards' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'text-ios-subtext'
+                )}
+                onClick={() => setMobileViewMode('cards')}
+              >
+                Карточки
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'touch-target rounded-lg px-2 text-xs font-medium transition-colors',
+                  mobileViewMode === 'table' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'text-ios-subtext'
+                )}
+                onClick={() => setMobileViewMode('table')}
+              >
+                Таблица
+              </button>
+            </div>
+          ) : null}
           <Button
             variant="secondary"
-            className="h-9 rounded-xl"
+            className="h-11 rounded-xl"
             disabled={selectedRows.length === 0 || bulkPushMutation.isPending}
             onClick={() => void onBulkPush()}
           >
@@ -394,7 +467,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
           </Button>
           <Button
             variant="secondary"
-            className="h-9 rounded-xl"
+            className="h-11 rounded-xl"
             disabled={selectedRows.length === 0 || bulkCacheMutation.isPending}
             onClick={() => void onBulkCacheReset()}
           >
@@ -403,7 +476,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
           </Button>
           <Button
             variant="secondary"
-            className="h-9 rounded-xl"
+            className="h-11 rounded-xl"
             disabled={selectedRows.length === 0}
             onClick={() => {
               downloadCsv(selectedRows);
@@ -416,43 +489,122 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
-        <div className="max-h-[58vh] overflow-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-white/85 backdrop-blur dark:bg-zinc-950/80">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="border-b border-ios-border/60 px-3 py-2 font-medium text-ios-subtext">
-                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              <AnimatePresence initial={false}>
-                {table.getRowModel().rows.map((row) => (
-                  <motion.tr
-                    key={row.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ type: 'spring', stiffness: 330, damping: 28 }}
-                    className="border-b border-ios-border/40 hover:bg-emerald-500/5"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-2 align-middle">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </tbody>
-          </table>
+      {isCompactMobile && mobileViewMode === 'cards' ? (
+        <div className="space-y-2">
+          <label className="flex touch-target items-center gap-2 rounded-xl border border-ios-border/60 bg-white/70 px-3 text-xs text-ios-subtext dark:bg-zinc-900/60">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-emerald-500"
+              checked={allFilteredSelected}
+              onChange={(event) => toggleAllFiltered(event.target.checked)}
+            />
+            Выбрать все ({filteredItems.length})
+          </label>
+
+          {filteredItems.map((user) => (
+            <div key={user.id} className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:bg-zinc-900/60">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-emerald-500"
+                  checked={Boolean(rowSelection[String(user.id)])}
+                  onChange={(event) => toggleUserSelection(user.id, event.target.checked)}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ios-text">@{user.username ?? 'без username'}</p>
+                  <p className="truncate text-xs text-ios-subtext">{user.firstName ?? 'Без имени'}</p>
+                  <p className="mt-1 text-xs text-ios-subtext">ID: {user.telegramId}</p>
+                  <p className="text-xs text-ios-subtext">Город: {user.city ?? '—'}</p>
+                  <p className="text-xs text-ios-subtext">Растений: {user.plantCount}</p>
+                  <p className="text-xs text-ios-subtext">Последний вход: {formatDate(user.lastSeenAt)}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-1">
+                <Button
+                  variant="secondary"
+                  className="h-10 min-w-10 rounded-lg px-2"
+                  onClick={() => {
+                    hapticImpact('light');
+                    setDetailsUserId(user.id);
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-10 min-w-10 rounded-lg px-2"
+                  onClick={() => {
+                    const blocked = Boolean(user.blocked);
+                    if (!confirmDangerousAction('Изменить статус блокировки?', blocked ? 'Разблокировать пользователя?' : 'Заблокировать пользователя?')) {
+                      return;
+                    }
+                    hapticImpact('medium');
+                    toggleBlockMutation.mutate({ userId: user.id, blocked: !blocked });
+                  }}
+                >
+                  {user.blocked ? <ShieldCheck className="h-4 w-4 text-emerald-500" /> : <ShieldBan className="h-4 w-4 text-amber-500" />}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-10 min-w-10 rounded-lg px-2 text-red-500"
+                  onClick={() => {
+                    if (
+                      !confirmDangerousAction(
+                        'Удалить пользователя и связанные данные?',
+                        'Действие необратимо. Подтверждаете удаление?'
+                      )
+                    ) {
+                      return;
+                    }
+                    hapticImpact('heavy');
+                    deleteUserMutation.mutate(user.id);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
+          <div className="max-h-[58vh] overflow-auto">
+            <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-white/85 backdrop-blur dark:bg-zinc-950/80">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="border-b border-ios-border/60 px-3 py-2 font-medium text-ios-subtext">
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {table.getRowModel().rows.map((row) => (
+                    <motion.tr
+                      key={row.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 330, damping: 28 }}
+                      className="border-b border-ios-border/40 hover:bg-emerald-500/5"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-3 py-2 align-middle">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-xs text-ios-subtext">
         <p>Выбрано: {selectedRows.length}</p>
@@ -471,7 +623,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
       ) : null}
       {usersQuery.hasNextPage ? (
         <div className="flex justify-center">
-          <Button variant="secondary" className="h-9 rounded-xl" onClick={() => void usersQuery.fetchNextPage()}>
+          <Button variant="secondary" className="h-11 rounded-xl" onClick={() => void usersQuery.fetchNextPage()}>
             Показать ещё
           </Button>
         </div>
@@ -502,7 +654,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
 function UserDetailsContent({ data }: { data: AdminUserDetailsDto }) {
   return (
     <div className="space-y-4 text-sm">
-      <section className="grid grid-cols-2 gap-2 rounded-xl border border-ios-border/50 bg-white/60 p-3 dark:bg-zinc-900/60">
+      <section className="grid grid-cols-1 gap-2 rounded-xl border border-ios-border/50 bg-white/60 p-3 sm:grid-cols-2 dark:bg-zinc-900/60">
         <Info label="Username" value={data.username ? `@${data.username}` : '—'} />
         <Info label="Telegram" value={String(data.telegramId)} />
         <Info label="Email" value={data.email ?? '—'} />
@@ -511,7 +663,7 @@ function UserDetailsContent({ data }: { data: AdminUserDetailsDto }) {
         <Info label="Статус" value={data.blocked ? 'Заблокирован' : 'Активен'} />
       </section>
 
-      <section className="grid grid-cols-3 gap-2 rounded-xl border border-ios-border/50 bg-white/60 p-3 dark:bg-zinc-900/60">
+      <section className="grid grid-cols-2 gap-2 rounded-xl border border-ios-border/50 bg-white/60 p-3 sm:grid-cols-3 dark:bg-zinc-900/60">
         <Info label="Растений" value={String(data.plantCount)} />
         <Info label="Просрочено" value={String(data.overduePlants)} />
         <Info label="Поливов" value={String(data.totalWaterings)} />
@@ -519,7 +671,7 @@ function UserDetailsContent({ data }: { data: AdminUserDetailsDto }) {
 
       <section className="rounded-xl border border-ios-border/50 bg-white/60 p-3 dark:bg-zinc-900/60">
         <p className="text-xs uppercase tracking-wide text-ios-subtext">Home Assistant</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Info label="Подключение" value={data.homeAssistantConnected ? 'Подключено' : 'Не подключено'} />
           <Info label="Инстанс" value={data.homeAssistantInstanceName ?? '—'} />
           <Info label="URL" value={data.homeAssistantBaseUrlMasked ?? '—'} />
@@ -529,7 +681,7 @@ function UserDetailsContent({ data }: { data: AdminUserDetailsDto }) {
 
       <section className="rounded-xl border border-ios-border/50 bg-white/60 p-3 dark:bg-zinc-900/60">
         <p className="text-xs uppercase tracking-wide text-ios-subtext">OpenRouter</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Info label="API ключ" value={data.hasOpenRouterKey ? 'Задан' : 'Не задан'} />
           <Info label="Chat модель" value={data.openrouterModelChat ?? '—'} />
           <Info label="Plant модель" value={data.openrouterModelPlant ?? '—'} />
@@ -572,7 +724,7 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wide text-ios-subtext">{label}</p>
-      <p className="truncate text-sm font-medium text-ios-text">{value}</p>
+      <p className="break-words text-sm font-medium text-ios-text">{value}</p>
     </div>
   );
 }

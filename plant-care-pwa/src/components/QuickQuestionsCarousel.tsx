@@ -16,13 +16,14 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
         Примеры быстрых вопросов
       </p>
 
-      <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+      <div className="no-scrollbar flex w-full min-w-0 gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
           <motion.button
             key={item}
             type="button"
             whileTap={{ scale: 0.97 }}
-            className="android-ripple shrink-0 rounded-2xl border border-ios-border/55 bg-white/65 px-3 py-2 text-left text-xs text-ios-text dark:bg-zinc-900/55"
+            className="touch-target android-ripple h-11 max-w-[76vw] shrink-0 truncate rounded-2xl border border-ios-border/55 bg-white/65 px-3.5 text-left text-xs text-ios-text dark:bg-zinc-900/55"
+            title={item}
             onClick={() => {
               hapticSelectionChanged();
               onPick(item);

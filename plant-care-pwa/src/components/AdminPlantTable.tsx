@@ -246,7 +246,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
       }),
       columnHelper.accessor('name', {
         header: 'Название',
-        cell: (info) => <span className="text-sm font-semibold text-ios-text">{info.getValue()}</span>
+        cell: (info) => <span className="line-clamp-2 max-w-[220px] break-words text-sm font-semibold text-ios-text">{info.getValue()}</span>
       }),
       columnHelper.accessor('username', {
         header: 'Владелец',
@@ -279,7 +279,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
             <div className="flex items-center justify-end gap-1">
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2"
+                className="h-10 min-w-10 rounded-lg px-2"
                 disabled={!isOverdue(plant.nextWateringDate) || waterOneMutation.isPending}
                 onClick={() => {
                   if (!confirmDangerousAction('Отметить растение как политое?', 'Подтвердите действие.')) {
@@ -293,7 +293,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
               </Button>
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2"
+                className="h-10 min-w-10 rounded-lg px-2"
                 disabled={updateMutation.isPending}
                 onClick={() => {
                   const nextName = window.prompt('Новое название растения:', plant.name ?? '');
@@ -323,7 +323,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
               </Button>
               <Button
                 variant="secondary"
-                className="h-8 rounded-lg px-2 text-red-500"
+                className="h-10 min-w-10 rounded-lg px-2 text-red-500"
                 onClick={() => {
                   if (
                     !confirmDangerousAction(
@@ -406,16 +406,16 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
     <article className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-ios-text">Растения ({filteredItems.length})</p>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <input
             value={ownerFilter}
             onChange={(event) => setOwnerFilter(event.target.value)}
             placeholder="Фильтр по владельцу (@username)"
-            className="h-9 rounded-xl border border-ios-border/60 bg-white/70 px-3 text-xs outline-none dark:bg-zinc-900/60"
+            className="h-11 w-full rounded-xl border border-ios-border/60 bg-white/70 px-3 text-xs outline-none sm:w-[280px] dark:bg-zinc-900/60"
           />
           <Button
             variant="secondary"
-            className="h-9 rounded-xl"
+            className="h-11 rounded-xl"
             disabled={waterBulkMutation.isPending}
             onClick={() => void onWaterOverdue()}
           >
@@ -480,7 +480,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
       ) : null}
       {plantsQuery.hasNextPage ? (
         <div className="flex justify-center">
-          <Button variant="secondary" className="h-9 rounded-xl" onClick={() => void plantsQuery.fetchNextPage()}>
+          <Button variant="secondary" className="h-11 rounded-xl" onClick={() => void plantsQuery.fetchNextPage()}>
             Показать ещё
           </Button>
         </div>

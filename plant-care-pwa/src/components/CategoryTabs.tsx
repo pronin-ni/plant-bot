@@ -36,7 +36,7 @@ export function CategoryTabs({
               type="button"
               onClick={() => onChange(tab.key)}
               className={cn(
-                'relative rounded-ios-button px-2 py-2 text-xs font-medium transition-colors',
+                'touch-target relative min-h-11 rounded-ios-button px-2 py-2.5 text-[13px] font-medium transition-colors',
                 active ? 'text-ios-text' : 'text-ios-subtext'
               )}
             >

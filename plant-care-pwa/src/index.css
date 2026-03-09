@@ -54,10 +54,18 @@
   body {
     @apply bg-ios-bg text-ios-text font-sans antialiased;
     overscroll-behavior-y: contain;
+    overflow-x: hidden;
   }
 
   #root {
     @apply min-h-dvh;
+  }
+}
+
+@layer utilities {
+  .touch-target {
+    min-width: 2.75rem;
+    height: 2.75rem;
   }
 }
 

@@ -71,7 +71,7 @@ export function InstallPrompt() {
           <button
             type="button"
             aria-label="Закрыть"
-            className="rounded-full p-1 text-ios-subtext"
+            className="touch-target inline-flex w-11 items-center justify-center rounded-full text-ios-subtext transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/60"
             onClick={() => {
               localStorage.setItem('plant-pwa-install-dismissed-at', String(Date.now()));
               setDismissed(true);

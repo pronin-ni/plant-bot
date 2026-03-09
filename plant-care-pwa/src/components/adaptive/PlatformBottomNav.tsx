@@ -39,7 +39,7 @@ export function PlatformBottomNav() {
               hapticSelectionChanged();
             }}
             className={cn(
-              'relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors android:rounded-[16px] android:py-2 android:text-[11px]',
+              'touch-target relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors android:rounded-[16px] android:py-2 android:text-[11px]',
               isActive ? 'text-ios-accent' : 'text-ios-subtext android:text-[#5F6368]'
             )}
             aria-label={tab.title}
@@ -74,4 +74,3 @@ export function PlatformBottomNav() {
     </nav>
   );
 }
-

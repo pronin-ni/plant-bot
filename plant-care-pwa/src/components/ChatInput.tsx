@@ -36,10 +36,10 @@ export function ChatInput({
     <section className="ios-blur-card space-y-2 border border-ios-border/60 bg-white/60 p-3 dark:border-emerald-500/15 dark:bg-zinc-950/60">
       {attachedLabel ? (
         <div className="flex items-center justify-between rounded-2xl border border-ios-border/60 bg-white/60 px-3 py-2 text-xs text-ios-subtext dark:bg-zinc-900/60">
-          <span className="truncate">Фото: {attachedLabel}</span>
+          <span className="min-w-0 truncate">Фото: {attachedLabel}</span>
           <button
             type="button"
-            className="rounded-full p-1 text-ios-subtext"
+            className="touch-target inline-flex w-10 shrink-0 items-center justify-center rounded-full text-ios-subtext"
             onClick={() => {
               hapticImpact('light');
               onClearAttachment?.();
@@ -51,7 +51,7 @@ export function ChatInput({
       ) : null}
 
       <div className="flex items-end gap-2">
-        <label className="android-ripple inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-ios-border/60 bg-white/65 text-ios-subtext dark:bg-zinc-900/60">
+        <label className="touch-target android-ripple inline-flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-ios-border/60 bg-white/65 text-ios-subtext dark:bg-zinc-900/60">
           <input
             type="file"
             accept="image/*"
@@ -70,7 +70,7 @@ export function ChatInput({
           <Paperclip className="h-4 w-4" />
         </label>
 
-        <div className="relative min-h-[42px] flex-1 rounded-[22px] border border-ios-border/65 bg-white/68 px-3 py-2 dark:bg-zinc-900/62">
+        <div className="relative min-h-[44px] flex-1 rounded-[22px] border border-ios-border/65 bg-white/68 px-3 py-2 dark:bg-zinc-900/62">
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
@@ -92,7 +92,7 @@ export function ChatInput({
         <button
           type="button"
           title={micSupported ? 'Голосовой ввод' : 'Голосовой ввод не поддерживается'}
-          className={`android-ripple relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-ios-border/60 ${micActive ? 'bg-red-500/15 text-red-500' : 'bg-white/65 text-ios-subtext'} disabled:cursor-not-allowed disabled:opacity-55 dark:bg-zinc-900/60`}
+          className={`touch-target android-ripple relative inline-flex w-11 shrink-0 items-center justify-center rounded-full border border-ios-border/60 ${micActive ? 'bg-red-500/15 text-red-500' : 'bg-white/65 text-ios-subtext'} disabled:cursor-not-allowed disabled:opacity-55 dark:bg-zinc-900/60`}
           onClick={() => {
             if (!micSupported || disabled) {
               return;
@@ -119,7 +119,7 @@ export function ChatInput({
 
         <button
           type="button"
-          className={`android-ripple inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-[0_10px_24px_rgba(52,199,89,0.32)] transition ${canSend ? 'bg-ios-accent' : 'bg-ios-accent/45'}`}
+          className={`touch-target android-ripple inline-flex w-11 shrink-0 items-center justify-center rounded-full text-white shadow-[0_10px_24px_rgba(52,199,89,0.32)] transition ${canSend ? 'bg-ios-accent' : 'bg-ios-accent/45'}`}
           onClick={() => {
             if (!canSend) {
               return;

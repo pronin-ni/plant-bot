@@ -48,7 +48,7 @@ export function ThemeSelector() {
         <button
           type="button"
           onClick={setSystemTheme}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-medium transition-colors ${
+          className={`touch-target inline-flex items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${
             useSystemTheme
               ? 'border-emerald-500/55 bg-emerald-500/12 text-emerald-800 dark:text-emerald-200'
               : 'border-ios-border/60 bg-white/70 text-ios-text hover:border-ios-accent/45 dark:bg-zinc-900/60'

@@ -270,7 +270,7 @@ export function CalendarPage() {
 
             <button
               type="button"
-              className="android-ripple inline-flex h-9 items-center rounded-full border border-ios-border/60 bg-white/60 px-3 text-ios-caption text-ios-subtext dark:bg-zinc-900/55"
+              className="touch-target android-ripple inline-flex shrink-0 items-center rounded-full border border-ios-border/60 bg-white/60 px-3 text-ios-caption text-ios-subtext dark:bg-zinc-900/55"
               onClick={() => {
                 hapticImpact('light');
                 void calendarQuery.refetch();

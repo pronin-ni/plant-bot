@@ -518,7 +518,7 @@ export function PlantsList() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Быстрый поиск по растениям"
-                className="h-9 w-full rounded-ios-button border border-ios-border/50 bg-white/55 px-3 text-sm outline-none backdrop-blur-[20px] dark:bg-zinc-900/55"
+                className="h-11 w-full rounded-ios-button border border-ios-border/50 bg-white/55 px-3 text-sm outline-none backdrop-blur-[20px] dark:bg-zinc-900/55"
               />
             </motion.div>
           ) : null}
@@ -554,10 +554,10 @@ export function PlantsList() {
             <p className="mt-1 text-xs text-ios-subtext">{buildConditionsHint(conditionsData, weatherData)}</p>
           </div>
           {weatherData ? (
-            <div className="flex items-center gap-2 rounded-xl border border-ios-border/50 bg-white/60 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
+            <div className="flex min-w-0 max-w-[42%] items-center gap-2 rounded-xl border border-ios-border/50 bg-white/60 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
               <WeatherIcon code={weatherData.icon} />
-              <span>{translateWeather(weatherData.icon, weatherData.description) ?? 'Погода'}</span>
-              {weatherCity ? <span className="text-ios-subtext/70">· {weatherCity}</span> : null}
+              <span className="truncate">{translateWeather(weatherData.icon, weatherData.description) ?? 'Погода'}</span>
+              {weatherCity ? <span className="truncate text-ios-subtext/70">· {weatherCity}</span> : null}
             </div>
           ) : null}
         </motion.div>
@@ -565,7 +565,7 @@ export function PlantsList() {
         <div className="ios-blur-card flex flex-wrap items-center gap-2 p-3">
           <button
             type="button"
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+            className={`touch-target inline-flex items-center rounded-full border px-3 text-xs font-semibold ${
               onlyOverdue
                 ? 'border-red-400/70 bg-red-500/15 text-red-600 dark:text-red-300'
                 : 'border-ios-border/70 bg-white/60 text-ios-subtext dark:bg-zinc-900/55'
@@ -580,7 +580,7 @@ export function PlantsList() {
             Только просроченные ({overdueCount})
           </button>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
             <select
               value={sortMode}
               onChange={(event) => {
@@ -589,7 +589,7 @@ export function PlantsList() {
                 localStorage.setItem(sortStorageKey, next);
                 hapticImpact('light');
               }}
-              className="h-9 rounded-ios-button border border-ios-border/70 bg-white/70 px-2 text-[12px] outline-none backdrop-blur-ios dark:bg-zinc-900/60"
+              className="h-11 min-w-[150px] max-w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-2 text-[12px] outline-none backdrop-blur-ios dark:bg-zinc-900/60"
             >
               <option value="needs_water">Нуждаются в поливе</option>
               <option value="created_desc">Сначала новые</option>
@@ -599,7 +599,7 @@ export function PlantsList() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 px-3 text-ios-subtext"
+              className="h-11 px-3 text-ios-subtext"
               onClick={() => {
                 hapticImpact('light');
                 void refreshAll();
