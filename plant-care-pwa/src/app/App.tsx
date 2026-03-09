@@ -36,6 +36,7 @@ export function App() {
   const previousThemeIdRef = useRef<string | null>(null);
   const [themeTransitionTick, setThemeTransitionTick] = useState(0);
   const [themeTransitionColor, setThemeTransitionColor] = useState<string | null>(null);
+  const [isLandscapeBlocked, setIsLandscapeBlocked] = useState(false);
   const isAndroid = typeof document !== 'undefined' && document.documentElement.classList.contains('android');
   const prefersReducedMotion = useReducedMotion();
   useOpenRouterModels();
@@ -124,11 +125,29 @@ export function App() {
     }
   }, [isAdmin, activeTab, setActiveTab]);
 
+  useEffect(() => {
+    const evaluateOrientation = () => {
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+      const compactHeight = window.innerHeight <= 560;
+      setIsLandscapeBlocked(coarsePointer && isLandscape && compactHeight);
+    };
+
+    evaluateOrientation();
+    window.addEventListener('resize', evaluateOrientation, { passive: true });
+    window.addEventListener('orientationchange', evaluateOrientation);
+    return () => {
+      window.removeEventListener('resize', evaluateOrientation);
+      window.removeEventListener('orientationchange', evaluateOrientation);
+    };
+  }, []);
+
   if (!isAuthorized) {
     return (
       <main className="app-shell">
         <InstallPrompt />
         <AuthPage />
+        {isLandscapeBlocked ? <LandscapeOrientationOverlay /> : null}
       </main>
     );
   }
@@ -200,6 +219,20 @@ export function App() {
       </div>
 
       <PlantDetailSheet />
+      {isLandscapeBlocked ? <LandscapeOrientationOverlay /> : null}
     </main>
+  );
+}
+
+function LandscapeOrientationOverlay() {
+  return (
+    <div className="fixed inset-0 z-[120] flex min-h-[100dvh] w-screen items-center justify-center bg-black/85 px-6 text-center text-white">
+      <div className="max-w-sm space-y-2 rounded-2xl border border-white/20 bg-black/35 p-5 backdrop-blur-sm">
+        <h2 className="text-lg font-semibold">Портретный режим</h2>
+        <p className="text-sm text-white/80">
+          Для стабильной работы Plant Bot поверните устройство вертикально.
+        </p>
+      </div>
+    </div>
   );
 }

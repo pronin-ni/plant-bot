@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bell,
   Bot,
@@ -24,7 +25,6 @@ import {
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { ThemeSelector } from '@/components/settings/ThemeSelector';
 import { OpenRouterSettings } from '@/components/OpenRouterSettings';
-import { Dialog } from '@/components/ui/dialog';
 import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import {
@@ -362,7 +362,16 @@ export function SettingsPage() {
           </SettingsGroupCard>
         ))}
 
-        <SettingsDetailDialog detailId={activeDetail} isAdmin={isAdmin} onClose={() => setActiveDetail(null)} />
+        <AnimatePresence>
+          {activeDetail ? (
+            <SettingsDetailDialog
+              key={activeDetail}
+              detailId={activeDetail}
+              isAdmin={isAdmin}
+              onClose={() => setActiveDetail(null)}
+            />
+          ) : null}
+        </AnimatePresence>
       </section>
     </PlatformPullToRefresh>
   );
@@ -409,40 +418,64 @@ function SettingsDetailDialog({
   isAdmin: boolean;
   onClose: () => void;
 }) {
-  if (!detailId) {
-    return null;
-  }
-
+  if (!detailId) return null;
   const meta = DETAIL_META[detailId];
 
   return (
-    <Dialog
-      open
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onClose();
-        }
-      }}
-      title={meta.title}
-      description={meta.description}
-      className="max-h-[85vh] overflow-hidden p-0"
+    <motion.div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] w-screen overflow-hidden bg-black/30 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      onClick={() => onClose()}
     >
-      <div className="max-h-[calc(85vh-88px)] space-y-4 overflow-y-auto p-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-        {detailId === 'theme' ? <ThemeSelector /> : null}
-        {detailId === 'notifications' ? <NotificationsPanel /> : null}
-        {detailId === 'weather' ? <WeatherPanel /> : null}
-        {detailId === 'home-assistant' ? <HomeAssistantPanel /> : null}
-        {detailId === 'calendar' ? <CalendarPanel /> : null}
-        {detailId === 'export-data' ? <ExportDataPanel /> : null}
-        {detailId === 'import-data' ? <ImportDataPanel /> : null}
-        {detailId === 'backups' ? <BackupsPanel /> : null}
-        {detailId === 'install-pwa' ? <PwaInstallPanel /> : null}
-        {detailId === 'app-status' ? <AppStatusPanel /> : null}
-        {detailId === 'diagnostics' ? <DiagnosticsPanel /> : null}
-        {detailId === 'version' ? <VersionPanel /> : null}
-        {detailId === 'support' ? <SupportPanel /> : null}
-        {detailId === 'openrouter' && isAdmin ? <OpenRouterSettings /> : null}
-      </div>
-    </Dialog>
+      <motion.div
+        className="relative ml-auto flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-white dark:bg-zinc-950"
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', stiffness: 320, damping: 34 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3 shadow-sm">
+          <button
+            type="button"
+            className="touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-slate-100 text-ios-text dark:bg-zinc-900"
+            onClick={onClose}
+            aria-label="Назад"
+          >
+            ←
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase tracking-wide text-ios-subtext">Настройки</p>
+            <h3 className="truncate text-lg font-semibold text-ios-text">{meta.title}</h3>
+          </div>
+        </header>
+
+        {meta.description ? (
+          <p className="px-4 pt-3 text-sm text-ios-subtext">{meta.description}</p>
+        ) : null}
+
+        <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+22px)]">
+          {detailId === 'theme' ? <ThemeSelector /> : null}
+          {detailId === 'notifications' ? <NotificationsPanel /> : null}
+          {detailId === 'weather' ? <WeatherPanel /> : null}
+          {detailId === 'home-assistant' ? <HomeAssistantPanel /> : null}
+          {detailId === 'calendar' ? <CalendarPanel /> : null}
+          {detailId === 'export-data' ? <ExportDataPanel /> : null}
+          {detailId === 'import-data' ? <ImportDataPanel /> : null}
+          {detailId === 'backups' ? <BackupsPanel /> : null}
+          {detailId === 'install-pwa' ? <PwaInstallPanel /> : null}
+          {detailId === 'app-status' ? <AppStatusPanel /> : null}
+          {detailId === 'diagnostics' ? <DiagnosticsPanel /> : null}
+          {detailId === 'version' ? <VersionPanel /> : null}
+          {detailId === 'support' ? <SupportPanel /> : null}
+          {detailId === 'openrouter' && isAdmin ? <OpenRouterSettings /> : null}
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -23,6 +23,11 @@
   --ring: 122 39% 49%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 .theme-crossfade-layer {
   position: fixed;
   inset: 0;
@@ -51,6 +56,12 @@
     @apply border-ios-border/50;
   }
 
+  html,
+  body,
+  #root {
+    touch-action: pan-x pan-y;
+  }
+
   body {
     @apply bg-ios-bg text-ios-text font-sans antialiased;
     overscroll-behavior-y: contain;
@@ -59,6 +70,21 @@
 
   #root {
     @apply min-h-dvh;
+  }
+
+  input,
+  textarea,
+  select {
+    touch-action: manipulation;
+  }
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    /* iOS Safari не должен масштабировать страницу при фокусе поля ввода. */
+    font-size: 16px !important;
   }
 }
 
