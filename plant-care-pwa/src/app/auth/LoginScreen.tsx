@@ -5,13 +5,14 @@ import { Leaf, MoonStar, SunMedium } from 'lucide-react';
 
 import { AnimatedBackground } from '@/components/login/AnimatedBackground';
 import { AuthProvidersList } from '@/components/auth/AuthProvidersList';
+import { MagicLinkForm } from '@/components/auth/MagicLinkForm';
 import { TelegramWidgetLogin } from '@/components/auth/TelegramWidgetLogin';
 import { GuestModeButton } from '@/components/GuestModeButton';
 import { PrivacyNote } from '@/components/PrivacyNote';
 import { QuickTip } from '@/components/QuickTip';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
 import { cacheSet } from '@/lib/indexeddb';
-import { pwaLoginTelegram, pwaLoginTelegramWidget } from '@/lib/api';
+import { pwaLoginTelegram, pwaLoginTelegramWidget, pwaRequestEmailMagicLink, pwaVerifyEmailMagicLink } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import type { CalendarEventDto, PlantDto } from '@/types/api';
@@ -59,6 +60,35 @@ function clearMigrationInitDataFromUrl() {
     return;
   }
   window.history.replaceState(null, '', window.location.pathname);
+}
+
+function getMagicLinkTokenFromUrl(): string | null {
+  const path = window.location.pathname.toLowerCase();
+  const queryToken = new URLSearchParams(window.location.search).get('token');
+  if (path.includes('/auth/verify') && queryToken) {
+    return queryToken;
+  }
+
+  const hash = window.location.hash.replace(/^#/, '');
+  if (!hash) {
+    return null;
+  }
+  const hashParts = hash.split('?');
+  const hashPath = (hashParts[0] ?? '').toLowerCase();
+  if (!hashPath.includes('/auth/verify')) {
+    return null;
+  }
+  const hashQuery = hashParts.length > 1 ? hashParts.slice(1).join('?') : '';
+  return new URLSearchParams(hashQuery).get('token');
+}
+
+function clearMagicLinkTokenFromUrl() {
+  if (!window.location.pathname.toLowerCase().includes('/auth/verify') && !window.location.hash.toLowerCase().includes('/auth/verify')) {
+    return;
+  }
+  const path = window.location.pathname.toLowerCase();
+  const fallbackPath = path.startsWith('/pwa/') || path === '/pwa' ? '/pwa/' : '/';
+  window.history.replaceState(null, '', fallbackPath);
 }
 
 function GrowingLogo() {
@@ -202,13 +232,22 @@ export function LoginScreen() {
   const prefersReducedMotion = useReducedMotion();
   const [activeProvider, setActiveProvider] = useState<AuthProviderId | null>(null);
   const [migrationState, setMigrationState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [magicLinkVerifyState, setMagicLinkVerifyState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [magicLinkVerifyError, setMagicLinkVerifyError] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkSentToEmail, setMagicLinkSentToEmail] = useState<string | null>(null);
+  const [magicLinkExpiresAt, setMagicLinkExpiresAt] = useState<string | null>(null);
+  const [magicEmail, setMagicEmail] = useState('');
   const [showTelegramWidget, setShowTelegramWidget] = useState(false);
   const [successOverlay, setSuccessOverlay] = useState<LoginSuccessOverlay>(null);
   const [loginTheme, setLoginTheme] = useState<LoginTheme>(() => readInitialLoginTheme());
   const [isOffline, setIsOffline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? !navigator.onLine : false));
   const successTimerRef = useRef<number | null>(null);
+  const magicLinkVerifyAttemptRef = useRef(false);
   const migrationInitData = useMemo(() => getMigrationInitDataFromUrl(), []);
+  const magicLinkTokenFromUrl = useMemo(() => getMagicLinkTokenFromUrl(), []);
   const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
   const setActiveTab = useUiStore((s) => s.setActiveTab);
 
@@ -217,11 +256,11 @@ export function LoginScreen() {
       window.clearTimeout(successTimerRef.current);
     }
     setSuccessOverlay({
-      title: 'Добро пожаловать!',
+      title: 'Добро пожаловать в сад! 🌿',
       subtitle
     });
-    hapticImpact('rigid');
-    navigator.vibrate?.(300);
+    hapticImpact('heavy');
+    navigator.vibrate?.([80, 40, 140]);
 
     successTimerRef.current = window.setTimeout(() => {
       useAuthStore.getState().setAuth(payload);
@@ -313,6 +352,49 @@ export function LoginScreen() {
     }
   });
 
+  const magicLinkMutation = useMutation({
+    mutationFn: (email: string) => pwaRequestEmailMagicLink(email),
+    onSuccess: (response) => {
+      setMagicLinkError(null);
+      setMagicLinkSent(true);
+      setMagicLinkSentToEmail(magicEmail.trim().toLowerCase());
+      setMagicLinkExpiresAt(response.expiresAt ?? null);
+      hapticImpact('medium');
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Не удалось отправить ссылку. Попробуйте еще раз.';
+      setMagicLinkSent(false);
+      setMagicLinkError(message);
+      hapticNotify('error');
+    }
+  });
+
+  const magicLinkVerifyMutation = useMutation({
+    mutationFn: (token: string) => pwaVerifyEmailMagicLink(token),
+    onSuccess: (session) => {
+      setMagicLinkVerifyState('done');
+      setMagicLinkVerifyError(null);
+      clearMagicLinkTokenFromUrl();
+      scheduleAuthSuccess({
+        isAuthorized: true,
+        accessToken: session.accessToken,
+        telegramUserId: session.user.telegramId,
+        username: session.user.username,
+        firstName: session.user.firstName,
+        email: session.user.email,
+        roles: session.user.roles,
+        isAdmin: session.user.roles.includes('ROLE_ADMIN')
+      }, 'Magic Link подтвержден');
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Не удалось подтвердить ссылку входа.';
+      setMagicLinkVerifyState('error');
+      setMagicLinkVerifyError(message);
+      hapticNotify('error');
+      clearMagicLinkTokenFromUrl();
+    }
+  });
+
   useEffect(() => {
     if (!migrationInitData || migrationState !== 'idle') {
       return;
@@ -320,6 +402,16 @@ export function LoginScreen() {
     setMigrationState('running');
     migrationMutation.mutate(migrationInitData);
   }, [migrationInitData, migrationState, migrationMutation]);
+
+  useEffect(() => {
+    if (!magicLinkTokenFromUrl || magicLinkVerifyAttemptRef.current) {
+      return;
+    }
+    magicLinkVerifyAttemptRef.current = true;
+    setMagicLinkVerifyState('running');
+    setMagicLinkVerifyError(null);
+    magicLinkVerifyMutation.mutate(magicLinkTokenFromUrl);
+  }, [magicLinkTokenFromUrl, magicLinkVerifyMutation]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -368,6 +460,36 @@ export function LoginScreen() {
   const toggleLoginTheme = () => {
     setLoginTheme((current) => (current === 'dark' ? 'light' : 'dark'));
     hapticImpact('light');
+  };
+
+  const isMagicLinkVerifying = magicLinkVerifyState === 'running' || magicLinkVerifyMutation.isPending;
+
+  const submitMagicLink = () => {
+    if (isMagicLinkVerifying) {
+      return;
+    }
+    if (isOffline) {
+      setMagicLinkError('Нет подключения к сети. Подключитесь к интернету и попробуйте снова.');
+      setMagicLinkSent(false);
+      hapticNotify('warning');
+      return;
+    }
+    const normalized = magicEmail.trim().toLowerCase();
+    if (!normalized) {
+      setMagicLinkError('Введите email.');
+      setMagicLinkSent(false);
+      return;
+    }
+    setMagicLinkError(null);
+    magicLinkMutation.mutate(normalized);
+  };
+
+  const resendMagicLink = () => {
+    if (!magicEmail.trim()) {
+      setMagicLinkError('Введите email перед повторной отправкой.');
+      return;
+    }
+    submitMagicLink();
   };
 
   return (
@@ -429,6 +551,28 @@ export function LoginScreen() {
             </motion.p>
           ) : null}
         </AnimatePresence>
+
+        <AnimatePresence initial={false}>
+          {magicLinkVerifyState !== 'idle' ? (
+            <motion.p
+              key={`magic-link-verify-${magicLinkVerifyState}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+              className={[
+                'mt-3 rounded-2xl px-3 py-2 text-xs',
+                magicLinkVerifyState === 'error'
+                  ? 'border border-red-400/35 bg-red-500/10 text-red-300'
+                  : 'border border-emerald-400/35 bg-emerald-500/12 text-emerald-200'
+              ].join(' ')}
+            >
+              {magicLinkVerifyState === 'running' ? 'Подтверждаем вход по волшебной ссылке...' : null}
+              {magicLinkVerifyState === 'done' ? 'Ссылка подтверждена. Входим в ваш сад...' : null}
+              {magicLinkVerifyState === 'error' ? (magicLinkVerifyError ?? 'Ссылка недействительна или срок ее действия истек.') : null}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
       </motion.div>
 
       <motion.div
@@ -439,7 +583,7 @@ export function LoginScreen() {
       >
         <AuthProvidersList
           loadingProvider={activeProvider}
-          disabledAll={isOffline}
+          disabledAll={isOffline || isMagicLinkVerifying}
           onLogin={(providerId) => {
             if (isOffline) {
               setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
@@ -477,6 +621,30 @@ export function LoginScreen() {
         ) : null}
 
         {loginError ? <p className="mt-3 text-xs text-red-500">{loginError}</p> : null}
+
+        <MagicLinkForm
+          email={magicEmail}
+          onEmailChange={(value) => {
+            setMagicEmail(value);
+            if (magicLinkError) {
+              setMagicLinkError(null);
+            }
+          }}
+          onSubmit={submitMagicLink}
+          onResend={resendMagicLink}
+          onResetSent={() => {
+            setMagicLinkSent(false);
+            setMagicLinkSentToEmail(null);
+            setMagicLinkExpiresAt(null);
+            setMagicLinkError(null);
+          }}
+          loading={magicLinkMutation.isPending}
+          disabled={isOffline || isMagicLinkVerifying}
+          error={magicLinkError}
+          sent={magicLinkSent}
+          sentToEmail={magicLinkSentToEmail}
+          expiresAt={magicLinkExpiresAt}
+        />
       </motion.div>
 
       <motion.div
@@ -508,7 +676,7 @@ export function LoginScreen() {
             />
 
             <div className="pointer-events-none absolute inset-0">
-              {Array.from({ length: 14 }).map((_, index) => (
+              {Array.from({ length: prefersReducedMotion ? 0 : 18 }).map((_, index) => (
                 <motion.span
                   key={index}
                   className="absolute text-emerald-300/85"
@@ -517,13 +685,33 @@ export function LoginScreen() {
                     top: `${20 + ((index * 11) % 58)}%`
                   }}
                   initial={{ opacity: 0, scale: 0.45, y: 0, rotate: 0 }}
-                  animate={{ opacity: [0, 1, 0], scale: [0.45, 1.06, 0.86], y: [0, -28, 12], rotate: [0, index % 2 === 0 ? 24 : -24, 0] }}
-                  transition={{ duration: 1.1, delay: index * 0.03, ease: 'easeOut' }}
+                  animate={{ opacity: [0, 1, 0], scale: [0.45, 1.08, 0.88], y: [0, -34, 14], rotate: [0, index % 2 === 0 ? 26 : -26, 0] }}
+                  transition={{ duration: 1.15, delay: index * 0.028, ease: 'easeOut' }}
                 >
                   <Leaf className="h-3.5 w-3.5" />
                 </motion.span>
               ))}
             </div>
+
+            <motion.div
+              className="pointer-events-none absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: prefersReducedMotion ? 0.12 : 0.2 }}
+            >
+              <motion.span
+                className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-300/65"
+                initial={{ scale: 0.35, opacity: 0.65 }}
+                animate={{ scale: prefersReducedMotion ? 1 : [0.35, 1.8], opacity: [0.65, 0] }}
+                transition={{ duration: prefersReducedMotion ? 0.16 : 0.72, ease: 'easeOut' }}
+              />
+              <motion.span
+                className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-200/45"
+                initial={{ scale: 0.4, opacity: 0.5 }}
+                animate={{ scale: prefersReducedMotion ? 1 : [0.4, 2.2], opacity: [0.5, 0] }}
+                transition={{ duration: prefersReducedMotion ? 0.16 : 0.88, ease: 'easeOut', delay: prefersReducedMotion ? 0 : 0.08 }}
+              />
+            </motion.div>
 
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 18 }}

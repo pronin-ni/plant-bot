@@ -32,9 +32,11 @@ import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefre
 import { SettingsAccordion } from '@/components/SettingsAccordion';
 import { SettingsTutorial } from '@/components/SettingsTutorial';
 import { WeatherProviderSelector } from '@/components/WeatherProviderSelector';
+import { OpenRouterSettings } from '@/components/OpenRouterSettings';
 import { hapticImpact } from '@/lib/telegram';
 import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 import { trackMigrationEvent } from '@/lib/analytics';
+import { useAuthStore } from '@/lib/store';
 import {
   getWeatherProviders,
   getWeatherCurrent,
@@ -42,12 +44,6 @@ import {
   setWeatherProvider,
   saveHomeAssistantConfig,
   getHomeAssistantRoomsAndSensors,
-  getOpenRouterModels,
-  getOpenRouterPreferences,
-  saveOpenRouterPreferences,
-  clearOpenRouterApiKey,
-  validateOpenRouterKey,
-  sendOpenRouterTest,
   exportPdf,
   importFromCloud,
   backupToTelegram,
@@ -66,8 +62,6 @@ import type {
   WeatherCurrentDto,
   WeatherForecastDto,
   WeatherProvidersResponse,
-  OpenRouterModelsDto,
-  OpenRouterPreferencesDto,
   AchievementsDto,
   PlantStatsDto,
   PlantLearningDto,
@@ -75,7 +69,6 @@ import type {
 } from '@/types/api';
 import type { HomeAssistantRoomsSensorsResponse } from '@/types/home-assistant';
 import { Button } from '@/components/ui/button';
-import { ModelSelector } from '@/components/ModelSelector';
 import { ExportImportSection } from '@/components/ExportImportSection';
 import { AchievementCard } from '@/components/AchievementCard';
 
@@ -120,10 +113,10 @@ const SECTION_META: Record<
   },
   openrouter: {
     title: 'OpenRouter AI',
-    description: 'Ключ, авто-выбор vision/text, тест',
+    description: 'Глобальные модели и ключ (только админ)',
     icon: Brain,
     tone: 'emerald',
-    keywords: ['openrouter', 'ai', 'vision', 'text', 'models']
+    keywords: ['openrouter', 'ai', 'vision', 'text', 'models', 'admin', 'global']
   },
   backup: {
     title: 'Экспорт / Импорт',
@@ -201,10 +194,7 @@ const SECTION_ORDER: SectionId[] = [
 export function SettingsPage() {
   const [search, setSearch] = useState('');
   const [openSections, setOpenSections] = useState<SectionId[]>(['pwa', 'weather']);
-  const [isAdmin] = useState<boolean>(() => {
-    const flag = localStorage.getItem('app:isAdmin');
-    return flag === '1';
-  });
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const pwaUrl = useMemo(() => getConfiguredPwaUrl(), []);
   const [pwaInstalled, setPwaInstalled] = useState(false);
   const [pwaChecking, setPwaChecking] = useState(false);
@@ -221,7 +211,8 @@ export function SettingsPage() {
 
   const visibleSections = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const base = isAdmin ? SECTION_ORDER : SECTION_ORDER.filter((id) => id !== 'admin');
+    // OR4: обычным пользователям полностью скрываем OpenRouter и Admin секции.
+    const base = isAdmin ? SECTION_ORDER : SECTION_ORDER.filter((id) => id !== 'openrouter' && id !== 'admin');
     if (!query) {
       return base;
     }
@@ -926,7 +917,7 @@ function HaPreview() {
 function OpenRouterPreview() {
   return (
     <div className="space-y-3">
-      <OpenRouterConfigurator />
+      <OpenRouterSettings />
     </div>
   );
 }
@@ -1659,199 +1650,6 @@ function Badge({ children }: { children: React.ReactNode }) {
     >
       {children}
     </motion.span>
-  );
-}
-
-function OpenRouterConfigurator() {
-  const [models, setModels] = useState<OpenRouterModelsDto | null>(null);
-  const [prefs, setPrefs] = useState<OpenRouterPreferencesDto | null>(null);
-  const [onlyFree, setOnlyFree] = useState(true);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [apiKeyMasked, setApiKeyMasked] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [m, p] = await Promise.all([getOpenRouterModels(), getOpenRouterPreferences()]);
-      setModels(m);
-      setPrefs(p);
-      setApiKeyMasked(Boolean(p.apiKey || p.hasApiKey));
-      setStatus('Модели и настройки загружены');
-    } catch (error) {
-      console.error(error);
-      setStatus('Не удалось загрузить модели');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const selectDefault = (list: OpenRouterModelsDto['models'], filter: (m: any) => boolean) => {
-    const found = list.find(filter);
-    return found?.id ?? null;
-  };
-
-  const derivedChat = prefs?.chatModel ?? selectDefault(models?.models ?? [], (m) => !m.supportsImageToText && m.free);
-  const derivedVision =
-    prefs?.photoIdentifyModel ??
-    prefs?.photoDiagnoseModel ??
-    selectDefault(models?.models ?? [], (m) => m.supportsImageToText && m.free);
-
-  const handleSave = async () => {
-    if (!prefs) return;
-    setSaving(true);
-    setStatus(null);
-    try {
-      const payload: OpenRouterPreferencesDto = {
-        ...prefs,
-        chatModel: derivedChat ?? prefs.chatModel ?? 'qwen/qwen2-7b-instruct',
-        plantModel: derivedChat ?? prefs.plantModel ?? 'qwen/qwen2-7b-instruct',
-        photoIdentifyModel: derivedVision ?? prefs.photoIdentifyModel ?? 'qwen/qwen2-vl-7b-instruct',
-        photoDiagnoseModel: derivedVision ?? prefs.photoDiagnoseModel ?? 'qwen/qwen2-vl-7b-instruct',
-        apiKey: apiKeyInput.trim() ? apiKeyInput.trim() : undefined
-      };
-      const res = await saveOpenRouterPreferences(payload);
-      setPrefs(res);
-      setApiKeyMasked(Boolean(res.apiKey || res.hasApiKey));
-      setStatus('Сохранено: бэкенд сам выберет vision/text по типу запроса.');
-      hapticImpact('medium');
-    } catch (error) {
-      console.error(error);
-      setStatus('Не удалось сохранить настройки');
-      hapticImpact('light');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleValidateKey = async () => {
-    if (!apiKeyInput.trim()) {
-      setStatus('Введите ключ OpenRouter');
-      return;
-    }
-    setSaving(true);
-    setStatus('Проверяем ключ...');
-    try {
-      const res = await validateOpenRouterKey(apiKeyInput.trim());
-      setStatus(res.ok ? 'Ключ валиден' : res.message ?? 'Ключ отклонён');
-      hapticImpact(res.ok ? 'medium' : 'light');
-    } catch (error) {
-      console.error(error);
-      setStatus('Ошибка проверки ключа');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleClearKey = async () => {
-    setSaving(true);
-    try {
-      const res = await clearOpenRouterApiKey();
-      setPrefs(res);
-      setApiKeyInput('');
-      setApiKeyMasked(false);
-      setStatus('Ключ удалён');
-    } catch (error) {
-      console.error(error);
-      setStatus('Не удалось удалить ключ');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setStatus('Отправляем пробный запрос...');
-    try {
-      const res = await sendOpenRouterTest({
-        message: 'Проверка связи: назови одно комнатное растение.'
-      });
-      setStatus(res.answer ? `Успех: ${res.answer.slice(0, 64)}...` : 'Ответ получен');
-      hapticImpact('medium');
-    } catch (error) {
-      console.error(error);
-      setStatus('Тест не прошёл');
-      hapticImpact('light');
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-zinc-950/55">
-        <p className="text-[12px] uppercase tracking-wide text-ios-subtext">Ключ OpenRouter</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input
-            type="password"
-            placeholder={apiKeyMasked ? 'Ключ сохранён на бэкенде' : 'Введите API Key'}
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            className="h-11 flex-1 min-w-[240px] rounded-ios-button border border-ios-border/60 bg-white/70 px-3 text-sm outline-none backdrop-blur-ios dark:bg-zinc-900/60"
-          />
-          <button
-            type="button"
-            className="android-ripple rounded-full border border-ios-border/60 bg-white/70 px-3 py-2 text-sm font-semibold text-ios-text dark:bg-zinc-900/60"
-            onClick={handleValidateKey}
-            disabled={saving}
-          >
-            Проверить
-          </button>
-          <button
-            type="button"
-            className="android-ripple rounded-full border border-ios-border/60 bg-white/70 px-3 py-2 text-sm font-semibold text-ios-text dark:bg-zinc-900/60"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {apiKeyMasked ? 'Обновить' : 'Сохранить'}
-          </button>
-          {apiKeyMasked ? (
-            <button
-              type="button"
-              className="rounded-full border border-red-300/60 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200"
-              onClick={handleClearKey}
-              disabled={saving}
-            >
-              Очистить
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <ModelSelector
-        models={models?.models ?? []}
-        chatModel={derivedChat ?? undefined}
-        visionModel={derivedVision ?? undefined}
-        onlyFree={onlyFree}
-        apiKeyMasked={apiKeyMasked}
-        onToggleFree={setOnlyFree}
-        onSelectChat={(id) => setPrefs((prev) => ({ ...prev, chatModel: id, plantModel: id }))}
-        onSelectVision={(id) => setPrefs((prev) => ({ ...prev, photoIdentifyModel: id, photoDiagnoseModel: id }))}
-        onSave={handleSave}
-        saving={saving}
-        onTest={handleTest}
-        testing={testing}
-        status={status}
-      />
-
-      <SettingsTutorial
-        steps={[
-          { title: '1. Получите ключ', description: 'openrouter.ai → Dashboard → API Key', icon: ShieldCheck },
-          { title: '2. Выберите модели', description: 'Чат (text) и Фото (vision). Автовыбор по типу запроса.', icon: Brain },
-          { title: '3. Тест', description: 'Пробный запрос убедится, что ключ работает.', icon: Sparkles }
-        ]}
-        tone="emerald"
-      />
-
-      {loading ? <p className="text-[12px] text-ios-subtext">Загружаем модели…</p> : null}
-    </div>
   );
 }
 

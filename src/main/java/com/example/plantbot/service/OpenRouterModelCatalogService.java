@@ -16,7 +16,9 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +44,22 @@ public class OpenRouterModelCatalogService {
 
   @Value("${openrouter.model-chat:}")
   private String fallbackModelChat;
+
+  private static final List<FallbackModelPreset> CURATED_FALLBACK_PRESETS = List.of(
+      // Бесплатные text-модели.
+      new FallbackModelPreset("qwen/qwen2-7b-instruct", true, false),
+      new FallbackModelPreset("meta-llama/llama-3.3-8b-instruct:free", true, false),
+      new FallbackModelPreset("mistralai/mistral-7b-instruct:free", true, false),
+      // Бесплатные vision-модели.
+      new FallbackModelPreset("qwen/qwen2-vl-7b-instruct", true, true),
+      new FallbackModelPreset("meta-llama/llama-3.2-11b-vision-instruct:free", true, true),
+      // Платные text-модели.
+      new FallbackModelPreset("anthropic/claude-3.5-haiku", false, false),
+      new FallbackModelPreset("openai/gpt-4.1-mini", false, false),
+      // Платные vision-модели.
+      new FallbackModelPreset("google/gemini-1.5-pro", false, true),
+      new FallbackModelPreset("openai/gpt-4o", false, true)
+  );
 
   public List<OpenRouterModelOptionResponse> fetchModels(User user) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
@@ -97,33 +115,54 @@ public class OpenRouterModelCatalogService {
 
 
   private List<OpenRouterModelOptionResponse> fallbackModels() {
-    List<String> raw = new ArrayList<>();
-    raw.add(fallbackModel);
-    raw.add(fallbackModelPlant);
-    raw.add(fallbackModelPhotoIdentify);
-    raw.add(fallbackModelPhotoDiagnose);
-    raw.add(fallbackModelChat);
+    Map<String, OpenRouterModelOptionResponse> byId = new LinkedHashMap<>();
 
-    List<OpenRouterModelOptionResponse> items = new ArrayList<>();
+    // 1) Сначала вшитые пресеты, чтобы UI не "ломался" при недоступном каталоге OpenRouter.
+    for (FallbackModelPreset preset : CURATED_FALLBACK_PRESETS) {
+      byId.putIfAbsent(
+          preset.id(),
+          new OpenRouterModelOptionResponse(
+              preset.id(),
+              preset.id(),
+              null,
+              null,
+              null,
+              preset.free(),
+              preset.supportsImageToText()
+          )
+      );
+    }
+
+    // 2) Затем модели из конфигурации проекта (могут переопределять/дополнять пресеты).
+    List<String> raw = List.of(
+        fallbackModel,
+        fallbackModelPlant,
+        fallbackModelPhotoIdentify,
+        fallbackModelPhotoDiagnose,
+        fallbackModelChat
+    );
     for (String id : raw) {
       if (id == null || id.isBlank()) {
         continue;
       }
       String normalized = id.trim();
-      boolean alreadyExists = items.stream().anyMatch(x -> x.id().equalsIgnoreCase(normalized));
-      if (alreadyExists) {
-        continue;
-      }
-      items.add(new OpenRouterModelOptionResponse(
+      byId.putIfAbsent(
           normalized,
-          normalized,
-          null,
-          null,
-          null,
-          normalized.endsWith(":free"),
-          isConfiguredPhotoModel(normalized)
-      ));
+          new OpenRouterModelOptionResponse(
+              normalized,
+              normalized,
+              null,
+              null,
+              null,
+              normalized.endsWith(":free"),
+              isConfiguredPhotoModel(normalized)
+          )
+      );
     }
+
+    List<OpenRouterModelOptionResponse> items = new ArrayList<>(byId.values());
+    items.sort(Comparator.comparing(OpenRouterModelOptionResponse::free).reversed()
+        .thenComparing(OpenRouterModelOptionResponse::id));
     return items;
   }
 
@@ -180,5 +219,12 @@ public class OpenRouterModelCatalogService {
       return null;
     }
     return value.trim();
+  }
+
+  private record FallbackModelPreset(
+      String id,
+      boolean free,
+      boolean supportsImageToText
+  ) {
   }
 }

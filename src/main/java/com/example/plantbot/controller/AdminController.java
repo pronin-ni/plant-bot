@@ -21,12 +21,20 @@ import com.example.plantbot.controller.dto.admin.AdminPushTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminStatsResponse;
 import com.example.plantbot.controller.dto.admin.AdminUsersResponse;
 import com.example.plantbot.controller.dto.admin.AdminActivityLogItemResponse;
+import com.example.plantbot.controller.dto.admin.AdminMagicLinkAuditItemResponse;
 import com.example.plantbot.controller.dto.admin.AdminMonitoringResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterSettingsResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterSettingsUpdateRequest;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequest;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.UserRole;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
+import com.example.plantbot.service.OpenRouterGlobalSettingsService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.WeatherService;
@@ -35,6 +43,7 @@ import com.example.plantbot.service.WebPushNotificationService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.config.AdminRateLimitInterceptor;
 import com.example.plantbot.service.AdminInsightsService;
+import com.example.plantbot.service.auth.MagicLinkAuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -45,6 +54,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -67,8 +77,10 @@ public class AdminController {
   private final PlantService plantService;
   private final AdminRateLimitInterceptor adminRateLimitInterceptor;
   private final AdminInsightsService adminInsightsService;
+  private final MagicLinkAuditService magicLinkAuditService;
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
+  private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
 
   @GetMapping("/overview")
   public AdminOverviewResponse overview(Authentication authentication) {
@@ -165,6 +177,131 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     log.info("Admin activity logs requested: userId={} telegramId={} limit={}", admin.getId(), admin.getTelegramId(), limit);
     return adminInsightsService.activityLogs(limit);
+  }
+
+  @GetMapping("/auth/magic-link/logs")
+  public List<AdminMagicLinkAuditItemResponse> magicLinkAuditLogs(
+      Authentication authentication,
+      @RequestParam(name = "limit", defaultValue = "50") int limit
+  ) {
+    User admin = requireAdmin(authentication);
+    log.info("Admin magic-link logs requested: userId={} telegramId={} limit={}", admin.getId(), admin.getTelegramId(), limit);
+    return magicLinkAuditService.latest(limit);
+  }
+
+  @GetMapping("/openrouter/settings")
+  public AdminOpenRouterSettingsResponse openRouterSettings(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    var settings = openRouterGlobalSettingsService.getOrCreate();
+    var models = openRouterGlobalSettingsService.resolveModels(settings);
+    log.info("Admin openrouter settings requested: userId={} telegramId={} hasApiKey={}",
+        admin.getId(), admin.getTelegramId(), openRouterGlobalSettingsService.hasApiKey(settings));
+    return new AdminOpenRouterSettingsResponse(
+        openRouterGlobalSettingsService.hasApiKey(settings),
+        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
+        models.chatModel(),
+        models.photoRecognitionModel(),
+        models.photoDiagnosisModel(),
+        settings.getUpdatedAt()
+    );
+  }
+
+  @PutMapping("/openrouter/settings")
+  public AdminOpenRouterSettingsResponse updateOpenRouterSettings(
+      Authentication authentication,
+      @RequestBody(required = false) AdminOpenRouterSettingsUpdateRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    var result = openRouterGlobalSettingsService.update(request);
+    var settings = result.settings();
+    var models = openRouterGlobalSettingsService.resolveModels(settings);
+    log.warn(
+        "Admin openrouter settings updated: userId={} telegramId={} changedFields={} hasApiKey={} chatModel={} photoRecognitionModel={} photoDiagnosisModel={}",
+        admin.getId(),
+        admin.getTelegramId(),
+        result.changedFields(),
+        result.hasApiKey(),
+        models.chatModel(),
+        models.photoRecognitionModel(),
+        models.photoDiagnosisModel()
+    );
+    return new AdminOpenRouterSettingsResponse(
+        result.hasApiKey(),
+        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
+        models.chatModel(),
+        models.photoRecognitionModel(),
+        models.photoDiagnosisModel(),
+        settings.getUpdatedAt()
+    );
+  }
+
+  @GetMapping("/openrouter/models")
+  public AdminOpenRouterModelsResponse openRouterModels(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    var settings = openRouterGlobalSettingsService.getOrCreate();
+    var models = openRouterGlobalSettingsService.resolveModels(settings);
+    log.info("Admin openrouter models requested: userId={} telegramId={} textModel={} photoModel={}",
+        admin.getId(), admin.getTelegramId(), models.chatModel(), models.photoRecognitionModel());
+    return new AdminOpenRouterModelsResponse(
+        models.chatModel(),
+        models.photoRecognitionModel(),
+        openRouterGlobalSettingsService.hasApiKey(settings),
+        settings.getUpdatedAt()
+    );
+  }
+
+  @PutMapping("/openrouter/models")
+  public AdminOpenRouterModelsResponse updateOpenRouterModels(
+      Authentication authentication,
+      @RequestBody(required = false) AdminOpenRouterModelsUpdateRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    var result = openRouterGlobalSettingsService.updateModels(request);
+    log.warn("Admin openrouter models updated: userId={} telegramId={} changedFields={} textModel={} photoModel={} hasApiKey={}",
+        admin.getId(),
+        admin.getTelegramId(),
+        result.changedFields(),
+        result.textModel(),
+        result.photoModel(),
+        result.hasApiKey());
+    return new AdminOpenRouterModelsResponse(
+        result.textModel(),
+        result.photoModel(),
+        result.hasApiKey(),
+        result.settings().getUpdatedAt()
+    );
+  }
+
+  @PostMapping("/openrouter/test")
+  public AdminOpenRouterTestResponse testOpenRouter(
+      Authentication authentication,
+      @RequestBody(required = false) AdminOpenRouterTestRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    String message = request == null || request.message() == null || request.message().isBlank()
+        ? "Тест глобальной конфигурации OpenRouter: назови одно неприхотливое комнатное растение."
+        : request.message().trim();
+
+    var answer = openRouterPlantAdvisorService.answerGardeningQuestion(null, message);
+    if (answer.isEmpty()) {
+      log.warn("Admin openrouter test failed: userId={} telegramId={} message='{}'",
+          admin.getId(), admin.getTelegramId(), message);
+      return new AdminOpenRouterTestResponse(
+          false,
+          null,
+          null,
+          "Тест не прошёл. Проверьте глобальный API-ключ, модель и лимиты OpenRouter."
+      );
+    }
+
+    log.info("Admin openrouter test success: userId={} telegramId={} model={}",
+        admin.getId(), admin.getTelegramId(), answer.get().model());
+    return new AdminOpenRouterTestResponse(
+        true,
+        answer.get().answer(),
+        answer.get().model(),
+        "Тест успешен"
+    );
   }
 
   @PostMapping("/clear-cache")

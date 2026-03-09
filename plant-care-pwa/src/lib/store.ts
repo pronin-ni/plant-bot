@@ -102,3 +102,50 @@ export const useOfflineStore = create<OfflineState>((set) => ({
   setOffline: (value) => set({ isOffline: value }),
   setPendingMutations: (value) => set({ pendingMutations: Math.max(0, value) })
 }));
+
+const DEFAULT_OPENROUTER_TEXT_MODEL = 'qwen/qwen2-7b-instruct';
+const DEFAULT_OPENROUTER_PHOTO_MODEL = 'qwen/qwen2-vl-7b-instruct';
+
+interface OpenRouterModelsState {
+  textModel: string;
+  photoModel: string;
+  hasApiKey: boolean;
+  isLoaded: boolean;
+  source: 'default' | 'server';
+  updatedAt?: string;
+  setModels: (payload: {
+    textModel?: string;
+    photoModel?: string;
+    hasApiKey?: boolean;
+    source: 'default' | 'server';
+    updatedAt?: string;
+  }) => void;
+  resetToDefault: () => void;
+}
+
+export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => ({
+  textModel: DEFAULT_OPENROUTER_TEXT_MODEL,
+  photoModel: DEFAULT_OPENROUTER_PHOTO_MODEL,
+  hasApiKey: false,
+  isLoaded: false,
+  source: 'default',
+  updatedAt: undefined,
+  setModels: ({ textModel, photoModel, hasApiKey, source, updatedAt }) =>
+    set({
+      textModel: textModel?.trim() || DEFAULT_OPENROUTER_TEXT_MODEL,
+      photoModel: photoModel?.trim() || DEFAULT_OPENROUTER_PHOTO_MODEL,
+      hasApiKey: Boolean(hasApiKey),
+      isLoaded: true,
+      source,
+      updatedAt
+    }),
+  resetToDefault: () =>
+    set({
+      textModel: DEFAULT_OPENROUTER_TEXT_MODEL,
+      photoModel: DEFAULT_OPENROUTER_PHOTO_MODEL,
+      hasApiKey: false,
+      isLoaded: true,
+      source: 'default',
+      updatedAt: undefined
+    })
+}));

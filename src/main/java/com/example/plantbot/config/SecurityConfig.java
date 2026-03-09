@@ -26,6 +26,7 @@ public class SecurityConfig {
                 "/",
                 "/mini-app/**",
                 "/actuator/health",
+                "/api/auth/email/**",
                 "/api/pwa/auth/**",
                 "/api/calendar/ics/**"
             ).permitAll()

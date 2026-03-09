@@ -68,6 +68,14 @@ Fill required secrets at least:
 - `APP_SECURITY_JWT_SECRET`
 - optional: `OPENROUTER_API_KEY`, `OPENWEATHER_API_KEY`, `WEB_PUSH_VAPID_*`
 
+For Magic Link via Resend, also set:
+
+- `SPRING_APPLICATION_NAME=plant-care-backend`
+- `APP_MAGIC_LINK_EXPIRY_MINUTES=20`
+- `APP_FRONTEND_URL=https://your-app-domain.com`
+- `RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+- `RESEND_FROM_EMAIL=no-reply@your-domain.com` (or `resend-default@resend.dev` for testing)
+
 ### 3. Run backend
 
 ```bash

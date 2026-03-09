@@ -1,6 +1,7 @@
 package com.example.plantbot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class ApiExceptionHandler {
   @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
   public ResponseEntity<Void> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
@@ -43,6 +45,7 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<?> handleUnexpected(Exception ex, HttpServletRequest request) {
+    log.error("Unhandled API exception: {}", ex.getMessage(), ex);
     if (!acceptsJson(request)) {
       return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }

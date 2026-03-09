@@ -140,6 +140,43 @@ export interface OpenRouterPreferencesDto {
   apiKey?: string | null;
 }
 
+export interface AdminOpenRouterSettingsDto {
+  hasApiKey: boolean;
+  apiKeyMasked: string;
+  chatModel?: string | null;
+  photoRecognitionModel?: string | null;
+  photoDiagnosisModel?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface AdminOpenRouterModelsDto {
+  textModel?: string | null;
+  photoModel?: string | null;
+  hasApiKey: boolean;
+  updatedAt?: string | null;
+}
+
+export interface OpenRouterRuntimeSettingsDto {
+  textModel?: string | null;
+  photoModel?: string | null;
+  hasApiKey: boolean;
+}
+
+export interface AdminOpenRouterTestDto {
+  ok: boolean;
+  answer?: string | null;
+  model?: string | null;
+  message: string;
+}
+
+export interface OpenRouterTypedTestDto {
+  ok: boolean;
+  type: 'text' | 'photo';
+  model?: string | null;
+  answer?: string | null;
+  message: string;
+}
+
 
 export interface ChatAskResponse {
   ok: boolean;
@@ -374,6 +411,13 @@ export interface PwaAuthDto {
 
 export interface PwaAuthProvidersDto {
   providers: string[];
+}
+
+export interface PwaEmailMagicLinkRequestDto {
+  ok: boolean;
+  message: string;
+  expiresAt: string;
+  debugToken?: string | null;
 }
 
 export interface PwaTelegramWidgetPayloadDto {

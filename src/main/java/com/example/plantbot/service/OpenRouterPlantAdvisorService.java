@@ -84,7 +84,7 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<PlantLookupResult> suggestIntervalDays(User user, String plantName) {
-    String modelToUse = resolvePlantModel(user);
+    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
@@ -135,7 +135,7 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays) {
     User user = plant == null ? null : plant.getUser();
-    String modelToUse = resolvePlantModel(user);
+    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plant == null || plant.getName() == null || plant.getName().isBlank()) {
       return Optional.empty();
@@ -216,7 +216,7 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
     User user = plant == null ? null : plant.getUser();
-    String modelToUse = resolvePlantModel(user);
+    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (plant == null || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
@@ -264,7 +264,7 @@ public class OpenRouterPlantAdvisorService {
                                                                             PlantCategory category,
                                                                             String sizeHint) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    String modelToUse = resolvePlantModel(user);
+    String modelToUse = resolveTextModel(user);
     if (apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
       return Optional.empty();
     }
@@ -311,33 +311,38 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<ChatAnswer> answerGardeningQuestion(String question) {
-    return answerGardeningQuestion(null, question);
+    return answerGardeningQuestion(null, question, null);
   }
 
   public Optional<ChatAnswer> answerGardeningQuestion(User user, String question) {
+    return answerGardeningQuestion(user, question, null);
+  }
+
+  public Optional<ChatAnswer> answerGardeningQuestion(User user, String question, String photoBase64) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
 
     String normalizedQuestion = question.trim();
-    for (String modelToUse : resolveChatModelCandidates(user)) {
+    String normalizedPhoto = normalizePhotoBase64(photoBase64);
+    boolean hasPhoto = normalizedPhoto != null;
+    for (String modelToUse : resolveChatModelCandidates(user, hasPhoto)) {
       String cacheKey = buildChatCacheKey(modelToUse, normalizedQuestion);
-      Optional<String> cached = getChatAnswerCache(cacheKey);
-      if (cached != null) {
-        log.info("OpenRouter chat cache hit. model='{}', question='{}', hasAnswer={}",
-            modelToUse, preview(normalizedQuestion), cached.isPresent());
-        if (cached.isPresent()) {
-          return Optional.of(new ChatAnswer(cached.get(), modelToUse));
+      if (!hasPhoto) {
+        Optional<String> cached = getChatAnswerCache(cacheKey);
+        if (cached != null) {
+          log.info("OpenRouter chat cache hit. model='{}', question='{}', hasAnswer={}",
+              modelToUse, preview(normalizedQuestion), cached.isPresent());
+          if (cached.isPresent()) {
+            return Optional.of(new ChatAnswer(cached.get(), modelToUse));
+          }
+          continue;
         }
-        continue;
       }
 
       try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
-            Map.of("role", "system", "content", gardeningChatSystemPrompt()),
-            Map.of("role", "user", "content", normalizedQuestion)
-        ));
+        JsonNode body = postMessages(apiKey, modelToUse, buildChatMessages(normalizedQuestion, normalizedPhoto));
         if (body == null) {
           continue;
         }
@@ -346,16 +351,41 @@ public class OpenRouterPlantAdvisorService {
           continue;
         }
         String answer = content.trim();
-        putChatAnswerCache(cacheKey, Optional.of(answer));
-        log.info("OpenRouter chat success. model='{}', question='{}', answerPreview='{}'",
-            modelToUse, preview(normalizedQuestion), preview(answer));
+        if (!hasPhoto) {
+          putChatAnswerCache(cacheKey, Optional.of(answer));
+        }
+        log.info("OpenRouter chat success. model='{}', hasPhoto={}, question='{}', answerPreview='{}'",
+            modelToUse, hasPhoto, preview(normalizedQuestion), preview(answer));
         return Optional.of(new ChatAnswer(answer, modelToUse));
       } catch (Exception ex) {
-        log.warn("OpenRouter chat failed. model='{}', question='{}': {}", modelToUse, preview(normalizedQuestion), ex.getMessage());
+        log.warn("OpenRouter chat failed. model='{}', hasPhoto={}, question='{}': {}",
+            modelToUse, hasPhoto, preview(normalizedQuestion), ex.getMessage());
       }
     }
 
     return Optional.empty();
+  }
+
+  private List<Map<String, Object>> buildChatMessages(String question, String photoBase64) {
+    if (photoBase64 == null || photoBase64.isBlank()) {
+      return List.of(
+          Map.of("role", "system", "content", gardeningChatSystemPrompt()),
+          Map.of("role", "user", "content", question)
+      );
+    }
+
+    Map<String, Object> userContent = Map.of(
+        "role", "user",
+        "content", List.of(
+            Map.of("type", "text", "text", question),
+            Map.of("type", "image_url", "image_url", Map.of("url", photoBase64))
+        )
+    );
+
+    return List.of(
+        Map.of("role", "system", "content", gardeningChatSystemPrompt()),
+        userContent
+    );
   }
 
   private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
@@ -598,9 +628,14 @@ public class OpenRouterPlantAdvisorService {
     return NS_CHAT + "|" + modelKey + "|" + normalizedQuestion;
   }
 
-  private String resolvePlantModel(User user) {
-    if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
-      return normalizeModelId(user.getOpenrouterModelPlant());
+  private String resolveTextModel(User user) {
+    // ORB2: для текстовых задач всегда text-модель из глобальных настроек.
+    String globalText = openRouterUserSettingsService.resolveGlobalModels().chatModel();
+    if (globalText != null && !globalText.isBlank()) {
+      return normalizeModelId(globalText);
+    }
+    if (chatModel != null && !chatModel.isBlank()) {
+      return normalizeModelId(chatModel);
     }
     if (plantModel != null && !plantModel.isBlank()) {
       return normalizeModelId(plantModel);
@@ -608,21 +643,33 @@ public class OpenRouterPlantAdvisorService {
     if (model != null && !model.isBlank()) {
       return normalizeModelId(model);
     }
-    return "";
+    return OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL;
   }
 
-  private String resolveChatModel(User user) {
-    if (user != null && user.getOpenrouterModelChat() != null && !user.getOpenrouterModelChat().isBlank()) {
-      return normalizeModelId(user.getOpenrouterModelChat());
+  private String resolvePhotoModel(User user) {
+    // ORB2: для задач с фото всегда vision-модель из глобальных настроек.
+    String globalPhoto = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
+    if (globalPhoto != null && !globalPhoto.isBlank()) {
+      return normalizeModelId(globalPhoto);
     }
-    if (chatModel != null && !chatModel.isBlank()) {
-      return normalizeModelId(chatModel);
+    if (plantModel != null && !plantModel.isBlank()) {
+      return normalizeModelId(plantModel);
     }
-    return resolvePlantModel(user);
+    if (model != null && !model.isBlank()) {
+      return normalizeModelId(model);
+    }
+    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
   }
 
-  private List<String> resolveChatModelCandidates(User user) {
-    String primary = resolveChatModel(user);
+  private String resolveChatModel(User user, boolean hasPhoto) {
+    if (hasPhoto) {
+      return resolvePhotoModel(user);
+    }
+    return resolveTextModel(user);
+  }
+
+  private List<String> resolveChatModelCandidates(User user, boolean hasPhoto) {
+    String primary = resolveChatModel(user, hasPhoto);
     if (!chatFallbackEnabled) {
       return primary == null || primary.isBlank() ? List.of() : List.of(primary);
     }
@@ -631,9 +678,12 @@ public class OpenRouterPlantAdvisorService {
     if (primary != null && !primary.isBlank()) {
       models.add(primary.trim());
     }
-    if (user != null && user.getOpenrouterModelPlant() != null && !user.getOpenrouterModelPlant().isBlank()) {
-      models.add(user.getOpenrouterModelPlant().trim());
+
+    String secondary = hasPhoto ? resolveTextModel(user) : resolvePhotoModel(user);
+    if (secondary != null && !secondary.isBlank()) {
+      models.add(secondary.trim());
     }
+
     if (plantModel != null && !plantModel.isBlank()) {
       models.add(plantModel.trim());
     }
@@ -652,6 +702,20 @@ public class OpenRouterPlantAdvisorService {
       }
     }
     return dedup;
+  }
+
+  private String normalizePhotoBase64(String raw) {
+    if (raw == null) {
+      return null;
+    }
+    String trimmed = raw.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    if (!trimmed.startsWith("data:image/")) {
+      return null;
+    }
+    return trimmed;
   }
 
   private String normalizeModelId(String raw) {

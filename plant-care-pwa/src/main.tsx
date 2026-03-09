@@ -8,6 +8,7 @@ import { initPwa } from '@/lib/pwa';
 import { initOfflineSync } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { applyPlatformClasses } from '@/lib/theme/platformDetect';
+import { applyThemeToDocument, useThemeStore } from '@/lib/theme/themeStore';
 import '@/index.css';
 
 const queryClient = new QueryClient({
@@ -66,6 +67,9 @@ function initMotionLifecycleFlags() {
 
 async function bootstrap() {
   applyPlatformClasses(document.documentElement);
+  // Инициализируем тему до первого рендера, чтобы минимизировать визуальный "скачок".
+  useThemeStore.getState().initializeTheme();
+  applyThemeToDocument(useThemeStore.getState().getResolvedTheme());
   initMotionLifecycleFlags();
   initPwa();
   await ensureTelegramScriptLoaded();

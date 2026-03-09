@@ -261,8 +261,10 @@ public class OpenRouterVisionService {
   }
 
   private String resolveIdentifyModel(User user) {
-    if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
-      return normalizeModelId(user.getOpenrouterModelPhotoIdentify());
+    // OR3: модель для распознавания берём из глобальных настроек.
+    String globalIdentify = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
+    if (globalIdentify != null && !globalIdentify.isBlank()) {
+      return normalizeModelId(globalIdentify);
     }
     if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
       return normalizeModelId(photoIdentifyModel);
@@ -273,15 +275,18 @@ public class OpenRouterVisionService {
     if (fallbackModel != null && !fallbackModel.isBlank()) {
       return normalizeModelId(fallbackModel);
     }
-    return "google/gemini-flash-1.5";
+    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
   }
 
   private String resolveDiagnoseModel(User user) {
-    if (user != null && user.getOpenrouterModelPhotoDiagnose() != null && !user.getOpenrouterModelPhotoDiagnose().isBlank()) {
-      return normalizeModelId(user.getOpenrouterModelPhotoDiagnose());
+    // OR3: модель для диагностики берём из глобальных настроек.
+    String globalDiagnose = openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel();
+    if (globalDiagnose != null && !globalDiagnose.isBlank()) {
+      return normalizeModelId(globalDiagnose);
     }
-    if (user != null && user.getOpenrouterModelPhotoIdentify() != null && !user.getOpenrouterModelPhotoIdentify().isBlank()) {
-      return normalizeModelId(user.getOpenrouterModelPhotoIdentify());
+    String globalIdentify = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
+    if (globalIdentify != null && !globalIdentify.isBlank()) {
+      return normalizeModelId(globalIdentify);
     }
     if (photoDiagnoseModel != null && !photoDiagnoseModel.isBlank()) {
       return normalizeModelId(photoDiagnoseModel);
@@ -295,7 +300,7 @@ public class OpenRouterVisionService {
     if (fallbackModel != null && !fallbackModel.isBlank()) {
       return normalizeModelId(fallbackModel);
     }
-    return "google/gemini-flash-1.5";
+    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
   }
 
   private String normalizeModelId(String raw) {

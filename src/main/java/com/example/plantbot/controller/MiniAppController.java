@@ -18,6 +18,7 @@ import com.example.plantbot.controller.dto.PlantAiRecommendRequest;
 import com.example.plantbot.controller.dto.PlantAiRecommendResponse;
 import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.PlantStatsResponse;
+import com.example.plantbot.controller.dto.OpenRouterRuntimeSettingsResponse;
 import com.example.plantbot.controller.dto.AssistantChatHistoryItemResponse;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantCategory;
@@ -30,6 +31,7 @@ import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PlantPresetCatalogService;
 import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
+import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.UserService;
@@ -98,6 +100,7 @@ public class MiniAppController {
   private final PlantPresetCatalogService plantPresetCatalogService;
   private final PhotoUrlSignerService photoUrlSignerService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
+  private final OpenRouterUserSettingsService openRouterUserSettingsService;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
@@ -388,16 +391,33 @@ public class MiniAppController {
       Authentication authentication,
       @RequestBody ChatAskRequest request
   ) {
+    return askAssistantInternal(initData, authentication, request);
+  }
+
+  @PostMapping("/openrouter/send")
+  public ChatAskResponse sendOpenRouter(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @RequestBody ChatAskRequest request
+  ) {
+    return askAssistantInternal(initData, authentication, request);
+  }
+
+  private ChatAskResponse askAssistantInternal(
+      String initData,
+      Authentication authentication,
+      ChatAskRequest request
+  ) {
     User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.question() == null || request.question().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "question обязателен");
     }
 
     String question = request.question().trim();
-    var answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, question);
+    var answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, question, request.photoBase64());
     if (answer.isEmpty()) {
       return new ChatAskResponse(false,
-          "Не удалось получить ответ от OpenRouter. Проверь ключ/модель и лимиты. Если используешь free-модель, включи Free model publication в настройках OpenRouter.",
+          "Не удалось получить ответ от OpenRouter. Попросите администратора проверить глобальный ключ/модели и лимиты.",
           null);
     }
     assistantChatHistoryService.saveAndTrim(user, question, answer.get().answer(), answer.get().model());
@@ -506,6 +526,26 @@ public class MiniAppController {
     user.setCityDisplayName(request.city().trim());
     user = userService.save(user);
     return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
+  }
+
+  @GetMapping("/settings/openrouter")
+  public OpenRouterRuntimeSettingsResponse getOpenRouterRuntimeSettings(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    if (user.getId() == null) {
+      throw new IllegalStateException("Unauthorized user context");
+    }
+
+    var models = openRouterUserSettingsService.resolveGlobalModels();
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
+    boolean hasApiKey = apiKey != null && !apiKey.isBlank();
+    return new OpenRouterRuntimeSettingsResponse(
+        models.chatModel(),
+        models.photoRecognitionModel(),
+        hasApiKey
+    );
   }
 
   @GetMapping("/calendar/sync")

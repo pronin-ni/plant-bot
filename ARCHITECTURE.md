@@ -1,157 +1,92 @@
-# Architecture
+# ARCHITECTURE
 
-## 1. Architectural Style
-
-**Type:** Modular monolith.
-
-- Single backend deployable (`Spring Boot` JAR/container).
-- Multiple functional modules inside one codebase (`plants`, `assistant`, `weather`, `home-assistant`, `admin`, `auth`, `push`).
-- Two separate frontend projects (`plant-care-mini-app`, `plant-care-pwa`) consuming the same REST API.
-
-## 2. System Context
-
-```mermaid
-flowchart TD
-  U["User (Telegram/PWA)"] --> FE1["Telegram Mini App (React)"]
-  U --> FE2["PWA (React)"]
-  FE1 --> API["Spring Boot REST API"]
-  FE2 --> API
-  API --> DB["SQLite (JPA/Hibernate)"]
-  API --> TG["Telegram APIs"]
-  API --> OR["OpenRouter"]
-  API --> HA["Home Assistant"]
-  API --> WX["Open-Meteo/OpenWeather-like"]
-  API --> WP["Web Push/VAPID"]
+## High-Level View
+```
+Users (Web + Telegram Mini-App)
+        ↓
+React 19 Frontends (PWA, Mini-App)
+        ↓ REST/JSON + WebPush
+Spring Boot Monolith (Controllers → Services → Repos)
+        ↓ JPA (Hibernate)
+SQLite DB (file) + Backups
+External: Open-Meteo/WeatherAPI/Tomorrow.io/OWM, OpenRouter AI, Home Assistant, Telegram, Web Push (VAPID)
 ```
 
-## 3. Container-Level Diagram
+## Layered Architecture
+- **Presentation:** React clients (Vite) with Zustand state; shadcn/ui components; service worker for offline/push.
+- **API Layer:** Spring `@RestController` classes handle HTTP, validation, DTO mapping.
+- **Business Layer:** Services encapsulate domain logic (plants, watering recs, weather routing, AI selection, HA sync, admin analytics, auth/JWT, notifications, backups).
+- **Data Access:** Spring Data JPA repositories over SQLite entities; occasional native queries/caching.
+- **Integration:** HTTP clients for weather providers, OpenRouter, Telegram, Home Assistant; WebPush sender; Backup scheduler.
+- **Security:** JWT stateless auth; Telegram init-data verification; role-based guards; AES/Jasypt secrets; CORS configured.
 
-```text
-+--------------------------------------------------------------+
-|                         plant-bot                            |
-|                                                              |
-|  +---------------------------+     +----------------------+   |
-|  | Spring Boot Backend       | --> | SQLite DB file      |   |
-|  | - REST API                |     | ./data/plantbot.db  |   |
-|  | - Auth/JWT                |     +----------------------+   |
-|  | - Schedulers              |                               |
-|  +---------------------------+                               |
-|              |                                               |
-|              +--> static /mini-app (built Vite app)         |
-|              +--> static /pwa      (built Vite app + SW)    |
-+--------------------------------------------------------------+
+## Module Map (Backend)
+- `controller` — PWA/MiniApp/Admin/Auth/Push/Weather/OpenRouter/HA/Calendar/Achievements endpoints.
+- `service` — domain services (PlantService, WateringRecommendationService, LearningService, WeatherService, OpenRouter* services, HomeAssistantIntegrationService, AdminService, NotificationService, BackupScheduler, Auth/Jwt services).
+- `repository` — JPA interfaces for entities.
+- `model` — entities + DTOs + enums (PlantCategory/Placement/Type, WeatherProvider, Roles, etc.).
+- `config` — SecurityConfig, WebConfig, OpenRouterConfig, CryptoConfig, SchedulerConfig, Swagger.
+
+## Module Map (Frontend PWA)
+- `src/app` — feature screens (Plants, Calendar, AddPlant, AI Assistant, Settings, Admin, Achievements, PlantDetail).
+- `src/components` — shared UI (cards, tables, charts, settings accordions, admin widgets, nav, forms).
+- `src/lib` — `api.ts` HTTP layer, `store.ts` Zustand state, `indexeddb.ts` offline queue, theming, utils.
+- `src/types` — API typings.
+- `sw.js` — Workbox service worker.
+
+## Dependency Relationships
+- Controllers depend on Services and DTO mappers.
+- Services depend on Repositories and external clients (weather, OpenRouter, HA, push, telegram).
+- Repositories depend on JPA Entities.
+- Frontend components consume `lib/api.ts` + Zustand store; feature screens compose components; admin tables use TanStack Table.
+
+## Data Flow (Detailed)
+```
+User action
+→ Frontend component dispatch (Zustand) / api.ts fetch
+→ HTTP request (JWT or Telegram init-data)
+→ Controller (validation)
+→ Service (business rules, scheduling, AI/Weather provider choice)
+→ Repository (DB) and/or external API
+→ Service response
+→ Controller response JSON
+→ api.ts resolves → Zustand store → UI renders/animates
+
+Push/Calendar/Telegram callbacks
+→ Dedicated controller → service → repo → async notification
 ```
 
-## 4. Backend Layers
+## Domain Model (Primary Entities)
+- **User**: id, username, roles, city/lat/lon, weatherProvider, calendarToken, openRouterPrefs (vision/text models, encrypted apiKey), auth identities, flags.
+- **Plant**: id, owner, category/type/placement, lastWateredDate, baseIntervalDays, preferredWaterMl, photoUrl, alerts.
+- **WateringLog**: timestamp, volume, source (manual/ai/bulk), nextDue.
+- **AssistantChatHistory**: user, role, message, media.
+- **AuthIdentity**: telegramId/provider, user link.
+- **WebPushSubscription**: endpoint, keys, user.
+- **PlantDictionaryEntry/Alias**: reference data for plant names.
+- **PlantConditionSample/AdjustmentLog**: HA telemetry + adaptive learning.
+- **OpenRouterCacheEntry**: cached AI results.
 
-```mermaid
-flowchart LR
-  C["Controller"] --> S["Service"] --> R["Repository"] --> D["SQLite"]
-  S --> X["External APIs"]
-  C --> SEC["Security (JWT principal)"]
-```
+## External Integrations
+- **Weather**: Open-Meteo (no key), WeatherAPI/Tomorrow.io/OWM (public keys on backend), provider chosen per user; forecast/current endpoints.
+- **AI (OpenRouter)**: model catalog, validation, plant identify/diagnose; auto vision/text model selection.
+- **Home Assistant**: multiple instances, room/sensor listing, plant binding, history fetch.
+- **Calendar**: ICS feed + QR; sync tokens; test event.
+- **Notifications**: WebPush (VAPID); Telegram bot optional.
+- **Backups**: SQLite backup/restore, cron, Telegram cloud storage (planned).
 
-### Layer responsibilities
+## Key Entry Points
+- Backend: `PlantBotApplication` main class.
+- Frontend PWA: `plant-care-pwa/src/main.tsx` and `src/app/App.tsx`.
+- Mini-app: `plant-care-mini-app/src/main.tsx`.
 
-- `controller`: HTTP endpoints, request validation, response DTO mapping.
-- `service`: domain logic, orchestration, integration, scheduling.
-- `repository`: persistence queries via Spring Data JPA.
-- `domain`: entities/enums.
-- `config/security`: cross-cutting concerns (security, datasource, CORS, rate-limit).
+## Deployment / Build
+- **Backend:** Gradle `bootRun`; Dockerfile builds frontends then Spring Boot fat jar.
+- **Frontends:** `npm run build` in respective folders; served statically via Spring or docker-compose Nginx depending on compose config.
+- **Configs:** `docker-compose.yml` wires app, database volume, optional Nginx; `.env` controls keys/ports.
 
-## 5. Frontend Architecture
-
-### PWA (`plant-care-pwa`)
-
-- App shell in `src/app/App.tsx` using tab-driven navigation.
-- State: Zustand (`src/lib/store.ts`).
-- Data-fetching and API wrappers in `src/lib/api.ts`.
-- Offline queue + cache in IndexedDB (`src/lib/indexeddb.ts`).
-- UI: componentized screens + framer-motion transitions.
-
-### Mini App (`plant-care-mini-app`)
-
-- Same domain concepts with lighter UX surface.
-- Uses same backend API contract.
-
-## 6. Module Interaction Diagram
-
-```mermaid
-flowchart LR
-  P["Plant Module"] --> W["Weather Module"]
-  P --> L["Learning/Recommendation Module"]
-  P --> A["AI Module (OpenRouter)"]
-  P --> H["Home Assistant Module"]
-  P --> N["Notification/Push Module"]
-
-  U["User/Auth Module"] --> P
-  U --> A
-  U --> H
-  U --> N
-
-  ADM["Admin Module"] --> P
-  ADM --> U
-  ADM --> C["Cache/Backup Ops"]
-  ADM --> N
-```
-
-## 7. Security Model
-
-- Stateless JWT auth for PWA endpoints (`Authorization: Bearer <token>`).
-- Telegram init-data fallback for non-JWT flows (`X-Telegram-Init-Data`).
-- Method and path restrictions:
-  - `/api/admin/**` requires `ROLE_ADMIN`.
-  - additional checks in `AdminController.requireAdmin(...)`.
-- Admin rate limiting by remote IP (`AdminRateLimitInterceptor`).
-- Sensitive token storage encrypted at rest:
-  - OpenRouter user key: AES/GCM (`OpenRouterApiKeyCryptoService`).
-  - Home Assistant token: AES/GCM (`AesTokenCryptoService`).
-
-## 8. Data Flow Diagram (Typical)
-
-### Water plant
-
-```text
-User taps "Water" in frontend
--> PUT /api/plants/{id}/water
--> MiniAppController.waterPlant
--> WateringRecommendationService + PlantService + WateringLogService
--> DB update (plant lastWateredDate + new watering_log row)
--> PlantResponse returned
--> UI re-renders next watering date
-```
-
-### AI photo diagnose
-
-```text
-Frontend sends base64 image
--> POST /api/plant/diagnose-openrouter
--> OpenRouterVisionService
--> OpenRouter API call
--> Parsed diagnosis DTO
--> UI diagnostic card
-```
-
-## 9. Scheduling / Background jobs
-
-- `NotificationScheduler` for reminder workflows.
-- `DatabaseBackupScheduler` for nightly backups + retention cleanup.
-- `HomeAssistantPollingScheduler` for periodic HA condition polling.
-
-## 10. Known Contract Gaps (Current Repo State)
-
-Frontend API client references endpoints that are **not implemented** in backend controllers:
-
-- `POST /api/openrouter/validate-key`
-- `POST /api/openrouter/send`
-- `GET /api/export/pdf`
-- `POST /api/import/{provider}`
-- `POST /api/backup/telegram`
-
-These calls currently fail unless backend endpoints are added.
-
-## 11. Deployment Notes
-
-- Multi-stage Docker build compiles both frontends and backend into one runtime image.
-- Static assets served by Spring Boot under `/mini-app` and `/pwa`.
-- CI pipeline builds and pushes multi-arch images to GHCR (`.github/workflows/docker-publish.yml`).
+## Risks / Sensitive Areas
+- Encryption of API keys (OpenRouter, HA tokens) — use provided crypto services.
+- Auth flows differ between PWA (JWT) and mini-app (telegram init data); respect guards.
+- Weather provider enums must stay aligned backend ↔ frontend.
+- Admin actions require `ROLE_ADMIN` and double confirmations; keep logging.

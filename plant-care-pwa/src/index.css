@@ -4,6 +4,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* T4: дефолтные переменные темы (Light Forest) до инициализации Zustand/JS. */
+:root {
+  --background: 105 29% 97%;
+  --foreground: 129 41% 16%;
+  --card: 125 39% 94%;
+  --card-foreground: 129 41% 16%;
+  --primary: 122 39% 49%;
+  --primary-foreground: 129 41% 16%;
+  --secondary: 0 0% 100%;
+  --secondary-foreground: 129 41% 16%;
+  --muted: 0 0% 100%;
+  --muted-foreground: 127 8% 45%;
+  --accent: 123 38% 64%;
+  --accent-foreground: 129 41% 16%;
+  --border: 120 21% 89%;
+  --input: 120 21% 89%;
+  --ring: 122 39% 49%;
+}
+
+.theme-crossfade-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+:root.theme-transition-active body,
+:root.theme-transition-active .ios-blur-card,
+:root.theme-transition-active .ios-tabbar,
+:root.theme-transition-active .platform-top-nav,
+:root.theme-transition-active .android-bottom-nav,
+:root.theme-transition-active .rounded-2xl,
+:root.theme-transition-active button,
+:root.theme-transition-active input,
+:root.theme-transition-active select,
+:root.theme-transition-active textarea {
+  transition-property: background-color, color, border-color, box-shadow, fill, stroke;
+  transition-duration: 420ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @layer base {
   * {
     @apply border-ios-border/50;

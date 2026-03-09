@@ -1,4 +1,6 @@
 spring:
+  application:
+    name: ${SPRING_APPLICATION_NAME:plant-care-backend}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/plantbot.db?busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL}
     driver-class-name: org.sqlite.JDBC
@@ -92,6 +94,23 @@ web:
     allowed-origins: ${WEB_CORS_ALLOWED_ORIGINS:*}
 
 app:
+  name: ${APP_NAME:Мои Растения}
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173/pwa}
+  magic-link:
+    expiry-minutes: ${APP_MAGIC_LINK_EXPIRY_MINUTES:20}
+    require-https: ${APP_MAGIC_LINK_REQUIRE_HTTPS:true}
+    allow-insecure-localhost: ${APP_MAGIC_LINK_ALLOW_INSECURE_LOCALHOST:true}
+    cleanup-cron: ${APP_MAGIC_LINK_CLEANUP_CRON:0 */10 * * * *}
+    cleanup-used-retention-minutes: ${APP_MAGIC_LINK_CLEANUP_USED_RETENTION_MINUTES:30}
+    persist-email-identity: ${APP_MAGIC_LINK_PERSIST_EMAIL_IDENTITY:false}
+    audit-retention-days: ${APP_MAGIC_LINK_AUDIT_RETENTION_DAYS:30}
+    audit-cleanup-cron: ${APP_MAGIC_LINK_AUDIT_CLEANUP_CRON:0 15 4 * * *}
+    rate-limit:
+      max-requests: ${APP_MAGIC_LINK_RATE_LIMIT_MAX_REQUESTS:5}
+      window-seconds: ${APP_MAGIC_LINK_RATE_LIMIT_WINDOW_SECONDS:60}
+    verify-rate-limit:
+      max-requests: ${APP_MAGIC_LINK_VERIFY_RATE_LIMIT_MAX_REQUESTS:20}
+      window-seconds: ${APP_MAGIC_LINK_VERIFY_RATE_LIMIT_WINDOW_SECONDS:60}
   features:
     mini-app-enabled: ${APP_FEATURE_MINI_APP_ENABLED:true}
     pwa-enabled: ${APP_FEATURE_PWA_ENABLED:true}
@@ -127,6 +146,15 @@ app:
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
   dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
   dev-username: ${APP_DEV_USERNAME:dev_user}
+
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from-email: ${RESEND_FROM_EMAIL:resend-default@resend.dev}
+  domain-name: ${RESEND_DOMAIN_NAME:}
+  from-local-part: ${RESEND_FROM_LOCAL_PART:no-reply}
+  auto-from-enabled: ${RESEND_AUTO_FROM_ENABLED:true}
+  auto-from-cache-seconds: ${RESEND_AUTO_FROM_CACHE_SECONDS:600}
+  base-url: ${RESEND_BASE_URL:https://api.resend.com}
 
 web-push:
   enabled: ${WEB_PUSH_ENABLED:false}

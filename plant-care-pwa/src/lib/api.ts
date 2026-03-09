@@ -20,6 +20,11 @@ import type {
   AchievementsDto,
   OpenRouterModelsDto,
   OpenRouterPreferencesDto,
+  AdminOpenRouterSettingsDto,
+  AdminOpenRouterModelsDto,
+  AdminOpenRouterTestDto,
+  OpenRouterRuntimeSettingsDto,
+  OpenRouterTypedTestDto,
   ChatAskResponse,
   PlantCareAdviceDto,
   AdminOverviewDto,
@@ -42,6 +47,7 @@ import type {
   AdminMonitoringDto,
   PwaAuthDto,
   PwaAuthProvidersDto,
+  PwaEmailMagicLinkRequestDto,
   PwaTelegramWidgetPayloadDto,
   PwaUserDto,
   PwaPushPublicKeyDto,
@@ -62,7 +68,7 @@ import type {
   PlantRoomBindingRequest
 } from '@/types/home-assistant';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? '';
 const AUTH_TOKEN_KEY = 'plant-pwa-jwt';
 const CACHE_PREFIX = 'api:cache:';
 
@@ -325,6 +331,19 @@ export async function pwaLoginOAuth(
   return pwaAuthFetch<PwaAuthDto>(`/api/pwa/auth/oauth/${provider}`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function pwaRequestEmailMagicLink(email: string): Promise<PwaEmailMagicLinkRequestDto> {
+  return pwaAuthFetch<PwaEmailMagicLinkRequestDto>('/api/auth/email/request', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+}
+
+export async function pwaVerifyEmailMagicLink(token: string): Promise<PwaAuthDto> {
+  return pwaAuthFetch<PwaAuthDto>(`/api/auth/email/verify?token=${encodeURIComponent(token)}`, {
+    method: 'GET'
   });
 }
 
@@ -666,6 +685,55 @@ export async function sendOpenRouterTest(payload: { message: string; imageBase64
   return apiFetch<ChatAskResponse>('/api/openrouter/send', {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getOpenRouterRuntimeSettings(): Promise<OpenRouterRuntimeSettingsDto> {
+  return apiFetch<OpenRouterRuntimeSettingsDto>('/api/settings/openrouter', { method: 'GET' });
+}
+
+export async function getAdminOpenRouterSettings(): Promise<AdminOpenRouterSettingsDto> {
+  return apiFetch<AdminOpenRouterSettingsDto>('/api/admin/openrouter/settings', { method: 'GET' });
+}
+
+export async function saveAdminOpenRouterSettings(
+  payload: {
+    apiKey?: string | null;
+    chatModel?: string | null;
+    photoRecognitionModel?: string | null;
+    photoDiagnosisModel?: string | null;
+  }
+): Promise<AdminOpenRouterSettingsDto> {
+  return apiFetch<AdminOpenRouterSettingsDto>('/api/admin/openrouter/settings', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getAdminOpenRouterModels(): Promise<AdminOpenRouterModelsDto> {
+  return apiFetch<AdminOpenRouterModelsDto>('/api/admin/openrouter/models', { method: 'GET' });
+}
+
+export async function saveAdminOpenRouterModels(payload: {
+  textModel?: string | null;
+  photoModel?: string | null;
+}): Promise<AdminOpenRouterModelsDto> {
+  return apiFetch<AdminOpenRouterModelsDto>('/api/admin/openrouter/models', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function testOpenRouterModel(type: 'text' | 'photo'): Promise<OpenRouterTypedTestDto> {
+  return apiFetch<OpenRouterTypedTestDto>(`/api/openrouter/test?type=${encodeURIComponent(type)}`, {
+    method: 'POST'
+  });
+}
+
+export async function sendAdminOpenRouterTest(payload?: { message?: string }): Promise<AdminOpenRouterTestDto> {
+  return apiFetch<AdminOpenRouterTestDto>('/api/admin/openrouter/test', {
+    method: 'POST',
+    body: JSON.stringify({ message: payload?.message ?? '' })
   });
 }
 

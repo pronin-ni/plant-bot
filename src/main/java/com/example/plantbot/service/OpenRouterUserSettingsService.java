@@ -10,18 +10,27 @@ import org.springframework.stereotype.Service;
 public class OpenRouterUserSettingsService {
   private final OpenRouterApiKeyCryptoService cryptoService;
   private final UserService userService;
+  private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
 
   @Value("${openrouter.api-key:}")
   private String fallbackApiKey;
 
   public String resolveApiKey(User user) {
-    if (user != null) {
-      String encrypted = user.getOpenrouterApiKeyEncrypted();
-      if (encrypted != null && !encrypted.isBlank()) {
-        return cryptoService.decrypt(encrypted);
-      }
+    // OR3: для runtime используем только глобальный ключ OpenRouter.
+    String global = resolveGlobalApiKey();
+    if (global != null && !global.isBlank()) {
+      return global;
     }
     return fallbackApiKey;
+  }
+
+  public String resolveGlobalApiKey() {
+    var settings = openRouterGlobalSettingsService.getOrCreate();
+    return openRouterGlobalSettingsService.resolveApiKey(settings);
+  }
+
+  public OpenRouterGlobalSettingsService.ResolvedModels resolveGlobalModels() {
+    return openRouterGlobalSettingsService.resolveModels(openRouterGlobalSettingsService.getOrCreate());
   }
 
   public boolean hasUserApiKey(User user) {
@@ -37,4 +46,3 @@ public class OpenRouterUserSettingsService {
     userService.save(user);
   }
 }
-
