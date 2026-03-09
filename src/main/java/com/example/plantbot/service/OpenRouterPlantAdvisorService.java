@@ -4,6 +4,7 @@ import com.example.plantbot.domain.OpenRouterCacheEntry;
 import com.example.plantbot.repository.OpenRouterCacheRepository;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantCategory;
+import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.util.AIWateringProfile;
@@ -274,54 +275,72 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<WizardWateringRecommendation> suggestWizardRecommendation(User user,
-                                                                            String plantName,
-                                                                            PlantCategory category,
-                                                                            String sizeHint) {
+                                                                            WizardRecommendInput input) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    String modelToUse = resolveTextModel(user);
-    if (apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+    if (apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
-    if (plantName == null || plantName.isBlank()) {
+    if (input == null || input.plantName() == null || input.plantName().isBlank()) {
       return Optional.empty();
     }
 
-    try {
-      JsonNode body = postMessages(apiKey, modelToUse, List.of(
-          Map.of("role", "system", "content", wizardRecommendSystemPrompt()),
-          Map.of("role", "user", "content", wizardRecommendUserPrompt(plantName.trim(), category, sizeHint))
-      ));
-      if (body == null) {
-        return Optional.empty();
-      }
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", wizardRecommendSystemPrompt()),
+            Map.of("role", "user", "content", wizardRecommendUserPrompt(input))
+        ));
+        if (body == null) {
+          continue;
+        }
 
-      String content = extractContent(body);
-      if (content.isEmpty()) {
-        return Optional.empty();
-      }
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          continue;
+        }
 
-      JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
-      int frequency = clamp(json.path("watering_frequency_days").asInt(0), 1, 60);
-      int volumeMl = clamp(json.path("watering_volume_ml").asInt(0), 50, 10_000);
-      if (frequency <= 0 || volumeMl <= 0) {
-        return Optional.empty();
-      }
+        JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
+        int frequency = clamp(
+            json.path("recommended_interval_days").asInt(json.path("watering_frequency_days").asInt(0)),
+            1,
+            60
+        );
+        int volumeMl = clamp(
+            json.path("recommended_water_ml").asInt(json.path("watering_volume_ml").asInt(0)),
+            50,
+            10_000
+        );
+        if (frequency <= 0 || volumeMl <= 0) {
+          continue;
+        }
 
-      String light = normalizeAdviceNote(json.path("light").asText(""));
-      String soil = normalizeAdviceNote(json.path("soil").asText(""));
-      String notes = normalizeAdviceNote(json.path("notes").asText(""));
-      return Optional.of(new WizardWateringRecommendation(
-          frequency,
-          volumeMl,
-          light,
-          soil,
-          notes,
-          "OpenRouter:" + modelToUse
-      ));
-    } catch (Exception ex) {
-      log.warn("OpenRouter wizard recommend failed for '{}': {}", preview(plantName), ex.getMessage());
-      return Optional.empty();
+        String summary = normalizeAdviceNote(json.path("summary").asText(""));
+        if (summary.isEmpty()) {
+          summary = normalizeAdviceNote(json.path("notes").asText(""));
+        }
+        if (summary.isEmpty()) {
+          summary = "Рекомендация рассчитана по данным растения и условий.";
+        }
+
+        List<String> reasoning = parseAdviceList(json.path("reasoning"), 5);
+        List<String> warnings = parseAdviceList(json.path("warnings"), 5);
+        String profile = input.environmentType() == null ? PlantEnvironmentType.INDOOR.name() : input.environmentType().name();
+
+        return Optional.of(new WizardWateringRecommendation(
+            "ai",
+            frequency,
+            volumeMl,
+            summary,
+            reasoning,
+            warnings,
+            profile
+        ));
+      } catch (Exception ex) {
+        log.warn("OpenRouter wizard recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
+      }
     }
+
+    return Optional.empty();
   }
 
   public Optional<ChatAnswer> answerGardeningQuestion(String question) {
@@ -566,29 +585,138 @@ public class OpenRouterPlantAdvisorService {
 
   private String wizardRecommendSystemPrompt() {
     return """
-        Ты эксперт по уходу за комнатными и садовыми растениями.
-        Верни только JSON без markdown и текста вне JSON:
+        Ты эксперт по поливу растений в indoor/outdoor средах.
+        Верни только JSON без markdown и текста вне JSON в формате:
         {
-          "watering_frequency_days": 5,
-          "watering_volume_ml": 300,
-          "light": "полутень",
-          "soil": "слабокислый",
-          "notes": "короткая практическая рекомендация"
+          "recommended_interval_days": 5,
+          "recommended_water_ml": 300,
+          "summary": "короткий практический вывод в 1-2 предложениях",
+          "reasoning": ["фактор 1", "фактор 2", "фактор 3"],
+          "warnings": ["предупреждение 1"]
         }
         Правила:
-        - watering_frequency_days: целое число [1..60]
-        - watering_volume_ml: целое число [50..10000]
-        - все текстовые поля на русском
+        - recommended_interval_days: целое число [1..60]
+        - recommended_water_ml: целое число [50..10000]
+        - reasoning: 2..5 коротких пунктов на русском
+        - warnings: 0..3 коротких пунктов на русском
+        - не возвращай пустые строки
         """;
   }
 
-  private String wizardRecommendUserPrompt(String plantName, PlantCategory category, String sizeHint) {
-    String categoryLabel = category == null ? "HOME" : category.name();
-    return """
-        Рекомендации по поливу для %s в %s.
-        Категория: %s.
-        Учитывай, что для OUTDOOR_GARDEN полив обычно объемнее, чем для декоративных и домашних.
-        """.formatted(plantName, sizeHint == null || sizeHint.isBlank() ? "без уточненного размера" : sizeHint, categoryLabel);
+  private String wizardRecommendUserPrompt(WizardRecommendInput input) {
+    PlantEnvironmentType env = input.environmentType() == null
+        ? PlantEnvironmentType.INDOOR
+        : input.environmentType();
+    return switch (env) {
+      case INDOOR -> buildIndoorWizardPrompt(input);
+      case OUTDOOR_ORNAMENTAL -> buildOutdoorOrnamentalWizardPrompt(input);
+      case OUTDOOR_GARDEN -> buildOutdoorGardenWizardPrompt(input);
+    };
+  }
+
+  private String buildIndoorWizardPrompt(WizardRecommendInput input) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Рассчитай режим полива для комнатного растения.\n");
+    builder.append("Растение: ").append(input.plantName().trim()).append('\n');
+    if (input.plantType() != null) {
+      builder.append("Тип растения: ").append(input.plantType().name()).append('\n');
+    }
+    if (input.potVolumeLiters() != null && input.potVolumeLiters() > 0) {
+      builder.append("Объем горшка: ").append(safeNum(input.potVolumeLiters(), 1)).append(" л\n");
+    }
+    if (input.baseIntervalDays() != null && input.baseIntervalDays() > 0) {
+      builder.append("Базовый интервал (пользователь): ").append(input.baseIntervalDays()).append(" дней\n");
+    }
+    if (input.region() != null && !input.region().isBlank()) {
+      builder.append("Город/регион: ").append(input.region()).append('\n');
+    }
+    builder.append("Верни конкретный интервал полива и объем воды.");
+    return builder.toString();
+  }
+
+  private String buildOutdoorOrnamentalWizardPrompt(WizardRecommendInput input) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Рассчитай режим полива для уличного декоративного растения.\n");
+    builder.append("Растение: ").append(input.plantName().trim()).append('\n');
+    if (input.containerType() != null && !input.containerType().isBlank()) {
+      builder.append("Формат выращивания: ").append(input.containerType()).append('\n');
+    }
+    if (input.potVolumeLiters() != null && input.potVolumeLiters() > 0) {
+      builder.append("Объем контейнера: ").append(safeNum(input.potVolumeLiters(), 1)).append(" л\n");
+    }
+    if (input.sunExposure() != null && !input.sunExposure().isBlank()) {
+      builder.append("Освещенность: ").append(input.sunExposure()).append('\n');
+    }
+    if (input.soilType() != null && !input.soilType().isBlank()) {
+      builder.append("Почва: ").append(input.soilType()).append('\n');
+    }
+    if (input.weatherSummary() != null && !input.weatherSummary().isBlank()) {
+      builder.append("Погода: ").append(input.weatherSummary()).append('\n');
+    }
+    if (input.region() != null && !input.region().isBlank()) {
+      builder.append("Город/регион: ").append(input.region()).append('\n');
+    }
+    builder.append("Верни конкретный интервал полива и объем воды.");
+    return builder.toString();
+  }
+
+  private String buildOutdoorGardenWizardPrompt(WizardRecommendInput input) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Рассчитай режим полива для садовой культуры.\n");
+    builder.append("Культура: ").append(input.plantName().trim()).append('\n');
+    if (input.growthStage() != null && !input.growthStage().isBlank()) {
+      builder.append("Стадия роста: ").append(input.growthStage()).append('\n');
+    }
+    if (input.soilType() != null && !input.soilType().isBlank()) {
+      builder.append("Почва: ").append(input.soilType()).append('\n');
+    }
+    if (input.greenhouse() != null) {
+      builder.append("Теплица: ").append(input.greenhouse() ? "да" : "нет").append('\n');
+    }
+    if (input.mulched() != null) {
+      builder.append("Мульча: ").append(input.mulched() ? "да" : "нет").append('\n');
+    }
+    if (input.dripIrrigation() != null) {
+      builder.append("Капельный полив: ").append(input.dripIrrigation() ? "да" : "нет").append('\n');
+    }
+    if (input.weatherSummary() != null && !input.weatherSummary().isBlank()) {
+      builder.append("Погода: ").append(input.weatherSummary()).append('\n');
+    }
+    if (input.region() != null && !input.region().isBlank()) {
+      builder.append("Город/регион: ").append(input.region()).append('\n');
+    }
+    if (input.baseIntervalDays() != null && input.baseIntervalDays() > 0) {
+      builder.append("Базовый интервал (пользователь): ").append(input.baseIntervalDays()).append(" дней\n");
+    }
+    builder.append("Верни конкретный интервал полива и объем воды.");
+    return builder.toString();
+  }
+
+  private List<String> parseAdviceList(JsonNode node, int maxSize) {
+    if (node == null || !node.isArray()) {
+      return List.of();
+    }
+    List<String> values = new ArrayList<>();
+    for (JsonNode item : node) {
+      String value = normalizeAdviceNote(item.asText(""));
+      if (value == null || value.isBlank()) {
+        continue;
+      }
+      values.add(value);
+      if (values.size() >= maxSize) {
+        break;
+      }
+    }
+    return values;
+  }
+
+  private String safeNum(Double value, int scale) {
+    if (value == null) {
+      return "0";
+    }
+    return scale <= 0
+        ? String.valueOf(Math.round(value))
+        : String.format(java.util.Locale.ROOT, "%." + scale + "f", value);
   }
 
   private String normalizeAdviceNote(String note) {
@@ -933,11 +1061,31 @@ public class OpenRouterPlantAdvisorService {
   public record ChatAnswer(String answer, String model) {
   }
 
-  public record WizardWateringRecommendation(int wateringFrequencyDays,
-                                             int wateringVolumeMl,
-                                             String light,
-                                             String soil,
-                                             String notes,
-                                             String source) {
+  public record WizardWateringRecommendation(String source,
+                                             int recommendedIntervalDays,
+                                             int recommendedWaterMl,
+                                             String summary,
+                                             List<String> reasoning,
+                                             List<String> warnings,
+                                             String profile) {
+  }
+
+  public record WizardRecommendInput(String plantName,
+                                     PlantEnvironmentType environmentType,
+                                     PlantCategory category,
+                                     PlantType plantType,
+                                     Integer baseIntervalDays,
+                                     Double potVolumeLiters,
+                                     Double heightCm,
+                                     Double diameterCm,
+                                     String containerType,
+                                     String growthStage,
+                                     Boolean greenhouse,
+                                     String soilType,
+                                     String sunExposure,
+                                     String region,
+                                     String weatherSummary,
+                                     Boolean mulched,
+                                     Boolean dripIrrigation) {
   }
 }

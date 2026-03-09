@@ -22,9 +22,11 @@ import com.example.plantbot.controller.dto.OpenRouterRuntimeSettingsResponse;
 import com.example.plantbot.controller.dto.AssistantChatHistoryItemResponse;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantCategory;
+import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.PlantCatalogService;
@@ -38,9 +40,11 @@ import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
+import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.WateringRecommendation;
+import com.example.plantbot.util.WeatherData;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -101,6 +105,7 @@ public class MiniAppController {
   private final PhotoUrlSignerService photoUrlSignerService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
+  private final WeatherService weatherService;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
@@ -209,6 +214,9 @@ public class MiniAppController {
     PlantCategory category = request.category() == null
         ? (placement == PlantPlacement.OUTDOOR ? PlantCategory.OUTDOOR_DECORATIVE : PlantCategory.HOME)
         : request.category();
+    PlantEnvironmentType environmentType = request.environmentType() != null
+        ? request.environmentType()
+        : request.wateringProfile();
 
     Plant plant = plantService.addPlant(
         user,
@@ -224,8 +232,17 @@ public class MiniAppController {
         request.mulched(),
         request.perennial(),
         request.winterDormancyEnabled(),
-        request.preferredWaterMl()
+        request.preferredWaterMl(),
+        environmentType
     );
+    plant.setRegion(request.region());
+    plant.setContainerType(request.containerType());
+    plant.setContainerVolumeLiters(request.containerVolumeLiters());
+    plant.setCropType(request.cropType());
+    plant.setGrowthStage(request.growthStage());
+    plant.setGreenhouse(request.greenhouse());
+    plant.setDripIrrigation(request.dripIrrigation());
+    plantService.save(plant);
     return toPlantResponse(plant, user);
   }
 
@@ -463,32 +480,63 @@ public class MiniAppController {
     if (request == null || request.name() == null || request.name().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
     }
+    PlantEnvironmentType environmentType = request.environmentType() == null
+        ? PlantEnvironmentType.INDOOR
+        : request.environmentType();
+    PlantCategory category = request.category() == null ? categoryByEnvironment(environmentType) : request.category();
+    int baseInterval = clampInt(request.baseIntervalDays() == null ? 7 : request.baseIntervalDays(), 1, 60);
+    int fallbackWaterMl = estimateFallbackWaterMl(environmentType, request);
 
-    String sizeHint;
-    if (request.category() == PlantCategory.OUTDOOR_GARDEN) {
-      sizeHint = "высота " + safeNum(request.heightCm(), 0) + " см, диаметр " + safeNum(request.diameterCm(), 0) + " см";
-    } else {
-      sizeHint = "горшок " + safeNum(request.potVolumeLiters(), 0) + " л";
-    }
+    String targetRegion = request.region() != null && !request.region().isBlank()
+        ? request.region().trim()
+        : (user.getCity() == null ? "" : user.getCity().trim());
+    WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
+    WeatherData weather = weatherService.getCurrent(targetRegion, user.getCityLat(), user.getCityLon(), provider).orElse(null);
+    String weatherSummary = weather == null
+        ? "нет актуальных погодных данных"
+        : String.format(Locale.ROOT, "%.1f°C, влажность %.0f%%, осадки %.1f мм/ч",
+        weather.temperatureC(),
+        weather.humidityPercent(),
+        weather.precipitationMm1h());
 
     var recommendation = openRouterPlantAdvisorService
-        .suggestWizardRecommendation(user, request.name().trim(), request.category(), sizeHint)
+        .suggestWizardRecommendation(user, new OpenRouterPlantAdvisorService.WizardRecommendInput(
+            request.name().trim(),
+            environmentType,
+            category,
+            request.plantType() == null ? PlantType.DEFAULT : request.plantType(),
+            baseInterval,
+            request.potVolumeLiters(),
+            request.heightCm(),
+            request.diameterCm(),
+            request.containerType(),
+            request.growthStage(),
+            request.greenhouse(),
+            request.soilType(),
+            request.sunExposure(),
+            targetRegion,
+            weatherSummary,
+            request.mulched(),
+            request.dripIrrigation()
+        ))
         .orElseGet(() -> new OpenRouterPlantAdvisorService.WizardWateringRecommendation(
-            7,
-            300,
-            "рассеянный свет",
-            "универсальный грунт",
-            "Проверьте влажность почвы перед поливом.",
-            "Heuristic"
+            "fallback",
+            baseInterval,
+            fallbackWaterMl,
+            fallbackSummary(environmentType, weather != null),
+            fallbackReasoning(environmentType, request, weather),
+            fallbackWarnings(environmentType, weather != null),
+            environmentType.name()
         ));
 
     return new PlantAiRecommendResponse(
-        recommendation.wateringFrequencyDays(),
-        recommendation.wateringVolumeMl(),
-        recommendation.light(),
-        recommendation.soil(),
-        recommendation.notes(),
-        recommendation.source()
+        recommendation.source(),
+        recommendation.recommendedIntervalDays(),
+        recommendation.recommendedWaterMl(),
+        recommendation.summary(),
+        recommendation.reasoning(),
+        recommendation.warnings(),
+        recommendation.profile()
     );
   }
 
@@ -633,6 +681,14 @@ public class MiniAppController {
         plant.getName(),
         plant.getPlacement(),
         plant.getCategory(),
+        plant.getWateringProfile() == null ? profileByCategory(plant.getCategory()) : plant.getWateringProfile(),
+        plant.getRegion(),
+        plant.getContainerType(),
+        plant.getContainerVolumeLiters(),
+        plant.getCropType(),
+        plant.getGrowthStage(),
+        plant.getGreenhouse(),
+        plant.getDripIrrigation(),
         plant.getPotVolumeLiters(),
         plant.getOutdoorAreaM2(),
         plant.getOutdoorSoilType(),
@@ -803,6 +859,77 @@ public class MiniAppController {
       return "0";
     }
     return scale <= 0 ? String.valueOf(Math.round(value)) : String.format(Locale.ROOT, "%." + scale + "f", value);
+  }
+
+  private PlantCategory categoryByEnvironment(PlantEnvironmentType environmentType) {
+    if (environmentType == null) {
+      return PlantCategory.HOME;
+    }
+    return switch (environmentType) {
+      case OUTDOOR_ORNAMENTAL -> PlantCategory.OUTDOOR_DECORATIVE;
+      case OUTDOOR_GARDEN -> PlantCategory.OUTDOOR_GARDEN;
+      case INDOOR -> PlantCategory.HOME;
+    };
+  }
+
+  private PlantEnvironmentType profileByCategory(PlantCategory category) {
+    if (category == null) {
+      return PlantEnvironmentType.INDOOR;
+    }
+    return switch (category) {
+      case OUTDOOR_GARDEN -> PlantEnvironmentType.OUTDOOR_GARDEN;
+      case OUTDOOR_DECORATIVE -> PlantEnvironmentType.OUTDOOR_ORNAMENTAL;
+      case HOME -> PlantEnvironmentType.INDOOR;
+    };
+  }
+
+  private int estimateFallbackWaterMl(PlantEnvironmentType environmentType, PlantAiRecommendRequest request) {
+    if (environmentType == PlantEnvironmentType.OUTDOOR_GARDEN) {
+      double h = request.heightCm() == null ? 40.0 : request.heightCm();
+      return clampInt((int) Math.round(Math.max(20.0, h) * 10.0), 350, 4000);
+    }
+    double liters = request.potVolumeLiters() == null ? 2.0 : request.potVolumeLiters();
+    if (environmentType == PlantEnvironmentType.OUTDOOR_ORNAMENTAL) {
+      return clampInt((int) Math.round(Math.max(0.5, liters) * 170.0), 180, 3200);
+    }
+    return clampInt((int) Math.round(Math.max(0.3, liters) * 130.0), 120, 2200);
+  }
+
+  private String fallbackSummary(PlantEnvironmentType environmentType, boolean hasWeather) {
+    String weatherPart = hasWeather ? "с учётом текущей погоды" : "без погодных данных";
+    return switch (environmentType) {
+      case OUTDOOR_ORNAMENTAL -> "Рекомендации рассчитаны по базовой модели для декоративных уличных растений " + weatherPart + ".";
+      case OUTDOOR_GARDEN -> "Рекомендации рассчитаны по базовой модели для садовых культур " + weatherPart + ".";
+      case INDOOR -> "Рекомендации рассчитаны по базовой модели для домашних растений " + weatherPart + ".";
+    };
+  }
+
+  private List<String> fallbackReasoning(PlantEnvironmentType environmentType, PlantAiRecommendRequest request, WeatherData weather) {
+    List<String> reasoning = new ArrayList<>();
+    reasoning.add("Профиль: " + (environmentType == null ? PlantEnvironmentType.INDOOR.name() : environmentType.name()));
+    if (request.baseIntervalDays() != null && request.baseIntervalDays() > 0) {
+      reasoning.add("Базовый интервал пользователя: " + request.baseIntervalDays() + " дн.");
+    }
+    if (request.potVolumeLiters() != null && request.potVolumeLiters() > 0) {
+      reasoning.add("Объем контейнера: " + safeNum(request.potVolumeLiters(), 1) + " л.");
+    }
+    if (weather != null) {
+      reasoning.add(String.format(Locale.ROOT, "Погода: %.1f°C, влажность %.0f%%.", weather.temperatureC(), weather.humidityPercent()));
+    }
+    return reasoning;
+  }
+
+  private List<String> fallbackWarnings(PlantEnvironmentType environmentType, boolean hasWeather) {
+    List<String> warnings = new ArrayList<>();
+    warnings.add("AI недоступен, использован fallback расчёт.");
+    if (!hasWeather && environmentType != PlantEnvironmentType.INDOOR) {
+      warnings.add("Для уличных растений точность ниже без актуальной погоды.");
+    }
+    return warnings;
+  }
+
+  private int clampInt(int value, int min, int max) {
+    return Math.max(min, Math.min(max, value));
   }
 
   private boolean isAdmin(User user) {

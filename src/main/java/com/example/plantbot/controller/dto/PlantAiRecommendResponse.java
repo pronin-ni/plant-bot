@@ -1,9 +1,12 @@
 package com.example.plantbot.controller.dto;
 
-public record PlantAiRecommendResponse(Integer wateringFrequencyDays,
-                                       Integer wateringVolumeMl,
-                                       String light,
-                                       String soil,
-                                       String notes,
-                                       String source) {
+import java.util.List;
+
+public record PlantAiRecommendResponse(String source,
+                                       Integer recommendedIntervalDays,
+                                       Integer recommendedWaterMl,
+                                       String summary,
+                                       List<String> reasoning,
+                                       List<String> warnings,
+                                       String profile) {
 }

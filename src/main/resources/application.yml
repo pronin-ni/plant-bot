@@ -149,6 +149,8 @@ app:
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
   dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
   dev-username: ${APP_DEV_USERNAME:dev_user}
+  sensor-context:
+    provider: ${APP_SENSOR_CONTEXT_PROVIDER:NONE}
 
 resend:
   api-key: ${RESEND_API_KEY:}

@@ -36,13 +36,53 @@ public class Plant {
   @Column(nullable = false)
   private PlantCategory category = PlantCategory.HOME;
 
+  @Enumerated(EnumType.STRING)
+  @Column
+  private PlantEnvironmentType wateringProfile = PlantEnvironmentType.INDOOR;
+
+  @Enumerated(EnumType.STRING)
+  @Column
+  private WateringProfileType wateringProfileType;
+
+  @Enumerated(EnumType.STRING)
+  @Column
+  private PlantPlacementType plantPlacementType;
+
+  private String region;
+  private String city;
+
+  @Enumerated(EnumType.STRING)
+  private PlantContainerType containerType;
+
+  // Для outdoor ornamental может отличаться от potVolumeLiters.
+  private Double containerVolumeLiters;
+
+  // Для outdoor garden: тип культуры (например, tomato, cucumber).
+  private String cropType;
+
+  @Enumerated(EnumType.STRING)
+  private PlantGrowthStage growthStage;
+
+  @Enumerated(EnumType.STRING)
+  private GrowthStage growthStageV2;
+
+  private Boolean greenhouse;
+
+  private Boolean dripIrrigation;
+
   private Double outdoorAreaM2;
 
   @Enumerated(EnumType.STRING)
   private OutdoorSoilType outdoorSoilType;
 
   @Enumerated(EnumType.STRING)
+  private SoilType soilType;
+
+  @Enumerated(EnumType.STRING)
   private SunExposure sunExposure;
+
+  @Enumerated(EnumType.STRING)
+  private SunlightExposure sunlightExposure;
 
   private Boolean mulched;
 
@@ -56,8 +96,46 @@ public class Plant {
   @Column(nullable = false)
   private int baseIntervalDays;
 
+  private Integer manualWaterVolumeMl;
+
+  private Boolean weatherAdjustmentEnabled;
+
+  private Boolean aiWateringEnabled;
+
   // Пользовательский объём полива в мл (если задан в wizard).
   private Integer preferredWaterMl;
+
+  @Enumerated(EnumType.STRING)
+  private RecommendationSource lastRecommendationSource;
+
+  private Integer lastRecommendedIntervalDays;
+
+  private Integer lastRecommendedWaterMl;
+
+  @Column(length = 1024)
+  private String lastRecommendationSummary;
+
+  private Instant lastRecommendationUpdatedAt;
+
+  private Integer recommendedIntervalDays;
+
+  private Integer recommendedWaterVolumeMl;
+
+  @Enumerated(EnumType.STRING)
+  private RecommendationSource recommendationSource;
+
+  @Column(length = 1024)
+  private String recommendationSummary;
+
+  @Column(length = 4000)
+  private String recommendationReasoningJson;
+
+  @Column(length = 4000)
+  private String recommendationWarningsJson;
+
+  private Double confidenceScore;
+
+  private Instant generatedAt;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)

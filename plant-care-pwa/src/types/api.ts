@@ -12,6 +12,14 @@ export interface PlantDto {
   name: string;
   placement: 'INDOOR' | 'OUTDOOR';
   category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+  wateringProfile?: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  region?: string | null;
+  containerType?: 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND' | null;
+  containerVolumeLiters?: number | null;
+  cropType?: string | null;
+  growthStage?: 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST' | null;
+  greenhouse?: boolean | null;
+  dripIrrigation?: boolean | null;
   potVolumeLiters?: number;
   outdoorAreaM2?: number | null;
   outdoorSoilType?: 'SANDY' | 'LOAMY' | 'CLAY' | null;
@@ -31,12 +39,89 @@ export interface PlantDto {
 
 
 export interface PlantAiRecommendDto {
-  wateringFrequencyDays: number;
-  wateringVolumeMl: number;
-  light?: string;
-  soil?: string;
-  notes?: string;
-  source?: string;
+  source: 'ai' | 'fallback';
+  recommendedIntervalDays: number;
+  recommendedWaterMl: number;
+  summary: string;
+  reasoning: string[];
+  warnings: string[];
+  profile: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+}
+
+export interface WateringRecommendationPreviewDto {
+  source: 'AI' | 'WEATHER_ADJUSTED' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL' | 'BASE_PROFILE';
+  environmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  recommendedIntervalDays: number;
+  recommendedWaterMl: number;
+  wateringMode?: 'LIGHT' | 'STANDARD' | 'DEEP' | 'SOIL_CHECK_FIRST';
+  confidence?: number;
+  summary: string;
+  reasoning: string[];
+  warnings: string[];
+  weatherUsed?: boolean;
+  cyclePreview?: {
+    dates: string[];
+  };
+  weatherContextPreview?: {
+    available: boolean;
+    city?: string | null;
+    region?: string | null;
+    temperatureNowC?: number | null;
+    humidityNowPercent?: number | null;
+    precipitationLast24hMm?: number | null;
+    precipitationForecastMm?: number | null;
+    maxTemperatureNext3DaysC?: number | null;
+    windNowMs?: number | null;
+    confidence?: string;
+    warnings?: string[];
+  };
+  sensorContext?: WateringSensorContextDto;
+}
+
+export interface WateringSensorContextDto {
+  available: boolean;
+  roomId?: string | null;
+  roomName?: string | null;
+  temperatureC?: number | null;
+  humidityPercent?: number | null;
+  soilMoisturePercent?: number | null;
+  illuminanceLux?: number | null;
+  confidence: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH';
+  source: string;
+  sensorEntityIds: string[];
+  message?: string | null;
+}
+
+export interface HaRoomDto {
+  id: string;
+  name: string;
+}
+
+export interface HaSensorDto {
+  entityId: string;
+  friendlyName: string;
+  kind: string;
+  areaId?: string | null;
+  areaName?: string | null;
+  unit?: string | null;
+  value?: number | null;
+  fromAttribute: boolean;
+}
+
+export interface WateringHaOptionsDto {
+  connected: boolean;
+  rooms: HaRoomDto[];
+  sensors: HaSensorDto[];
+  message?: string | null;
+}
+
+export interface ApplyWateringRecommendationDto {
+  ok: boolean;
+  plantId: number;
+  source: 'AI' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL';
+  baseIntervalDays: number;
+  preferredWaterMl: number;
+  recommendationUpdatedAt: string;
 }
 
 export interface PlantPresetSuggestionDto {

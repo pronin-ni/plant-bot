@@ -52,6 +52,10 @@ import type {
   PwaPushSubscribeDto,
   PlantPresetSuggestionDto,
   PlantAiRecommendDto,
+  ApplyWateringRecommendationDto,
+  WateringHaOptionsDto,
+  WateringRecommendationPreviewDto,
+  WateringSensorContextDto,
   WeatherProvidersResponse,
   WeatherCurrentDto,
   WeatherForecastDto
@@ -500,12 +504,83 @@ export async function searchPlantPresets(
 
 export async function aiRecommendPlant(payload: {
   name: string;
+  environmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
   category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+  plantType?: 'DEFAULT' | 'TROPICAL' | 'FERN' | 'SUCCULENT' | 'CONIFER';
+  baseIntervalDays?: number;
   potVolumeLiters?: number;
   heightCm?: number;
   diameterCm?: number;
+  containerType?: string;
+  growthStage?: string;
+  greenhouse?: boolean;
+  soilType?: string;
+  sunExposure?: string;
+  region?: string;
+  mulched?: boolean;
+  dripIrrigation?: boolean;
 }): Promise<PlantAiRecommendDto> {
   return apiFetch<PlantAiRecommendDto>('/api/plants/ai-recommend', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function previewWateringRecommendation(payload: {
+  plantName: string;
+  environmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  potVolumeLiters?: number;
+  baseIntervalDays?: number;
+  containerType?: 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND';
+  containerVolume?: number;
+  sunExposure?: string;
+  soilType?: string;
+  cropType?: string;
+  growthStage?: string;
+  greenhouse?: boolean;
+  haRoomId?: string;
+  haRoomName?: string;
+  temperatureSensorEntityId?: string;
+  humiditySensorEntityId?: string;
+  soilMoistureSensorEntityId?: string;
+  illuminanceSensorEntityId?: string;
+  city?: string;
+}): Promise<WateringRecommendationPreviewDto> {
+  return apiFetch<WateringRecommendationPreviewDto>('/api/watering/recommendation/preview', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getWateringHaOptions(): Promise<WateringHaOptionsDto> {
+  return apiFetch<WateringHaOptionsDto>('/api/watering/recommendation/ha/options', {
+    method: 'GET'
+  });
+}
+
+export async function previewWateringHaContext(payload: {
+  plantName: string;
+  environmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  haRoomId?: string;
+  haRoomName?: string;
+  temperatureSensorEntityId?: string;
+  humiditySensorEntityId?: string;
+  soilMoistureSensorEntityId?: string;
+  illuminanceSensorEntityId?: string;
+}): Promise<WateringSensorContextDto> {
+  return apiFetch<WateringSensorContextDto>('/api/watering/recommendation/ha/context-preview', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function applyWateringRecommendation(plantId: number, payload: {
+  source: 'AI' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL';
+  recommendedIntervalDays: number;
+  recommendedWaterMl: number;
+  summary?: string;
+}): Promise<ApplyWateringRecommendationDto> {
+  return apiFetch<ApplyWateringRecommendationDto>(`/api/watering/recommendation/${plantId}/apply`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });
