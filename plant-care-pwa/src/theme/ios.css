@@ -123,17 +123,17 @@ body {
 }
 
 .platform-top-title {
-  font-size: 34px;
-  line-height: 1.08;
+  font-size: clamp(1.6rem, 5.2vw, 2rem);
+  line-height: 1.12;
   letter-spacing: -0.02em;
   font-weight: 700;
   color: rgb(var(--ios-text));
 }
 
 .platform-top-subtitle {
-  margin-top: 8px;
-  font-size: 17px;
-  line-height: 1.35;
+  margin-top: 6px;
+  font-size: clamp(0.9rem, 3.6vw, 1rem);
+  line-height: 1.45;
   color: rgb(var(--ios-subtext));
 }
 

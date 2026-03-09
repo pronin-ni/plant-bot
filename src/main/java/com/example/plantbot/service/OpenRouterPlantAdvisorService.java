@@ -73,7 +73,7 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.chat-cache-ttl-minutes:10080}")
   private int chatCacheTtlMinutes;
 
-  @Value("${openrouter.chat-fallback-enabled:false}")
+  @Value("${openrouter.chat-fallback-enabled:true}")
   private boolean chatFallbackEnabled;
 
   @Value("${openrouter.cache-max-entries:5000}")
@@ -679,16 +679,22 @@ public class OpenRouterPlantAdvisorService {
       models.add(primary.trim());
     }
 
-    String secondary = hasPhoto ? resolveTextModel(user) : resolvePhotoModel(user);
-    if (secondary != null && !secondary.isBlank()) {
-      models.add(secondary.trim());
+    // Fallback должен быть в рамках того же типа запроса: text->text, photo->photo.
+    String modeDefault = hasPhoto
+        ? OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL
+        : OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL;
+    if (modeDefault != null && !modeDefault.isBlank()) {
+      models.add(normalizeModelId(modeDefault));
     }
 
-    if (plantModel != null && !plantModel.isBlank()) {
-      models.add(plantModel.trim());
+    if (!hasPhoto && chatModel != null && !chatModel.isBlank()) {
+      models.add(normalizeModelId(chatModel));
+    }
+    if (hasPhoto && plantModel != null && !plantModel.isBlank()) {
+      models.add(normalizeModelId(plantModel));
     }
     if (model != null && !model.isBlank()) {
-      models.add(model.trim());
+      models.add(normalizeModelId(model));
     }
 
     List<String> dedup = new ArrayList<>();
@@ -844,19 +850,24 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private void enforceCacheLimit() {
-    openRouterCacheRepository.deleteByExpiresAtBefore(Instant.now());
-    long max = Math.max(100, cacheMaxEntries);
-    long count = openRouterCacheRepository.count();
-    if (count <= max) {
-      return;
+    try {
+      openRouterCacheRepository.deleteByExpiresAtBefore(Instant.now());
+      long max = Math.max(100, cacheMaxEntries);
+      long count = openRouterCacheRepository.count();
+      if (count <= max) {
+        return;
+      }
+      List<OpenRouterCacheEntry> oldest = openRouterCacheRepository.findTop200ByOrderByUpdatedAtAsc();
+      long toDelete = count - max;
+      if (toDelete <= 0 || oldest.isEmpty()) {
+        return;
+      }
+      int end = (int) Math.min(toDelete, oldest.size());
+      openRouterCacheRepository.deleteAllInBatch(oldest.subList(0, end));
+    } catch (Exception ex) {
+      // Ошибки обслуживания кеша не должны ронять пользовательские запросы.
+      log.warn("OpenRouter cache maintenance skipped: {}", ex.getMessage());
     }
-    List<OpenRouterCacheEntry> oldest = openRouterCacheRepository.findTop200ByOrderByUpdatedAtAsc();
-    long toDelete = count - max;
-    if (toDelete <= 0 || oldest.isEmpty()) {
-      return;
-    }
-    int end = (int) Math.min(toDelete, oldest.size());
-    openRouterCacheRepository.deleteAllInBatch(oldest.subList(0, end));
   }
 
   public CacheClearStats clearCaches() {

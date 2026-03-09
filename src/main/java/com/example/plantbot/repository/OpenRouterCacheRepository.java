@@ -2,6 +2,8 @@ package com.example.plantbot.repository;
 
 import com.example.plantbot.domain.OpenRouterCacheEntry;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,5 +16,7 @@ public interface OpenRouterCacheRepository extends JpaRepository<OpenRouterCache
 
   List<OpenRouterCacheEntry> findTop200ByOrderByUpdatedAtAsc();
 
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Transactional
   void deleteByExpiresAtBefore(Instant cutoff);
 }

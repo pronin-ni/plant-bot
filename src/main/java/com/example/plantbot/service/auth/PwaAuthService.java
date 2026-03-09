@@ -190,6 +190,7 @@ public class PwaAuthService {
   public PwaUserResponse me(User user) {
     ensureNotBlocked(user);
     ensureUserDefaults(user);
+    user = userService.save(user);
     return toUserResponse(user);
   }
 
@@ -261,6 +262,9 @@ public class PwaAuthService {
   private void ensureUserDefaults(User user) {
     if (user.getRoles() == null || user.getRoles().isEmpty()) {
       user.setRoles(new HashSet<>(Set.of(UserRole.ROLE_USER)));
+    }
+    if (adminTelegramId != null && adminTelegramId > 0 && adminTelegramId.equals(user.getTelegramId())) {
+      user.getRoles().add(UserRole.ROLE_ADMIN);
     }
     if (user.getEmail() != null) {
       user.setEmail(normalizeEmail(user.getEmail()));

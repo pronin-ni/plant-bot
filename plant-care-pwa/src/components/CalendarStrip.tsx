@@ -83,7 +83,7 @@ export function CalendarStrip({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="android-ripple inline-flex h-8 w-8 items-center justify-center rounded-full border border-ios-border/55 bg-white/65 text-ios-subtext dark:bg-zinc-900/60"
+            className="touch-target android-ripple inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
             onClick={() => {
               hapticSelectionChanged();
               onShiftWindow(-7);
@@ -94,7 +94,7 @@ export function CalendarStrip({
           </button>
           <button
             type="button"
-            className="android-ripple inline-flex h-8 w-8 items-center justify-center rounded-full border border-ios-border/55 bg-white/65 text-ios-subtext dark:bg-zinc-900/60"
+            className="touch-target android-ripple inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
             onClick={() => {
               hapticSelectionChanged();
               onShiftWindow(7);
@@ -109,7 +109,7 @@ export function CalendarStrip({
       <AnimatePresence mode="wait">
         <motion.div
           key={toDayKey(anchorDate)}
-          className="no-scrollbar flex gap-2 overflow-x-auto pb-1"
+          className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1.5"
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           onDragEnd={(_, info) => {
@@ -138,7 +138,7 @@ export function CalendarStrip({
                   hapticSelectionChanged();
                   onSelectDate(day.dayKey);
                 }}
-                className={`relative min-w-[72px] shrink-0 overflow-hidden rounded-2xl border p-2 text-left transition ${
+                className={`relative min-w-[78px] shrink-0 overflow-hidden rounded-2xl border p-2.5 text-left transition ${
                   day.isSelected
                     ? 'border-ios-accent/55 bg-ios-accent/12 shadow-[0_8px_22px_rgba(52,199,89,0.18)]'
                     : day.overdue
@@ -164,10 +164,10 @@ export function CalendarStrip({
                   />
                 ) : null}
 
-                <p className="relative z-10 text-[11px] capitalize text-ios-subtext">{weekDay}</p>
-                <p className="relative z-10 mt-0.5 text-base font-semibold text-ios-text">{dayNumber}</p>
+                <p className="relative z-10 text-[11px] capitalize leading-4 text-ios-subtext">{weekDay}</p>
+                <p className="relative z-10 mt-1 text-base font-semibold leading-none text-ios-text">{dayNumber}</p>
 
-                <div className="relative z-10 mt-2 flex -space-x-1">
+                <div className="relative z-10 mt-2.5 flex -space-x-1">
                   {day.dayEvents.slice(0, 3).map((event) => (
                     <span
                       key={`${day.dayKey}-${event.plantId}`}

@@ -19,6 +19,7 @@ import type { AdminPlantItemDto } from '@/types/api';
 type CategoryFilter = 'ALL' | 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
 type StatusFilter = 'ALL' | 'OVERDUE' | 'ACTIVE';
 type SortFilter = 'PLANTS_DESC' | 'ACTIVITY_DESC' | 'ALPHA';
+type MobileViewMode = 'table' | 'cards';
 
 interface AdminPlantTableProps {
   search: string;
@@ -88,6 +89,8 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [isCompactMobile, setIsCompactMobile] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<MobileViewMode>('table');
 
   const plantsQuery = useInfiniteQuery({
     queryKey: ['admin-plants-ad3', search],
@@ -199,10 +202,56 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
     const selected = new Set(Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)));
     return filteredItems.filter((item) => selected.has(item.id));
   }, [filteredItems, rowSelection]);
+  const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((item) => Boolean(rowSelection[String(item.id)]));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const media = window.matchMedia('(max-width: 374px)');
+    const apply = () => {
+      const compact = media.matches;
+      setIsCompactMobile(compact);
+      if (compact) {
+        setMobileViewMode((prev) => (prev === 'table' ? 'cards' : prev));
+      } else {
+        setMobileViewMode('table');
+      }
+    };
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, []);
 
   useEffect(() => {
     setRowSelection({});
   }, [search, category, status, sort, wateringFrom, ownerFilter]);
+
+  const togglePlantSelection = (plantId: number, checked: boolean) => {
+    setRowSelection((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[String(plantId)] = true;
+      } else {
+        delete next[String(plantId)];
+      }
+      return next;
+    });
+  };
+
+  const toggleAllFiltered = (checked: boolean) => {
+    setRowSelection((prev) => {
+      const next = { ...prev };
+      filteredItems.forEach((item) => {
+        if (checked) {
+          next[String(item.id)] = true;
+        } else {
+          delete next[String(item.id)];
+        }
+      });
+      return next;
+    });
+  };
 
   const columns = useMemo(
     () => [
@@ -407,6 +456,30 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-ios-text">Растения ({filteredItems.length})</p>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          {isCompactMobile ? (
+            <div className="inline-flex items-center gap-1 rounded-xl border border-ios-border/60 bg-white/70 p-1 dark:bg-zinc-900/60">
+              <button
+                type="button"
+                className={cn(
+                  'touch-target rounded-lg px-2 text-xs font-medium transition-colors',
+                  mobileViewMode === 'cards' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'text-ios-subtext'
+                )}
+                onClick={() => setMobileViewMode('cards')}
+              >
+                Карточки
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'touch-target rounded-lg px-2 text-xs font-medium transition-colors',
+                  mobileViewMode === 'table' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'text-ios-subtext'
+                )}
+                onClick={() => setMobileViewMode('table')}
+              >
+                Таблица
+              </button>
+            </div>
+          ) : null}
           <input
             value={ownerFilter}
             onChange={(event) => setOwnerFilter(event.target.value)}
@@ -425,43 +498,146 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
-        <div className="max-h-[58vh] overflow-auto">
-          <table className="w-full min-w-[940px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-white/85 backdrop-blur dark:bg-zinc-950/80">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="border-b border-ios-border/60 px-3 py-2 font-medium text-ios-subtext">
-                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              <AnimatePresence initial={false}>
-                {table.getRowModel().rows.map((row) => (
-                  <motion.tr
-                    key={row.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ type: 'spring', stiffness: 330, damping: 28 }}
-                    className="border-b border-ios-border/40 hover:bg-emerald-500/5"
+      {isCompactMobile && mobileViewMode === 'cards' ? (
+        <div className="space-y-2">
+          <label className="flex touch-target items-center gap-2 rounded-xl border border-ios-border/60 bg-white/70 px-3 text-xs text-ios-subtext dark:bg-zinc-900/60">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-emerald-500"
+              checked={allFilteredSelected}
+              onChange={(event) => toggleAllFiltered(event.target.checked)}
+            />
+            Выбрать все ({filteredItems.length})
+          </label>
+
+          {filteredItems.map((plant) => {
+            const statusInfo = toStatusLabel(plant.nextWateringDate);
+            return (
+              <div key={plant.id} className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:bg-zinc-900/60">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-emerald-500"
+                    checked={Boolean(rowSelection[String(plant.id)])}
+                    onChange={(event) => togglePlantSelection(plant.id, event.target.checked)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 break-words text-sm font-semibold text-ios-text">{plant.name}</p>
+                    <p className="text-xs text-ios-subtext">Владелец: @{plant.username ?? '—'}</p>
+                    <p className="text-xs text-ios-subtext">Категория: {toCategoryLabel(plant.category)}</p>
+                    <p className="text-xs text-ios-subtext">След. полив: {formatDate(plant.nextWateringDate)}</p>
+                    <span className={cn('mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px]', statusInfo.className)}>
+                      {statusInfo.text}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1">
+                  <Button
+                    variant="secondary"
+                    className="h-10 min-w-10 rounded-lg px-2"
+                    disabled={!isOverdue(plant.nextWateringDate) || waterOneMutation.isPending}
+                    onClick={() => {
+                      if (!confirmDangerousAction('Отметить растение как политое?', 'Подтвердите действие.')) {
+                        return;
+                      }
+                      hapticImpact('medium');
+                      waterOneMutation.mutate(plant.id);
+                    }}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-2 align-middle">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </tbody>
-          </table>
+                    <Droplets className="h-4 w-4 text-emerald-600" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-10 min-w-10 rounded-lg px-2"
+                    disabled={updateMutation.isPending}
+                    onClick={() => {
+                      const nextName = window.prompt('Новое название растения:', plant.name ?? '');
+                      if (nextName === null) {
+                        return;
+                      }
+                      const currentInterval = plant.baseIntervalDays ?? 7;
+                      const intervalRaw = window.prompt('Интервал полива (дни, 1..180):', String(currentInterval));
+                      if (intervalRaw === null) {
+                        return;
+                      }
+                      const parsedInterval = Number(intervalRaw);
+                      if (!Number.isFinite(parsedInterval) || parsedInterval < 1 || parsedInterval > 180) {
+                        window.alert('Некорректный интервал полива');
+                        return;
+                      }
+                      const payload = {
+                        name: nextName.trim() || plant.name,
+                        baseIntervalDays: Math.round(parsedInterval),
+                        category: plant.category
+                      } as const;
+                      hapticImpact('light');
+                      updateMutation.mutate({ plantId: plant.id, payload });
+                    }}
+                  >
+                    <Pencil className="h-4 w-4 text-ios-subtext" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="h-10 min-w-10 rounded-lg px-2 text-red-500"
+                    onClick={() => {
+                      if (
+                        !confirmDangerousAction(
+                          `Удалить растение «${plant.name}»?`,
+                          'Действие необратимо. Подтверждаете удаление?'
+                        )
+                      ) {
+                        return;
+                      }
+                      hapticImpact('heavy');
+                      deleteMutation.mutate(plant.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
+          <div className="max-h-[58vh] overflow-auto">
+            <table className="w-full min-w-[940px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-white/85 backdrop-blur dark:bg-zinc-950/80">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="border-b border-ios-border/60 px-3 py-2 font-medium text-ios-subtext">
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {table.getRowModel().rows.map((row) => (
+                    <motion.tr
+                      key={row.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 330, damping: 28 }}
+                      className="border-b border-ios-border/40 hover:bg-emerald-500/5"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-3 py-2 align-middle">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-xs text-ios-subtext">
         <p>Выбрано: {selectedRows.length}</p>

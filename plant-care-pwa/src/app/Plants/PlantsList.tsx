@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CloudFog, CloudRain, CloudSun, RefreshCw, Search, Sparkles, Sprout, Sun } from 'lucide-react';
@@ -261,10 +261,8 @@ export function PlantsList() {
   const [categoryFilter, setCategoryFilter] = useState<PlantCategoryFilter>('ALL');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [rescuedCount, setRescuedCount] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
-  const lastScrollYRef = useRef(0);
 
   useEffect(() => {
     const savedSort = localStorage.getItem(sortStorageKey) as SortMode | null;
@@ -287,33 +285,6 @@ export function PlantsList() {
     const savedRescued = Number(localStorage.getItem(rescuedStorageKey) ?? '0');
     setRescuedCount(Number.isFinite(savedRescued) ? savedRescued : 0);
   }, [sortStorageKey, categoryStorageKey, overdueStorageKey, rescuedStorageKey]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
-      const prev = lastScrollYRef.current;
-      lastScrollYRef.current = y;
-
-      if (searchQuery.trim()) {
-        setShowSearch(true);
-        return;
-      }
-
-      if (y < 40) {
-        setShowSearch(false);
-        return;
-      }
-
-      if (y < prev - 8) {
-        setShowSearch(true);
-      } else if (y > prev + 16) {
-        setShowSearch(false);
-      }
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [searchQuery]);
 
   const plantsQuery = useQuery({
     queryKey: ['plants'],
@@ -452,6 +423,21 @@ export function PlantsList() {
     <PlatformPullToRefresh onRefresh={refreshAll}>
       <section className="space-y-3 pb-2 dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
         <motion.div
+          className="ios-blur-card sticky top-1 z-20 flex items-center gap-2 p-2.5"
+          initial={{ opacity: 0, y: -8, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 29 }}
+        >
+          <Search className="ml-1 h-4 w-4 text-ios-subtext" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Быстрый поиск по растениям"
+            className="h-11 w-full rounded-ios-button border border-ios-border/50 bg-white/55 px-3 text-sm outline-none backdrop-blur-[20px] dark:bg-zinc-900/55"
+          />
+        </motion.div>
+
+        <motion.div
           className="ios-blur-card relative overflow-hidden p-3"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
@@ -491,35 +477,6 @@ export function PlantsList() {
             >
               <span>Оффлайн-режим: показываем кеш.</span>
               <span className="rounded-full bg-amber-500/18 px-2 py-0.5 font-semibold">В очереди: {pendingMutations}</span>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <CategoryTabs
-          value={categoryFilter}
-          onChange={(next) => {
-            setCategoryFilter(next);
-            localStorage.setItem(categoryStorageKey, next);
-            hapticImpact('light');
-          }}
-        />
-
-        <AnimatePresence>
-          {showSearch ? (
-            <motion.div
-              className="ios-blur-card sticky top-1 z-20 flex items-center gap-2 p-2.5"
-              initial={{ opacity: 0, y: -8, scale: 0.985 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.985 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 29 }}
-            >
-              <Search className="ml-1 h-4 w-4 text-ios-subtext" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Быстрый поиск по растениям"
-                className="h-11 w-full rounded-ios-button border border-ios-border/50 bg-white/55 px-3 text-sm outline-none backdrop-blur-[20px] dark:bg-zinc-900/55"
-              />
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -610,6 +567,15 @@ export function PlantsList() {
             </Button>
           </div>
         </div>
+
+        <CategoryTabs
+          value={categoryFilter}
+          onChange={(next) => {
+            setCategoryFilter(next);
+            localStorage.setItem(categoryStorageKey, next);
+            hapticImpact('light');
+          }}
+        />
 
         <AnimatePresence mode="wait">
           <motion.div

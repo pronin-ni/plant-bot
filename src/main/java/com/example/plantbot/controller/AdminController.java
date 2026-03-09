@@ -46,6 +46,7 @@ import com.example.plantbot.service.AdminInsightsService;
 import com.example.plantbot.service.auth.MagicLinkAuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -81,6 +82,8 @@ public class AdminController {
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
+  @Value("${app.admin.telegram-id:0}")
+  private Long adminTelegramId;
 
   @GetMapping("/overview")
   public AdminOverviewResponse overview(Authentication authentication) {
@@ -546,6 +549,20 @@ public class AdminController {
     }
     User user = userRepository.findById(principal.userId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Пользователь не найден"));
+    // Fallback: если у пользователя совпадает telegramId из конфига,
+    // автоматически выдаём и сохраняем ROLE_ADMIN.
+    if (adminTelegramId != null
+        && adminTelegramId > 0
+        && adminTelegramId.equals(user.getTelegramId())
+        && (user.getRoles() == null || !user.getRoles().contains(UserRole.ROLE_ADMIN))) {
+      if (user.getRoles() == null) {
+        user.setRoles(new java.util.HashSet<>());
+      }
+      user.getRoles().add(UserRole.ROLE_ADMIN);
+      user = userRepository.save(user);
+      log.warn("Admin role auto-granted by configured telegramId: userId={} telegramId={}",
+          user.getId(), user.getTelegramId());
+    }
     if (user.getRoles() == null || !user.getRoles().contains(UserRole.ROLE_ADMIN)) {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Недостаточно прав");
     }

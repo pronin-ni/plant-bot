@@ -30,6 +30,12 @@ public class SecurityConfig {
                 "/api/pwa/auth/**",
                 "/api/calendar/ics/**"
             ).permitAll()
+            .requestMatchers(
+                "/api/openrouter/models",
+                "/api/openrouter/preferences",
+                "/api/openrouter/preferences/**",
+                "/api/openrouter/test"
+            ).hasRole("ADMIN")
             .requestMatchers("/api/admin/**").hasRole("ADMIN")
             .anyRequest().permitAll()
         )

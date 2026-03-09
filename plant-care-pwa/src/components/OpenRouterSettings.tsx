@@ -12,7 +12,7 @@ import {
   updateAdminOpenRouterModels
 } from '@/lib/api/openrouter';
 import { hapticImpact } from '@/lib/telegram';
-import { useOpenRouterModelsStore } from '@/lib/store';
+import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 import type { OpenRouterModelOption } from '@/types/api';
 
 const DEFAULT_TEXT_MODEL = 'qwen/qwen2-7b-instruct';
@@ -63,6 +63,8 @@ function ensureOption(options: OpenRouterModelOption[], value: string, supportsI
 export function OpenRouterSettings() {
   const queryClient = useQueryClient();
   const runtimeModels = useOpenRouterModelsStore((s) => s);
+  const roles = useAuthStore((s) => s.roles);
+  const isAdmin = roles.includes('ROLE_ADMIN');
   const prefersReducedMotion = useReducedMotion();
 
   const [loading, setLoading] = useState(true);
@@ -78,8 +80,16 @@ export function OpenRouterSettings() {
   const [photoModel, setPhotoModel] = useState(DEFAULT_PHOTO_MODEL);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     void load();
-  }, []);
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return null;
+  }
 
   const load = async () => {
     setLoading(true);

@@ -75,9 +75,9 @@ function useAnimatedNumber(value: number, durationMs = 520): number {
 function StatItem({ label, value }: { label: string; value: number }) {
   const animated = useAnimatedNumber(value);
   return (
-    <div className="rounded-2xl border border-ios-border/55 bg-white/50 px-3 py-2 text-center dark:bg-zinc-900/50">
-      <p className="text-[11px] text-ios-subtext">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-ios-text">{animated}</p>
+    <div className="flex h-full min-h-[82px] flex-col items-center justify-center rounded-2xl border border-ios-border/55 bg-white/50 px-3 py-2.5 text-center dark:bg-zinc-900/50">
+      <p className="text-[11px] leading-4 text-ios-subtext">{label}</p>
+      <p className="mt-1 text-lg font-semibold leading-none text-ios-text">{animated}</p>
     </div>
   );
 }
@@ -224,7 +224,7 @@ export function CalendarPage() {
 
   return (
     <PlatformPullToRefresh onRefresh={() => calendarQuery.refetch()}>
-      <section className="calendar-premium-shell relative space-y-3 overflow-hidden pb-28">
+      <section className="calendar-premium-shell relative space-y-3 overflow-hidden pb-[calc(8rem+env(safe-area-inset-bottom))]">
         <AnimatePresence>
           {wateringWavePulse > 0 ? (
             <motion.div
@@ -313,9 +313,9 @@ export function CalendarPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center gap-2 rounded-2xl border border-ios-border/55 bg-white/45 px-3 py-2 dark:bg-zinc-900/45">
-                <Sparkles className="h-4 w-4 text-ios-accent" />
-                <p className="text-xs text-ios-subtext">
+              <div className="flex items-start gap-2.5 rounded-2xl border border-ios-border/55 bg-white/45 px-3.5 py-2.5 dark:bg-zinc-900/45">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-ios-accent" />
+                <p className="text-xs leading-5 text-ios-subtext">
                   {todayCount + overdueCount > 0
                     ? `На сегодня есть ${todayCount + overdueCount} задач(и)`
                     : 'Сегодня все счастливы — задач нет'}
@@ -357,7 +357,7 @@ export function CalendarPage() {
             </p>
             <span className="text-[11px] text-ios-subtext">Пн–Вс</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid auto-rows-fr grid-cols-3 gap-2.5">
             <StatItem label="Задач" value={weekStats.planned} />
             <StatItem label="Срочных" value={weekStats.urgent} />
             <StatItem label="Стабильно" value={weekStats.safe} />
@@ -372,26 +372,21 @@ export function CalendarPage() {
                 <button
                   key={tab.key}
                   type="button"
-                  className={`relative shrink-0 rounded-2xl px-3 py-2 text-xs font-medium transition ${
+                  className={`touch-target android-ripple relative shrink-0 rounded-2xl border px-3.5 text-xs font-semibold transition ${
                     active
-                      ? 'text-ios-text'
-                      : 'text-ios-subtext hover:text-ios-text'
+                      ? 'border-ios-accent bg-ios-accent text-[#0D2815] shadow-[0_8px_20px_rgba(52,199,89,0.25)]'
+                      : 'border-ios-border/60 bg-white/60 text-ios-subtext hover:text-ios-text dark:bg-zinc-900/55'
                   }`}
                   onClick={() => {
                     hapticSelectionChanged();
                     setFilter(tab.key);
                   }}
                 >
-                  {active ? (
-                    <motion.span
-                      layoutId="calendar-filter-active"
-                      className="absolute inset-0 rounded-2xl border border-ios-border/55 bg-white/70 dark:bg-zinc-900/60"
-                      transition={{ type: 'spring', stiffness: 370, damping: 30 }}
-                    />
-                  ) : null}
                   <span className="relative z-10 inline-flex items-center gap-1.5">
                     {tab.label}
-                    <span className="rounded-full bg-ios-accent/12 px-1.5 py-0.5 text-[10px] text-ios-accent">{tab.count}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/15 text-[#0D2815]' : 'bg-ios-accent/12 text-ios-accent'}`}>
+                      {tab.count}
+                    </span>
                   </span>
                 </button>
               );

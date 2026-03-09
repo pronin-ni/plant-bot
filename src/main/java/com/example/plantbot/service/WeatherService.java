@@ -577,26 +577,58 @@ public class WeatherService {
   }
 
   private List<String> cityCandidates(String city) {
+    if (city == null || city.isBlank()) {
+      return List.of();
+    }
     String original = city.trim();
-    String normalized = normalize(original);
+    String primary = extractPrimaryCityName(original);
+    String normalized = normalize(primary);
     Set<String> values = new LinkedHashSet<>();
 
-    values.add(original);
-    values.add(original + ",RU");
+    addCityCandidate(values, primary);
+    addCityCandidate(values, primary + ",RU");
+    if (!primary.equalsIgnoreCase(original)) {
+      addCityCandidate(values, original);
+    }
 
     String alias = CITY_ALIASES.get(normalized);
     if (alias != null) {
-      values.add(alias);
-      values.add(alias + ",RU");
+      addCityCandidate(values, alias);
+      addCityCandidate(values, alias + ",RU");
     }
 
     String translit = transliterateRuToEn(normalized);
     if (!translit.isBlank()) {
-      values.add(capitalizeWords(translit));
-      values.add(capitalizeWords(translit) + ",RU");
+      String translitCity = capitalizeWords(translit);
+      addCityCandidate(values, translitCity);
+      addCityCandidate(values, translitCity + ",RU");
     }
 
     return new ArrayList<>(values);
+  }
+
+  private void addCityCandidate(Set<String> values, String candidate) {
+    if (candidate == null) {
+      return;
+    }
+    String normalized = candidate.trim().replaceAll("\\s+", " ");
+    if (normalized.isBlank()) {
+      return;
+    }
+    values.add(normalized);
+  }
+
+  private String extractPrimaryCityName(String value) {
+    String normalized = value == null ? "" : value.trim();
+    if (normalized.isEmpty()) {
+      return "";
+    }
+    int comma = normalized.indexOf(',');
+    if (comma > 0) {
+      normalized = normalized.substring(0, comma).trim();
+    }
+    normalized = normalized.replaceAll("(?iu)^(г\\.?|город)\\s+", "");
+    return normalized.trim();
   }
 
   private String cacheKey(String city, Double lat, Double lon) {
