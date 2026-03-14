@@ -2,8 +2,8 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherConfidence;
-import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.service.dto.NormalizedWeatherContext;
+import com.example.plantbot.service.dto.WeatherFetchResult;
 import com.example.plantbot.util.WeatherData;
 import com.example.plantbot.util.WeatherForecastDay;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +27,10 @@ public class OutdoorWeatherContextService {
     if (city.isBlank()) {
       return new NormalizedWeatherContext(
           false,
+          true,
+          false,
+          false,
+          null,
           "",
           region,
           null,
@@ -40,9 +44,9 @@ public class OutdoorWeatherContextService {
       );
     }
 
-    WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
-    Optional<WeatherData> current = weatherService.getCurrent(city, user.getCityLat(), user.getCityLon(), provider);
-    List<WeatherForecastDay> forecast = weatherService.getForecast(city, user.getCityLat(), user.getCityLon(), 3, provider);
+    WeatherFetchResult result = weatherService.fetchWeather(city, user.getCityLat(), user.getCityLon(), 3, null);
+    Optional<WeatherData> current = Optional.ofNullable(result.current());
+    List<WeatherForecastDay> forecast = result.forecast() == null ? List.of() : result.forecast();
     double rain24h = weatherService.getAccumulatedRainMm(city, user.getCityLat(), user.getCityLon(), 24);
 
     Double maxTempNext3Days = forecast.isEmpty()
@@ -55,8 +59,19 @@ public class OutdoorWeatherContextService {
       maxTempNext3Days = null;
     }
 
-    // В текущем API провайдеров нет стандартизированного wind-поля и осадков прогноза.
-    Double precipForecast = null;
+    Double precipForecast = forecast.isEmpty()
+        ? null
+        : forecast.stream()
+            .limit(3)
+            .map(WeatherForecastDay::precipitationMm)
+            .filter(value -> value != null && value > 0.0)
+            .mapToDouble(Double::doubleValue)
+            .sum();
+    if (precipForecast != null && precipForecast <= 0.0) {
+      precipForecast = null;
+    }
+
+    // В текущем API провайдеров нет стандартизированного wind-поля.
     Double windNow = null;
 
     List<String> warnings = new ArrayList<>();
@@ -67,10 +82,19 @@ public class OutdoorWeatherContextService {
       warnings.add("Прогноз на 2-3 дня недоступен.");
     }
     warnings.add("Скорость ветра недоступна в унифицированном API, расчёт без wind-фактора.");
-    warnings.add("Осадки прогноза недоступны в унифицированном API, используется история осадков за 24ч.");
+    if (result.fallbackUsed()) {
+      warnings.add(result.staleFallbackUsed()
+          ? "Использован сохранённый погодный срез, свежий источник временно недоступен."
+          : "Основной погодный источник недоступен, использован fallback-провайдер.");
+    }
+    if (result.degraded() && !result.success()) {
+      warnings.add("Погодный контекст работает в degraded mode.");
+    }
 
     WeatherConfidence confidence;
-    if (current.isPresent() && !forecast.isEmpty()) {
+    if (result.degraded() && current.isEmpty()) {
+      confidence = WeatherConfidence.LOW;
+    } else if (current.isPresent() && !forecast.isEmpty() && !result.staleFallbackUsed()) {
       confidence = WeatherConfidence.HIGH;
     } else if (current.isPresent()) {
       confidence = WeatherConfidence.MEDIUM;
@@ -80,6 +104,10 @@ public class OutdoorWeatherContextService {
 
     return new NormalizedWeatherContext(
         current.isPresent(),
+        result.degraded(),
+        result.fallbackUsed(),
+        result.staleFallbackUsed(),
+        result.providerUsed(),
         city,
         region,
         current.map(WeatherData::temperatureC).orElse(null),
@@ -99,10 +127,11 @@ public class OutdoorWeatherContextService {
     }
     return String.format(
         Locale.ROOT,
-        "%.1f°C, влажность %.0f%%, осадки за 24ч %.1f мм, max t (3д) %s",
+        "%.1f°C, влажность %.0f%%, осадки за 24ч %.1f мм, прогноз осадков 72ч %s, max t (3д) %s",
         context.temperatureNowC() == null ? 0.0 : context.temperatureNowC(),
         context.humidityNowPercent() == null ? 0.0 : context.humidityNowPercent(),
         context.precipitationLast24hMm() == null ? 0.0 : context.precipitationLast24hMm(),
+        context.precipitationForecastNext72hMm() == null ? "n/a" : String.format(Locale.ROOT, "%.1f мм", context.precipitationForecastNext72hMm()),
         context.maxTemperatureNext3DaysC() == null ? "n/a" : String.format(Locale.ROOT, "%.1f°C", context.maxTemperatureNext3DaysC())
     );
   }

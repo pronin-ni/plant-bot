@@ -32,6 +32,11 @@ export interface PlantDto {
   preferredWaterMl?: number;
   nextWateringDate?: string;
   recommendedWaterMl?: number;
+  recommendedIntervalDays?: number;
+  recommendationSource?: 'AI' | 'WEATHER_ADJUSTED' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL' | 'BASE_PROFILE' | null;
+  recommendationSummary?: string | null;
+  confidenceScore?: number | null;
+  recommendationGeneratedAt?: string | null;
   type?: string;
   photoUrl?: string;
   createdAt?: string;
@@ -525,6 +530,10 @@ export interface WeatherCurrentDto {
   icon?: string | null;
   description?: string | null;
   source: string;
+  fallbackUsed?: boolean;
+  staleFallbackUsed?: boolean;
+  degraded?: boolean;
+  statusMessage?: string | null;
 }
 
 export interface WeatherForecastItemDto {
@@ -539,4 +548,8 @@ export interface WeatherForecastDto {
   city: string;
   source: string;
   days: WeatherForecastItemDto[];
+  fallbackUsed?: boolean;
+  staleFallbackUsed?: boolean;
+  degraded?: boolean;
+  statusMessage?: string | null;
 }

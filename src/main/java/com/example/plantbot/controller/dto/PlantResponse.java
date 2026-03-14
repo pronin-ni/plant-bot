@@ -7,6 +7,7 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.SunExposure;
 
 import java.time.Instant;
@@ -36,6 +37,11 @@ public record PlantResponse(Long id,
                             Integer preferredWaterMl,
                             LocalDate nextWateringDate,
                             Integer recommendedWaterMl,
+                            Integer recommendedIntervalDays,
+                            RecommendationSource recommendationSource,
+                            String recommendationSummary,
+                            Double confidenceScore,
+                            Instant recommendationGeneratedAt,
                             PlantType type,
                             String photoUrl,
                             Instant createdAt) {

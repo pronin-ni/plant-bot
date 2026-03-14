@@ -140,17 +140,14 @@ function filterByCategory(plants: PlantDto[], filter: PlantCategoryFilter): Plan
   return plants.filter((plant) => (plant.category ?? 'HOME') === filter);
 }
 
-function sourceLabel(source?: string): string {
+function weatherStatusLabel(source?: string): string {
   if (!source) {
-    return 'Локальные данные';
+    return 'Погодный контекст недоступен';
   }
   if (source.toUpperCase().includes('HA')) {
-    return 'Home Assistant';
+    return 'Данные датчиков обновлены';
   }
-  if (source.toUpperCase().includes('WEATHER') || source.toUpperCase().includes('METEO')) {
-    return 'Погода';
-  }
-  return source;
+  return 'Погода обновлена';
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -211,32 +208,6 @@ function AnimatedCount({ value }: { value: number }) {
   }, [value]);
 
   return <span>{display}</span>;
-}
-
-function QuickStat({
-  label,
-  value,
-  tone
-}: {
-  label: string;
-  value: number;
-  tone: 'good' | 'warn' | 'danger' | 'neutral';
-}) {
-  const toneMap: Record<typeof tone, string> = {
-    good: 'text-emerald-600 dark:text-emerald-300',
-    warn: 'text-amber-600 dark:text-amber-300',
-    danger: 'text-red-600 dark:text-red-300',
-    neutral: 'text-ios-text'
-  };
-
-  return (
-    <div className="rounded-xl border border-ios-border/55 bg-white/72 px-2 py-2 text-center dark:bg-zinc-900/60">
-      <p className="text-[11px] leading-4 text-ios-subtext">{label}</p>
-      <p className={`mt-1 text-base font-semibold ${toneMap[tone]}`}>
-        <AnimatedCount value={value} />
-      </p>
-    </div>
-  );
 }
 
 export function PlantsList() {
@@ -344,12 +315,6 @@ export function PlantsList() {
     [plantsQuery.data]
   );
 
-  const totalPlantsCount = plantsQuery.data?.length ?? 0;
-  const wateredTodayCount = useMemo(
-    () => (plantsQuery.data ?? []).filter((plant) => isToday(plant.lastWateredDate)).length,
-    [plantsQuery.data]
-  );
-
   const weatherData = weatherQuery.data;
   const filteredHasNoResults = plants.length === 0;
   const hasActiveFilters = Boolean(searchQuery.trim()) || onlyOverdue || categoryFilter !== 'ALL';
@@ -416,52 +381,47 @@ export function PlantsList() {
 
   return (
     <PlatformPullToRefresh onRefresh={refreshAll}>
-      <section className="space-y-4 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
+      <section className="space-y-5 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
         <motion.header
-          className="ios-blur-card space-y-3 p-4"
+          className="ios-blur-card space-y-4 rounded-[30px] p-5 shadow-[0_20px_44px_rgba(15,23,42,0.08)]"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 30 }}
         >
-          <div>
-            <p className="text-xs uppercase tracking-[0.08em] text-ios-subtext">Коллекция</p>
-            <h2 className="mt-1 text-xl font-semibold text-ios-text">Главная коллекция и быстрый уход</h2>
+          <div className="space-y-1">
+            <h2 className="text-[1.45rem] font-semibold tracking-[-0.03em] text-ios-text">Мои растения</h2>
+            <p className="max-w-[26rem] text-sm leading-5 text-ios-subtext">Быстрый обзор того, что происходит с коллекцией сегодня.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            <QuickStat label="Всего" value={totalPlantsCount} tone="neutral" />
-            <QuickStat label="Нужно полить" value={needWaterCount} tone={needWaterCount > 0 ? 'warn' : 'good'} />
-            <QuickStat label="Просрочено" value={overdueCount} tone={overdueCount > 0 ? 'danger' : 'good'} />
-            <QuickStat label="Полито сегодня" value={wateredTodayCount} tone="good" />
-          </div>
-          <p className="text-[11px] text-ios-subtext">
-            {lastSyncAt ? `Обновлено в ${formatTimeRu(lastSyncAt)}` : 'Ожидаем первую синхронизацию...'}
-            {rescuedCount > 0 ? ` · Спасено: ${rescuedCount}` : ''}
-          </p>
-        </motion.header>
-
-        {weatherCity ? (
-          <motion.div
-            className="ios-blur-card flex items-center gap-3 p-3"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-          >
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-ios-accent/15 text-ios-accent">
-              <WeatherIcon code={weatherData?.icon} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ios-text">{weatherCity}</p>
-              <p className="text-xs text-ios-subtext">
-                {isFiniteNumber(weatherData?.tempC) ? `${Math.round(weatherData.tempC)}°C` : '—'} ·{' '}
-                {isFiniteNumber(weatherData?.humidity) ? `${Math.round(weatherData.humidity)}% влажность` : '—'} ·{' '}
-                {sourceLabel(weatherData?.source)}
-              </p>
-              <p className="mt-0.5 truncate text-[11px] text-ios-subtext/90">
-                {translateWeather(weatherData?.icon, weatherData?.description) ?? 'Поливайте осторожно в прохладную погоду.'}
-              </p>
+          <div className="rounded-[24px] border border-ios-border/55 bg-white/72 px-4 py-4 dark:bg-zinc-900/60">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ios-subtext">Сегодня</p>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-white/55 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:bg-zinc-950/20">
+                <p className="text-[12px] text-ios-subtext">Нужно полить</p>
+                <p className={`mt-1 text-2xl font-semibold ${needWaterCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
+                  <AnimatedCount value={needWaterCount} />
+                </p>
+              </div>
+              <div className="rounded-2xl bg-white/55 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:bg-zinc-950/20">
+                <p className="text-[12px] text-ios-subtext">Просрочено</p>
+                <p className={`mt-1 text-2xl font-semibold ${overdueCount > 0 ? 'text-red-600 dark:text-red-300' : 'text-ios-text'}`}>
+                  <AnimatedCount value={overdueCount} />
+                </p>
+              </div>
             </div>
-          </motion.div>
-        ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ios-subtext">
+              <span>{plantsQuery.data?.length ?? 0} растений в коллекции</span>
+              {lastSyncAt ? <span>Обновлено в {formatTimeRu(lastSyncAt)}</span> : null}
+              {rescuedCount > 0 ? <span>Спасено: {rescuedCount}</span> : null}
+              {weatherCity ? (
+                <span className="inline-flex items-center gap-1">
+                  <WeatherIcon code={weatherData?.icon} />
+                  {weatherCity}
+                  {isFiniteNumber(weatherData?.tempC) ? ` ${Math.round(weatherData.tempC)}°C` : ''}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </motion.header>
 
         <CategoryTabs
           value={categoryFilter}
@@ -472,18 +432,20 @@ export function PlantsList() {
           }}
         />
 
-        <div className="ios-blur-card space-y-2 p-3">
+        <div className="ios-blur-card space-y-3 p-3">
           <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-ios-subtext" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Найти растение"
-              className="h-10 min-w-0 flex-1 rounded-xl border border-ios-border/65 bg-white/70 px-3 text-sm outline-none dark:bg-zinc-900/55"
-            />
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-ios-border/65 bg-white/70 px-3 dark:bg-zinc-900/55">
+              <Search className="h-4 w-4 shrink-0 text-ios-subtext" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Поиск по названию"
+                className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+            </div>
             <button
               type="button"
-              className="touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-ios-border/70 bg-white/70 text-ios-subtext dark:bg-zinc-900/55"
+              className="touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-ios-border/70 bg-white/70 text-ios-subtext transition-transform duration-150 active:scale-95 dark:bg-zinc-900/55"
               onClick={() => {
                 hapticImpact('light');
                 void refreshAll();
@@ -496,7 +458,7 @@ export function PlantsList() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className={`touch-target inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-semibold ${
+              className={`touch-target inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-semibold transition-transform duration-150 active:scale-[0.98] ${
                 onlyOverdue
                   ? 'border-red-400/70 bg-red-500/15 text-red-600 dark:text-red-300'
                   : 'border-ios-border/70 bg-white/60 text-ios-subtext dark:bg-zinc-900/55'
@@ -508,10 +470,9 @@ export function PlantsList() {
                 hapticImpact('light');
               }}
             >
-              Только просроченные ({overdueCount})
+              Просроченные
             </button>
-
-            <div className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-full border border-ios-border/70 bg-white/70 px-3 dark:bg-zinc-900/55">
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-ios-border/70 bg-white/70 px-3 dark:bg-zinc-900/55">
               <SlidersHorizontal className="h-4 w-4 text-ios-subtext" />
               <select
                 value={sortMode}
@@ -521,14 +482,19 @@ export function PlantsList() {
                   localStorage.setItem(sortStorageKey, next);
                   hapticImpact('light');
                 }}
-                className="h-8 min-w-[145px] bg-transparent text-xs font-semibold text-ios-text outline-none"
+                className="h-8 min-w-[138px] bg-transparent text-xs font-semibold text-ios-text outline-none"
               >
-                <option value="needs_water">Нуждаются в поливе</option>
+                <option value="needs_water">По поливу</option>
                 <option value="created_desc">Сначала новые</option>
                 <option value="alpha">По алфавиту</option>
                 <option value="category">По категории</option>
               </select>
             </div>
+            {weatherCity ? (
+              <span className="ml-auto truncate text-[11px] text-ios-subtext">
+                {translateWeather(weatherData?.icon, weatherData?.description) ?? weatherStatusLabel(weatherData?.source)}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -573,7 +539,7 @@ export function PlantsList() {
                       stiffness: 420,
                       damping: 34,
                       mass: 0.9,
-                      delay: Math.min(0.24, index * 0.04)
+                      delay: Math.min(0.2, index * 0.035)
                     }}
                   >
                     <PlantCard

@@ -4,6 +4,10 @@ import java.util.List;
 
 public record WeatherContextPreviewResponse(
     boolean available,
+    boolean degraded,
+    boolean fallbackUsed,
+    boolean staleFallbackUsed,
+    String providerSource,
     String city,
     String region,
     Double temperatureNowC,

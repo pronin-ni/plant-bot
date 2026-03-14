@@ -44,21 +44,27 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 330, damping: 30 }}
     >
-      <div className="flex items-center gap-2">
-        <Stethoscope className="h-4 w-4 text-ios-accent" />
-        <p className="text-ios-body font-semibold">AI-диагностика листьев</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Stethoscope className="h-4 w-4 text-ios-accent" />
+          <div>
+            <p className="text-ios-body font-semibold">AI-диагностика листьев</p>
+            <p className="mt-0.5 text-xs text-ios-subtext">Быстрый CTA для проверки симптомов по фото.</p>
+          </div>
+        </div>
+        <span className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-ios-subtext">AI</span>
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-ios-border/60 bg-white/50 dark:bg-zinc-900/50">
         {preview ? (
-          <img src={preview} alt="Лист растения" className="h-48 w-full object-cover" />
+          <img src={preview} alt="Лист растения" className="h-36 w-full object-cover" />
         ) : (
-          <div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-ios-subtext">
+          <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-ios-subtext">
             <div className="rounded-full bg-ios-accent/14 p-3 text-ios-accent">
               <ScanSearch className="h-5 w-5" />
             </div>
             <p className="text-sm">Загрузите фото листа</p>
-            <p className="max-w-[230px] text-xs">AI проверит симптомы и подскажет план восстановления.</p>
+            <p className="max-w-[230px] text-xs">AI быстро оценит симптомы и подскажет следующий шаг.</p>
           </div>
         )}
 
@@ -107,11 +113,11 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
 
       <button
         type="button"
-        className="android-ripple inline-flex h-12 w-full items-center justify-center rounded-2xl border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50"
+        className="android-ripple inline-flex h-11 w-full items-center justify-center rounded-2xl border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50"
         onClick={() => inputRef.current?.click()}
       >
         <Camera className="mr-2 h-4 w-4" />
-        {diagnoseMutation.isPending ? 'Диагностика...' : 'Сфотографировать лист'}
+        {diagnoseMutation.isPending ? 'Диагностика...' : 'Проверить по фото'}
       </button>
 
       {diagnoseMutation.isError ? (
@@ -135,8 +141,8 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
           </p>
           <p className="text-xs text-ios-subtext">Уверенность: {result.confidence}% · Срочность: {result.urgency}</p>
           {result.description ? <p className="mt-2">{result.description}</p> : null}
-          {result.treatment ? <p className="mt-2"><b>Лечение:</b> {result.treatment}</p> : null}
-          {result.prevention ? <p className="mt-1"><b>Профилактика:</b> {result.prevention}</p> : null}
+          {result.treatment ? <p className="mt-2"><b>Что сделать:</b> {result.treatment}</p> : null}
+          {result.prevention ? <p className="mt-1"><b>Дальше:</b> {result.prevention}</p> : null}
           {result.confidence < 60 ? (
             <p className="mt-2 text-[12px] text-amber-700 dark:text-amber-400">Низкая уверенность. Сделайте ещё фото при хорошем освещении.</p>
           ) : null}

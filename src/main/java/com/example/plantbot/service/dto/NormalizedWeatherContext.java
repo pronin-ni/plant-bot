@@ -1,11 +1,16 @@
 package com.example.plantbot.service.dto;
 
 import com.example.plantbot.domain.WeatherConfidence;
+import com.example.plantbot.domain.WeatherProvider;
 
 import java.util.List;
 
 public record NormalizedWeatherContext(
     boolean available,
+    boolean degraded,
+    boolean fallbackUsed,
+    boolean staleFallbackUsed,
+    WeatherProvider providerUsed,
     String city,
     String region,
     Double temperatureNowC,

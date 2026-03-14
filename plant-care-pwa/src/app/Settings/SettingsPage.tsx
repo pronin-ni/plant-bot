@@ -97,8 +97,8 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
       },
       {
         id: 'weather',
-        title: 'Город и погода',
-        subtitle: 'Провайдер и предпросмотр прогноза',
+        title: 'Погода и город',
+        subtitle: 'Город, автоисточник и предпросмотр прогноза',
         icon: Cloud,
         detailId: 'weather',
         action: 'dialog'

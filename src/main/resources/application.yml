@@ -54,6 +54,33 @@ openmeteo:
   geocode-base-url: ${OPENMETEO_GEOCODE_BASE_URL:https://geocoding-api.open-meteo.com/v1/search}
   geocode-reverse-base-url: ${OPENMETEO_GEOCODE_REVERSE_BASE_URL:https://geocoding-api.open-meteo.com/v1/reverse}
 
+weather:
+  provider:
+    strategy: ${WEATHER_PROVIDER_STRATEGY:AUTO}
+    fixed: ${WEATHER_FIXED_PROVIDER:}
+    enabled: ${WEATHER_PROVIDERS_ENABLED:OPEN_METEO,MET_NORWAY}
+    timeout-ms: ${WEATHER_PROVIDER_TIMEOUT_MS:5000}
+    cache-ttl-minutes: ${WEATHER_PROVIDER_CACHE_TTL_MINUTES:15}
+    max-stale-hours: ${WEATHER_PROVIDER_MAX_STALE_HOURS:3}
+  provider-strategy: ${WEATHER_PROVIDER_STRATEGY:AUTO}
+  fixed-provider: ${WEATHER_FIXED_PROVIDER:OPEN_METEO}
+  enabled-providers: ${WEATHER_ENABLED_PROVIDERS:OPEN_METEO,MET_NORWAY}
+  timeout-ms: ${WEATHER_TIMEOUT_MS:5000}
+  cache-ttl-minutes: ${WEATHER_CACHE_TTL_MINUTES:15}
+  stale-fallback-enabled: ${WEATHER_STALE_FALLBACK_ENABLED:true}
+  max-stale-age-minutes: ${WEATHER_MAX_STALE_AGE_MINUTES:180}
+  metno:
+    base-url: ${WEATHER_METNO_BASE_URL:https://api.met.no/weatherapi/locationforecast/2.0/compact}
+    user-agent: ${WEATHER_METNO_USER_AGENT:PlantBot/1.0 (contact: plant-bot@example.com)}
+  weatherapi:
+    api-key: ${WEATHER_WEATHERAPI_API_KEY:}
+    current-url: ${WEATHER_WEATHERAPI_CURRENT_URL:https://api.weatherapi.com/v1/current.json}
+    forecast-url: ${WEATHER_WEATHERAPI_FORECAST_URL:https://api.weatherapi.com/v1/forecast.json}
+  tomorrow:
+    api-key: ${WEATHER_TOMORROW_API_KEY:}
+    realtime-url: ${WEATHER_TOMORROW_REALTIME_URL:https://api.tomorrow.io/v4/weather/realtime}
+    forecast-url: ${WEATHER_TOMORROW_FORECAST_URL:https://api.tomorrow.io/v4/weather/forecast}
+
 openweather:
   api-key: ${OPENWEATHER_API_KEY:}
   base-url: https://api.openweathermap.org/data/2.5/weather

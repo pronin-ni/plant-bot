@@ -5,12 +5,13 @@ import com.example.plantbot.controller.dto.weather.WeatherForecastResponse;
 import com.example.plantbot.controller.dto.weather.WeatherProviderResponse;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherProvider;
+import com.example.plantbot.domain.WeatherProviderStrategy;
 import com.example.plantbot.service.CurrentUserService;
-import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.util.WeatherData;
 import com.example.plantbot.util.WeatherForecastDay;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,10 +29,10 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/weather")
 @RequiredArgsConstructor
+@Slf4j
 public class WeatherController {
 
   private final CurrentUserService currentUserService;
-  private final UserService userService;
   private final WeatherService weatherService;
 
   @GetMapping("/providers")
@@ -39,14 +40,19 @@ public class WeatherController {
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
       Authentication authentication
   ) {
-    User user = currentUserService.resolve(authentication, initData);
-    List<WeatherProviderResponse.WeatherProviderItem> items = List.of(
-        new WeatherProviderResponse.WeatherProviderItem(WeatherProvider.OPEN_METEO.name(), "Open-Meteo", "Без ключей, точные данные", true),
-        new WeatherProviderResponse.WeatherProviderItem(WeatherProvider.WEATHERAPI.name(), "WeatherAPI Free", "Публичный ключ на сервере", true),
-        new WeatherProviderResponse.WeatherProviderItem(WeatherProvider.TOMORROW.name(), "Tomorrow.io Free", "Публичный ключ на сервере", true),
-        new WeatherProviderResponse.WeatherProviderItem(WeatherProvider.OPENWEATHER.name(), "OpenWeatherMap Free", "Публичный ключ на сервере", true)
-    );
-    return WeatherProviderResponse.of(items, user.getWeatherProvider());
+    currentUserService.resolve(authentication, initData);
+    List<WeatherProviderResponse.WeatherProviderItem> items = weatherService.getEnabledProviders().stream()
+        .map(provider -> new WeatherProviderResponse.WeatherProviderItem(
+            provider.name(),
+            providerLabel(provider),
+            providerDescription(provider),
+            provider == WeatherProvider.OPEN_METEO || provider == WeatherProvider.MET_NORWAY
+        ))
+        .toList();
+    WeatherProvider selected = weatherService.getProviderStrategy() == WeatherProviderStrategy.FIXED
+        ? weatherService.getFixedProvider()
+        : items.isEmpty() ? WeatherProvider.OPEN_METEO : WeatherProvider.valueOf(items.get(0).id());
+    return WeatherProviderResponse.of(items, selected);
   }
 
   @PostMapping("/provider")
@@ -55,10 +61,10 @@ public class WeatherController {
       Authentication authentication,
       @RequestBody(required = false) ProviderRequest request
   ) {
-    User user = currentUserService.resolve(authentication, initData);
-    WeatherProvider provider = parseProvider(request == null ? null : request.provider());
-    user.setWeatherProvider(provider);
-    userService.save(user);
+    currentUserService.resolve(authentication, initData);
+    String requested = request == null ? null : request.provider();
+    log.warn("Ignored deprecated manual weather provider selection request: provider={} strategy={}",
+        requested, weatherService.getProviderStrategy());
     return providers(initData, authentication);
   }
 
@@ -70,8 +76,8 @@ public class WeatherController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
-    WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
-    Optional<WeatherData> data = weatherService.getCurrent(targetCity, user.getCityLat(), user.getCityLon(), provider);
+    var result = weatherService.fetchWeather(targetCity, user.getCityLat(), user.getCityLon(), 3, null);
+    Optional<WeatherData> data = Optional.ofNullable(result.current());
     if (data.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
           "Не удалось получить текущую погоду для города: " + (targetCity == null ? "не задан" : targetCity));
@@ -83,7 +89,11 @@ public class WeatherController {
         payload.humidityPercent(),
         null,
         null,
-        provider.name()
+        result.providerUsed() == null ? weatherService.getProviderStrategy().name() : result.providerUsed().name(),
+        result.fallbackUsed(),
+        result.staleFallbackUsed(),
+        result.degraded(),
+        result.message()
     );
   }
 
@@ -96,8 +106,8 @@ public class WeatherController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
-    WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
-    List<WeatherForecastDay> items = weatherService.getForecast(targetCity, user.getCityLat(), user.getCityLon(), days, provider);
+    var result = weatherService.fetchWeather(targetCity, user.getCityLat(), user.getCityLon(), days, null);
+    List<WeatherForecastDay> items = result.forecast() == null ? List.of() : result.forecast();
     if (items.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
           "Не удалось получить прогноз погоды для города: " + (targetCity == null ? "не задан" : targetCity));
@@ -110,18 +120,35 @@ public class WeatherController {
             day.description()
         ))
         .toList();
-    return new WeatherForecastResponse(targetCity == null ? "" : targetCity, provider.name(), mapped);
+    return new WeatherForecastResponse(
+        targetCity == null ? "" : targetCity,
+        result.providerUsed() == null ? weatherService.getProviderStrategy().name() : result.providerUsed().name(),
+        result.fallbackUsed(),
+        result.staleFallbackUsed(),
+        result.degraded(),
+        result.message(),
+        mapped
+    );
   }
 
-  private WeatherProvider parseProvider(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return WeatherProvider.OPEN_METEO;
-    }
-    try {
-      return WeatherProvider.valueOf(raw.trim().toUpperCase());
-    } catch (IllegalArgumentException ex) {
-      return WeatherProvider.OPEN_METEO;
-    }
+  private String providerLabel(WeatherProvider provider) {
+    return switch (provider) {
+      case OPEN_METEO -> "Open-Meteo";
+      case MET_NORWAY -> "MET Norway";
+      case WEATHERAPI -> "WeatherAPI";
+      case TOMORROW -> "Tomorrow.io";
+      case OPENWEATHER -> "OpenWeatherMap";
+    };
+  }
+
+  private String providerDescription(WeatherProvider provider) {
+    return switch (provider) {
+      case OPEN_METEO -> "Бесплатно, без ключей";
+      case MET_NORWAY -> "Бесплатно, без ключей";
+      case WEATHERAPI -> "Optional keyed provider";
+      case TOMORROW -> "Optional keyed provider";
+      case OPENWEATHER -> "Legacy keyed provider";
+    };
   }
 
   public record ProviderRequest(String provider) {

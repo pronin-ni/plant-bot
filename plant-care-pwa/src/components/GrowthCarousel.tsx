@@ -93,9 +93,12 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 30 }}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-ios-body font-semibold">Камера роста</p>
-        <p className="text-xs text-ios-subtext">Последние снимки</p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-ios-body font-semibold">Камера роста</p>
+          <p className="mt-0.5 text-xs text-ios-subtext">Последние фото для сравнения и прогресса.</p>
+        </div>
+        <p className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-ios-subtext">История</p>
       </div>
 
       <AnimatePresence mode="wait">
@@ -111,12 +114,12 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
             {slides.map((shot, index) => (
               <motion.figure
                 key={`${shot.createdAt}-${shot.photoUrl}`}
-                className="relative w-[172px] shrink-0 snap-start overflow-hidden rounded-2xl border border-ios-border/55 bg-white/60 dark:bg-zinc-900/50"
+                className="relative w-[156px] shrink-0 snap-start overflow-hidden rounded-2xl border border-ios-border/55 bg-white/60 dark:bg-zinc-900/50"
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 360, damping: 30, delay: index * 0.04 }}
               >
-                <img src={shot.photoUrl} alt="Снимок роста" className="h-36 w-full object-cover" />
+                <img src={shot.photoUrl} alt="Снимок роста" className="h-28 w-full object-cover" />
                 <figcaption className="border-t border-ios-border/45 px-2.5 py-1.5 text-[11px] text-ios-subtext">
                   {prettyDate(shot.createdAt)}
                 </figcaption>
@@ -137,13 +140,14 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
             </div>
             <p className="text-sm font-medium text-ios-text">Начните документировать рост</p>
             <p className="mt-1 max-w-[220px] text-xs text-ios-subtext">
-              Добавляйте фото каждую неделю, чтобы видеть, как растение меняется.
+              Добавляйте фото время от времени, чтобы видеть динамику без лишнего шума.
             </p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <label className="absolute bottom-4 right-4">
+      <div className="mt-3 flex justify-end">
+      <label>
         <input
           type="file"
           accept="image/*"
@@ -161,13 +165,14 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
         <Button
           type="button"
           size="sm"
-          className="h-11 rounded-full px-4 shadow-[0_10px_24px_rgba(52,199,89,0.25)]"
+          className="h-10 rounded-full px-4 shadow-[0_10px_24px_rgba(52,199,89,0.18)]"
           disabled={uploadMutation.isPending}
         >
           <Camera className="mr-1.5 h-4 w-4" />
-          {uploadMutation.isPending ? 'Добавляем...' : 'Добавить'}
+          {uploadMutation.isPending ? 'Добавляем...' : 'Добавить фото'}
         </Button>
       </label>
+      </div>
     </motion.section>
   );
 }

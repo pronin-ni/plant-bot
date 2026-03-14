@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Camera, Home, Sprout, TreePine } from 'lucide-react';
 
+import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { Button } from '@/components/ui/button';
 import { hapticImpact } from '@/lib/telegram';
 import type { PlantDto } from '@/types/api';
@@ -49,20 +50,22 @@ export function PlantHero({
   const meta = categoryMeta(plant);
   const Icon = meta.icon;
 
-  const status = useMemo(() => {
+  const heroState = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const next = nextWateringDate(plant);
     const target = new Date(next.getFullYear(), next.getMonth(), next.getDate());
-    if (target.getTime() < today.getTime()) {
-      return { label: 'Нужно полить', className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' };
-    }
-    return { label: 'В порядке', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' };
+    const daysLeft = Math.floor((target.getTime() - today.getTime()) / 86_400_000);
+    return {
+      status: getPlantStatusTone(daysLeft, plant.recommendationSource),
+      source: getPlantSourceTone(plant.recommendationSource)
+    };
   }, [plant]);
+  const SourceIcon = heroState.source.icon;
 
   return (
     <motion.section
-      className="relative overflow-hidden rounded-3xl border border-ios-border/60 bg-white/70 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75"
+      className="relative overflow-hidden rounded-[32px] border border-ios-border/60 bg-white/70 shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-ios dark:bg-zinc-950/75"
       initial={{ opacity: 0, y: 10, scale: 0.995 }}
       animate={celebratePulse > 0 ? { opacity: 1, y: 0, scale: [1, 1.015, 1] } : { opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.24, ease: 'easeOut' }}
@@ -92,12 +95,19 @@ export function PlantHero({
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/30 to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_28%),linear-gradient(to_top,rgba(0,0,0,0.70),rgba(0,0,0,0.30),transparent_68%)]" />
 
         <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
-          <span className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold ${status.className}`}>
-            {status.label}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold backdrop-blur-md ${heroState.status.containerClassName}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ${heroState.status.dotClassName}`} />
+              {heroState.status.label}
+            </span>
+            <span className={`inline-flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold backdrop-blur-md ${heroState.source.className}`}>
+              <SourceIcon className="h-3.5 w-3.5" />
+              {heroState.source.shortLabel}
+            </span>
+          </div>
           <Button
             type="button"
             variant="secondary"
@@ -118,7 +128,10 @@ export function PlantHero({
             <Icon className="h-3.5 w-3.5" />
             {meta.label}
           </p>
-          <h2 className="mt-2 text-3xl font-semibold leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">{plant.name}</h2>
+          <h2 className="mt-2 text-[2rem] font-semibold leading-tight tracking-[-0.03em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">{plant.name}</h2>
+          <p className="mt-1 max-w-[26rem] text-sm leading-5 text-white/85 drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
+            {plant.placement === 'OUTDOOR' ? 'Outdoor dashboard' : 'Indoor dashboard'} · текущий режим полива и уход
+          </p>
         </div>
       </div>
 

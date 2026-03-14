@@ -5,5 +5,9 @@ public record WeatherCurrentResponse(String city,
                                      double humidity,
                                      String icon,
                                      String description,
-                                     String source) {
+                                     String source,
+                                     boolean fallbackUsed,
+                                     boolean staleFallbackUsed,
+                                     boolean degraded,
+                                     String statusMessage) {
 }

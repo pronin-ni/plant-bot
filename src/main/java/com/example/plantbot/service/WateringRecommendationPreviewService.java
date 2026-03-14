@@ -40,6 +40,10 @@ public class WateringRecommendationPreviewService {
     var weather = outdoorWeatherContextService.resolve(user, request.city(), request.region());
     return new WeatherContextPreviewResponse(
         weather.available(),
+        weather.degraded(),
+        weather.fallbackUsed(),
+        weather.staleFallbackUsed(),
+        weather.providerUsed() == null ? null : weather.providerUsed().name(),
         weather.city(),
         weather.region(),
         weather.temperatureNowC(),

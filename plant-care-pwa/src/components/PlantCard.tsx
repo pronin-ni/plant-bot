@@ -1,7 +1,15 @@
 import { motion } from 'framer-motion';
-import { Droplets, Home, Image as ImageIcon, SunMedium, TreePine } from 'lucide-react';
+import { Home, Image as ImageIcon, SunMedium, TreePine } from 'lucide-react';
 
 import { QuickWaterButton } from '@/components/QuickWaterButton';
+import {
+  getPlantCategoryLabel,
+  getPlantEnvironmentLabel,
+  getPlantRecommendationHint,
+  getPlantReasonTone,
+  getPlantSourceTone,
+  getPlantStatusTone
+} from '@/components/plants/plantRecommendationUi';
 import type { PlantDto } from '@/types/api';
 
 interface PlantCardProps {
@@ -14,55 +22,26 @@ interface PlantCardProps {
   onOpen: () => void;
 }
 
-function categoryLabel(plant: PlantDto): string {
-  switch (plant.category) {
-    case 'OUTDOOR_DECORATIVE':
-      return 'Декор';
-    case 'OUTDOOR_GARDEN':
-      return 'Сад';
-    default:
-      return 'Дом';
-  }
-}
-
 function CategoryIcon({ plant, className }: { plant: PlantDto; className?: string }) {
   if (plant.category === 'OUTDOOR_DECORATIVE') return <TreePine className={className} />;
   if (plant.category === 'OUTDOOR_GARDEN') return <SunMedium className={className} />;
   return <Home className={className} />;
 }
 
-function statusPill(daysLeft: number): {
-  text: string;
-  cls: string;
-  dot: string;
-  border: string;
-  progress: string;
-} {
-  if (daysLeft <= 0) {
-    return {
-      text: 'Нужно полить',
-      cls: 'bg-red-50 text-red-600 dark:bg-red-950/35 dark:text-red-300',
-      dot: 'bg-red-500',
-      border: 'border-red-200/80 dark:border-red-800/70',
-      progress: 'bg-red-500'
-    };
+function nextWateringLabel(daysLeft: number, nextWateringText: string): string {
+  if (daysLeft < 0) {
+    return `С задержкой на ${Math.abs(daysLeft)} дн.`;
   }
-  if (daysLeft <= 2) {
-    return {
-      text: 'Скоро полив',
-      cls: 'bg-amber-50 text-amber-600 dark:bg-amber-950/35 dark:text-amber-300',
-      dot: 'bg-amber-500',
-      border: 'border-amber-200/80 dark:border-amber-800/70',
-      progress: 'bg-amber-500'
-    };
+  if (daysLeft === 0) {
+    return 'Сегодня';
   }
-  return {
-    text: 'В порядке',
-    cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300',
-    dot: 'bg-emerald-500',
-    border: 'border-emerald-200/80 dark:border-emerald-800/70',
-    progress: 'bg-emerald-500'
-  };
+  if (daysLeft === 1) {
+    return 'Завтра';
+  }
+  return nextWateringText
+    .replace(/^Полив\s+/i, '')
+    .replace(/^Пора\s+/i, '')
+    .replace(/^Просрочено\s+/i, '');
 }
 
 export function PlantCard({
@@ -74,16 +53,20 @@ export function PlantCard({
   onWater,
   onOpen
 }: PlantCardProps) {
-  const moistureLeft = Math.max(0, Math.min(100, 100 - Math.round(progress)));
-  const pill = statusPill(daysLeft);
+  const pill = getPlantStatusTone(daysLeft, plant.recommendationSource);
+  const source = getPlantSourceTone(plant.recommendationSource);
+  const SourceIcon = source.icon;
+  const hint = getPlantRecommendationHint(plant);
+  const cycleProgress = Math.max(8, Math.min(100, Math.round(progress)));
+  const hintTone = getPlantReasonTone(plant.recommendationSource);
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 12, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      whileTap={{ scale: 0.992 }}
-      className={`flex flex-col gap-3 rounded-2xl border bg-white/95 p-3 shadow-sm transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${pill.border}`}
+      whileTap={{ scale: 0.988 }}
+      className={`group relative flex flex-col gap-3 overflow-hidden rounded-[28px] border bg-white/95 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(15,23,42,0.09)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${pill.borderClassName}`}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -94,48 +77,67 @@ export function PlantCard({
         }
       }}
     >
-      <div className="flex gap-3">
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(circle_at_top_left,rgba(52,199,89,0.10),transparent_52%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_48%)] opacity-90" />
+      <div className="relative flex gap-3.5">
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-slate-100 shadow-inner">
           {plant.photoUrl ? (
-            <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover" loading="lazy" />
+            <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-slate-400">
-              <ImageIcon className="h-5 w-5" />
+              <ImageIcon className="h-6 w-6" />
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate text-[15px] font-semibold text-slate-900">{plant.name}</p>
-              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500">
+            <div className="min-w-0 space-y-1">
+              <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-slate-900 sm:text-base">{plant.name}</p>
+              <p className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
                 <CategoryIcon plant={plant} className="h-3.5 w-3.5" />
-                {categoryLabel(plant)}
+                {getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}
               </p>
             </div>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${pill.cls}`}>
-              <span className={`h-2 w-2 rounded-full ${pill.dot}`} />
-              {pill.text}
+            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${pill.containerClassName}`}>
+              <span className={`h-2 w-2 rounded-full ${pill.dotClassName}`} />
+              {pill.label}
             </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${source.className}`}>
+              <SourceIcon className="h-3.5 w-3.5" />
+              {source.shortLabel}
+            </span>
+            <span className="text-xs text-slate-500">Следующий полив: {nextWateringLabel(daysLeft, nextWateringText)}</span>
           </div>
         </div>
       </div>
 
-      <div className="space-y-2 rounded-xl bg-slate-50/85 px-3 py-2 dark:bg-zinc-900/70">
-        <div className="flex items-center justify-between text-sm text-slate-700">
-          <span className="inline-flex items-center gap-1.5">
-            <Droplets className="h-4 w-4 text-emerald-500" />
-            {moistureLeft}% влаги
-          </span>
-          <span className="text-xs text-slate-500">{nextWateringText}</span>
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.06, duration: 0.22 }}
+        className={`space-y-2 rounded-[22px] px-3 py-3 ${hintTone}`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400/90">Почему сейчас</p>
+            <p className="mt-1 line-clamp-2 text-sm leading-5">{hint}</p>
+          </div>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-white/90 dark:bg-zinc-950/70">
-          <div
-            className={`h-full rounded-full ${pill.progress}`}
-            style={{ width: `${Math.min(100, Math.max(0, 100 - moistureLeft))}%` }}
-          />
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-slate-500">
+            <span>Цикл полива</span>
+            <span>{Math.max(0, Math.min(100, cycleProgress))}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/90 dark:bg-zinc-950/70">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400"
+              style={{ width: `${cycleProgress}%` }}
+            />
+          </div>
         </div>
-      </div>
+      </motion.div>
 
       <div
         className="mt-auto"

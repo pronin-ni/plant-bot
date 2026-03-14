@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getHomeAssistantRoomsAndSensors, saveHomeAssistantConfig } from '@/lib/api';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
-import type { HaSensor, HomeAssistantRoomsSensorsResponse } from '@/types/home-assistant';
+import type { HaSensor } from '@/types/home-assistant';
 
 const springTransition = {
   type: 'spring',
@@ -64,7 +64,6 @@ export function HomeAssistantSetup() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionMessage, setConnectionMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
-  const [summaryState, setSummaryState] = useState<SummaryState>(null);
   const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
   const [selectionMessage, setSelectionMessage] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
@@ -75,6 +74,7 @@ export function HomeAssistantSetup() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
+  const queryClient = useQueryClient();
 
   const normalizedUrl = useMemo(() => baseUrl.trim().replace(/\/+$/, ''), [baseUrl]);
 
@@ -94,7 +94,7 @@ export function HomeAssistantSetup() {
       setConnectionState('loading');
       setConnectionMessage('Проверяем подключение к Home Assistant...');
       setSummaryMessage(null);
-      setSummaryState(null);
+      setSelectionMessage(null);
     },
     onSuccess: (response) => {
       hapticImpact('medium');
@@ -102,32 +102,15 @@ export function HomeAssistantSetup() {
       setConnectionState('success');
       setConnectionMessage(response.message || 'Подключение подтверждено. Home Assistant доступен.');
       setToken('');
-      void fetchSummaryMutation.mutateAsync();
+      setCopyMessage(null);
+      void queryClient.invalidateQueries({ queryKey: ['home-assistant-rooms-sensors-for-setup'] });
     },
     onError: (error) => {
       hapticNotify('error');
       const message = error instanceof Error ? error.message : 'Проверка не прошла. Проверьте URL и token.';
       setConnectionState('error');
       setConnectionMessage(message);
-    }
-  });
-
-  const fetchSummaryMutation = useMutation({
-    mutationFn: () => getHomeAssistantRoomsAndSensors(),
-    onSuccess: (response: HomeAssistantRoomsSensorsResponse) => {
-      const hasKind = (kind: string) => response.sensors.some((sensor) => sensor.kind === kind);
-      setSummaryState({
-        rooms: response.rooms.length,
-        sensors: response.sensors.length,
-        hasTemperature: hasKind('TEMPERATURE'),
-        hasHumidity: hasKind('HUMIDITY'),
-        hasIlluminance: hasKind('ILLUMINANCE'),
-        hasSoilMoisture: hasKind('SOIL_MOISTURE')
-      });
-      setSummaryMessage(null);
-    },
-    onError: () => {
-      setSummaryMessage('Подключение выполнено, но не удалось загрузить сводку комнат и датчиков.');
+      setSelectionMessage(null);
     }
   });
 
@@ -136,6 +119,22 @@ export function HomeAssistantSetup() {
     queryFn: getHomeAssistantRoomsAndSensors,
     enabled: connectionState === 'success'
   });
+
+  const summaryState = useMemo<SummaryState>(() => {
+    if (!roomsSensorsQuery.data?.connected) {
+      return null;
+    }
+    const sensors = roomsSensorsQuery.data.sensors;
+    const hasKind = (kind: string) => sensors.some((sensor) => sensor.kind === kind);
+    return {
+      rooms: roomsSensorsQuery.data.rooms.length,
+      sensors: sensors.length,
+      hasTemperature: hasKind('TEMPERATURE'),
+      hasHumidity: hasKind('HUMIDITY'),
+      hasIlluminance: hasKind('ILLUMINANCE'),
+      hasSoilMoisture: hasKind('SOIL_MOISTURE')
+    };
+  }, [roomsSensorsQuery.data]);
 
   useEffect(() => {
     try {
@@ -160,6 +159,20 @@ export function HomeAssistantSetup() {
     }
   }, []);
 
+  useEffect(() => {
+    if (connectionState !== 'success') {
+      setSummaryMessage(null);
+      return;
+    }
+    if (roomsSensorsQuery.isError) {
+      setSummaryMessage('Подключение выполнено, но не удалось загрузить сводку комнат и датчиков.');
+      return;
+    }
+    if (roomsSensorsQuery.data?.connected) {
+      setSummaryMessage(null);
+    }
+  }, [connectionState, roomsSensorsQuery.data, roomsSensorsQuery.isError]);
+
   const sensorsByKind = useMemo(() => {
     const sensors = roomsSensorsQuery.data?.sensors ?? [];
     return {
@@ -180,6 +193,7 @@ export function HomeAssistantSetup() {
     };
     window.localStorage.setItem(HA_SELECTION_STORAGE_KEY, JSON.stringify(payload));
     setSelectionMessage('Выбор сохранен.');
+    hapticNotify('success');
   }, [
     selectedRoomId,
     selectedTemperatureSensorId,
@@ -374,7 +388,7 @@ export function HomeAssistantSetup() {
         {connectionState === 'success' ? (
           <div className="mt-3 rounded-xl border border-ios-border/60 bg-white/75 px-3 py-3 text-[12px] leading-5 text-ios-subtext dark:border-emerald-500/20 dark:bg-zinc-900/60">
             <p className="text-sm font-medium text-ios-text">Подключено успешно</p>
-            {fetchSummaryMutation.isPending ? (
+            {roomsSensorsQuery.isLoading || roomsSensorsQuery.isFetching ? (
               <p className="mt-1 inline-flex items-center gap-1.5">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
                 Загружаем сводку комнат и датчиков...

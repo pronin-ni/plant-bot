@@ -673,9 +673,13 @@ public class MiniAppController {
       user = userService.save(user);
     }
     WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
-    int interval = Math.max(1, (int) Math.floor(rec.intervalDays()));
+    int interval = plant.getRecommendedIntervalDays() == null
+        ? Math.max(1, (int) Math.floor(rec.intervalDays()))
+        : Math.max(1, plant.getRecommendedIntervalDays());
     LocalDate next = plant.getLastWateredDate().plusDays(interval);
-    int ml = (int) Math.round(rec.waterLiters() * 1000.0);
+    int ml = plant.getRecommendedWaterVolumeMl() == null
+        ? (int) Math.round(rec.waterLiters() * 1000.0)
+        : plant.getRecommendedWaterVolumeMl();
     return new PlantResponse(
         plant.getId(),
         plant.getName(),
@@ -701,6 +705,11 @@ public class MiniAppController {
         plant.getPreferredWaterMl(),
         next,
         ml,
+        interval,
+        plant.getRecommendationSource() == null ? plant.getLastRecommendationSource() : plant.getRecommendationSource(),
+        plant.getRecommendationSummary() == null ? plant.getLastRecommendationSummary() : plant.getRecommendationSummary(),
+        plant.getConfidenceScore(),
+        plant.getGeneratedAt() == null ? plant.getLastRecommendationUpdatedAt() : plant.getGeneratedAt(),
         plant.getType(),
         plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant),
         plant.getCreatedAt()

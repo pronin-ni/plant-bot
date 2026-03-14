@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
 import { LeafDiagnosis } from '@/components/LeafDiagnosis';
+import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
 import { apiFetch, deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
@@ -83,6 +84,55 @@ function recommendationBadge(source?: string | null): string {
   return source ?? 'N/A';
 }
 
+function humanizeWateringMode(mode?: string | null): string {
+  const normalized = (mode ?? '').toUpperCase();
+  switch (normalized) {
+    case 'LIGHT':
+      return 'Лёгкий полив';
+    case 'DEEP':
+      return 'Глубокий полив';
+    case 'SOIL_CHECK_FIRST':
+      return 'Сначала проверить почву';
+    case 'WEATHER_GUIDED':
+      return 'С учётом погоды';
+    case 'STANDARD':
+    default:
+      return 'Стандартный режим';
+  }
+}
+
+function buildExplainabilityFactors(
+  plant: PlantDto,
+  recommendation: WateringRecommendationPreviewDto | null
+): string[] {
+  if (recommendation?.reasoning?.length) {
+    return recommendation.reasoning
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 4);
+  }
+
+  if (plant.placement === 'OUTDOOR') {
+    return [
+      recommendation?.weatherContextPreview?.precipitationLast24hMm != null
+        ? `осадки за 24 часа: ${recommendation.weatherContextPreview.precipitationLast24hMm} мм`
+        : 'учтены осадки и прогноз',
+      recommendation?.weatherContextPreview?.temperatureNowC != null
+        ? `температура около ${Math.round(recommendation.weatherContextPreview.temperatureNowC)}°C`
+        : 'учтена текущая температура',
+      plant.containerType ? `условие: ${plant.containerType.toLowerCase()}` : 'учтены условия участка',
+      plant.outdoorSoilType ? `почва: ${plant.outdoorSoilType.toLowerCase()}` : 'учтён тип почвы'
+    ].filter(Boolean);
+  }
+
+  return [
+    plant.type ? `тип растения: ${plant.type.toLowerCase()}` : 'учтён тип растения',
+    plant.potVolumeLiters != null ? `горшок: ${plant.potVolumeLiters.toFixed(1)} л` : 'учтён объём горшка',
+    plant.baseIntervalDays ? `базовый интервал: ${plant.baseIntervalDays} дн.` : 'учтён базовый интервал',
+    plant.wateringProfile ? `профиль: ${plant.wateringProfile.toLowerCase()}` : 'учтён indoor профиль'
+  ].filter(Boolean);
+}
+
 function recommendationUiState(
   loading: boolean,
   error: boolean,
@@ -94,6 +144,18 @@ function recommendationUiState(
   const source = (recommendation.source ?? '').toUpperCase();
   if (source === 'FALLBACK' || source === 'HEURISTIC' || source === 'BASE_PROFILE') return 'fallback';
   return 'success';
+}
+
+function formatRecommendationMoment(iso?: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 export function PlantDetailSheet() {
@@ -235,6 +297,78 @@ export function PlantDetailSheet() {
             previewDataUrl={previewDataUrl}
             photoUploading={photoMutation.isPending}
             wateringPulse={wateringPulse}
+            mainWatering={
+              <WaterStatusBlock
+                plant={plant}
+                progress={getProgress(plant)}
+                isOverdue={isOverdue}
+                isLoading={waterMutation.isPending}
+                nextWateringDate={getNextDate(plant)}
+                recommendation={recommendationQuery.data ?? null}
+                onWater={async () => {
+                  if (!selectedPlantId) return;
+                  await waterMutation.mutateAsync(selectedPlantId);
+                  triggerWateringPulse();
+                }}
+              />
+            }
+            explainability={
+              <WateringRecommendationCard
+                plant={plant}
+                state={recommendationState}
+                recommendation={recommendationQuery.data ?? null}
+                loading={recommendationQuery.isFetching}
+                onRefresh={() => {
+                  if (!selectedPlantId || recommendationQuery.isFetching) {
+                    return;
+                  }
+                  void recommendationQuery.refetch();
+                }}
+                onManualApply={(intervalDays, waterMl) => {
+                  if (!selectedPlantId || applyManualRecommendationMutation.isPending) {
+                    return;
+                  }
+                  applyManualRecommendationMutation.mutate({
+                    plantId: selectedPlantId,
+                    intervalDays,
+                    waterMl
+                  });
+                }}
+                manualApplying={applyManualRecommendationMutation.isPending}
+              />
+            }
+            secondary={
+              <div className="space-y-4">
+                <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+
+                <AIAdviceCard
+                  loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
+                  refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
+                  error={careAdviceQuery.isError && !careAdviceQuery.data}
+                  refreshError={refreshAdviceMutation.isError}
+                  hasAiAdvice={hasAiAdvice}
+                  advice={adviceText}
+                  source={adviceSource}
+                  onRefresh={() => {
+                    if (!selectedPlantId || refreshAdviceMutation.isPending) {
+                      return;
+                    }
+                    refreshAdviceMutation.mutate(selectedPlantId);
+                  }}
+                />
+
+                <RecommendationHistorySection plant={plant} recommendation={recommendationQuery.data ?? null} />
+
+                <LeafDiagnosis plant={plant} />
+
+                <DangerZoneSection
+                  onDeleteClick={() => {
+                    hapticImpact('rigid');
+                    setDeleteConfirmOpen(true);
+                  }}
+                />
+              </div>
+            }
             onPickPhoto={async (file) => {
               if (!selectedPlantId) {
                 return;
@@ -246,69 +380,6 @@ export function PlantDetailSheet() {
               photoMutation.mutate({ id: selectedPlantId, dataUrl });
             }}
           >
-            <WaterStatusBlock
-              plant={plant}
-              progress={getProgress(plant)}
-              isOverdue={isOverdue}
-              isLoading={waterMutation.isPending}
-              nextWateringDate={getNextDate(plant)}
-              onWater={async () => {
-                if (!selectedPlantId) return;
-                await waterMutation.mutateAsync(selectedPlantId);
-                triggerWateringPulse();
-              }}
-            />
-
-            <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
-
-            <AIAdviceCard
-              loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
-              refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
-              error={careAdviceQuery.isError && !careAdviceQuery.data}
-              refreshError={refreshAdviceMutation.isError}
-              hasAiAdvice={hasAiAdvice}
-              advice={adviceText}
-              source={adviceSource}
-              onRefresh={() => {
-                if (!selectedPlantId || refreshAdviceMutation.isPending) {
-                  return;
-                }
-                refreshAdviceMutation.mutate(selectedPlantId);
-              }}
-            />
-
-            <WateringRecommendationCard
-              plant={plant}
-              state={recommendationState}
-              recommendation={recommendationQuery.data ?? null}
-              loading={recommendationQuery.isFetching}
-              onRefresh={() => {
-                if (!selectedPlantId || recommendationQuery.isFetching) {
-                  return;
-                }
-                void recommendationQuery.refetch();
-              }}
-              onManualApply={(intervalDays, waterMl) => {
-                if (!selectedPlantId || applyManualRecommendationMutation.isPending) {
-                  return;
-                }
-                applyManualRecommendationMutation.mutate({
-                  plantId: selectedPlantId,
-                  intervalDays,
-                  waterMl
-                });
-              }}
-              manualApplying={applyManualRecommendationMutation.isPending}
-            />
-
-            <LeafDiagnosis plant={plant} />
-
-            <DangerZoneSection
-              onDeleteClick={() => {
-                hapticImpact('rigid');
-                setDeleteConfirmOpen(true);
-              }}
-            />
           </PlantDetailPage>
 
           <Dialog
@@ -384,6 +455,7 @@ function WaterStatusBlock({
   nextWateringDate,
   isOverdue,
   isLoading,
+  recommendation,
   onWater
 }: {
   plant: PlantDto;
@@ -391,52 +463,94 @@ function WaterStatusBlock({
   nextWateringDate: Date;
   isOverdue: boolean;
   isLoading: boolean;
+  recommendation: WateringRecommendationPreviewDto | null;
   onWater: () => Promise<void> | void;
 }) {
-  const moistureLeft = Math.max(0, Math.min(100, 100 - Math.round(progress)));
   const now = new Date();
-  const daysLeft = Math.max(
-    0,
-    Math.ceil((nextWateringDate.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const rawDaysLeft = Math.ceil((nextWateringDate.getTime() - today.getTime()) / 86_400_000);
+  const daysLeft = Math.max(0, rawDaysLeft);
+  const status = getPlantStatusTone(rawDaysLeft, plant.recommendationSource);
+  const source = getPlantSourceTone(recommendation?.source ?? plant.recommendationSource);
+  const SourceIcon = source.icon;
+  const intervalDays = Math.max(
+    1,
+    recommendation?.recommendedIntervalDays ?? plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7
   );
-  const nextLabel = isOverdue
-    ? 'Полив просрочен'
-    : daysLeft === 0
-      ? 'Полив сегодня'
-      : `Через ${daysLeft} дн.`;
+  const waterMl = Math.max(50, recommendation?.recommendedWaterMl ?? plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250);
+  const wateringMode = recommendation?.wateringMode ?? (plant.placement === 'OUTDOOR' ? 'WEATHER_GUIDED' : 'STANDARD');
+  const nextLabel = isOverdue ? 'Сегодня без запаса' : daysLeft === 0 ? 'Полив сегодня' : daysLeft === 1 ? 'Полив завтра' : `Через ${daysLeft} дн.`;
+  const weatherHint = recommendation?.weatherContextPreview?.available
+    ? [
+        recommendation.weatherContextPreview.temperatureNowC != null
+          ? `${Math.round(recommendation.weatherContextPreview.temperatureNowC)}°C`
+          : null,
+        recommendation.weatherContextPreview.precipitationForecastMm != null
+          ? `осадки ${recommendation.weatherContextPreview.precipitationForecastMm} мм`
+          : null,
+        recommendation.weatherContextPreview.humidityNowPercent != null
+          ? `влажность ${Math.round(recommendation.weatherContextPreview.humidityNowPercent)}%`
+          : null
+      ].filter(Boolean).join(' · ')
+    : null;
+  const indoorHint = [
+    plant.potVolumeLiters != null ? `горшок ${plant.potVolumeLiters.toFixed(1)} л` : null,
+    plant.wateringProfile ? `профиль ${plant.wateringProfile.toLowerCase()}` : null,
+    plant.baseIntervalDays ? `база ${plant.baseIntervalDays} дн.` : null
+  ].filter(Boolean).join(' · ');
 
   return (
-    <section className="space-y-4 rounded-3xl border border-ios-border/60 bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75">
+    <section className={`space-y-4 rounded-3xl border bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75 ${status.borderClassName}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Сегодня</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Текущий режим полива</p>
           <p className="mt-1 text-lg font-semibold text-ios-text">
-            {isOverdue ? 'Растению нужен полив' : 'Состояние стабильное'}
+            {isOverdue ? 'Растению нужен полив сейчас' : nextLabel}
           </p>
           <p className="text-sm text-ios-subtext">
             Следующий полив: {nextWateringDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
           </p>
         </div>
-        <span
-          className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${
-            isOverdue
-              ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300'
-              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-          }`}
-        >
-          {isOverdue ? 'Срочно' : 'В порядке'}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${status.containerClassName}`}>
+            <span className={`mr-1.5 h-2 w-2 rounded-full ${status.dotClassName}`} />
+            {status.label}
+          </span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ${source.className}`}>
+            <SourceIcon className="h-3.5 w-3.5" />
+            {source.shortLabel}
+          </span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
-          <p className="text-xs text-ios-subtext">Влага</p>
-          <p className="mt-1 text-xl font-semibold text-ios-text">{moistureLeft}%</p>
+          <p className="text-xs text-ios-subtext">Следующий полив</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{nextLabel}</p>
         </div>
         <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
-          <p className="text-xs text-ios-subtext">Полив</p>
-          <p className="mt-1 text-xl font-semibold text-ios-text">{nextLabel}</p>
+          <p className="text-xs text-ios-subtext">Интервал</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{intervalDays} дн.</p>
         </div>
+        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+          <p className="text-xs text-ios-subtext">Объём</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{waterMl} мл</p>
+        </div>
+        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+          <p className="text-xs text-ios-subtext">Режим</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{wateringMode}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-ios-border/55 bg-white/70 p-3 dark:bg-zinc-900/55">
+        <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
+          {plant.placement === 'OUTDOOR' ? 'Outdoor акценты' : 'Indoor акценты'}
+        </p>
+        <p className="mt-2 text-sm leading-5 text-ios-text">
+          {plant.placement === 'OUTDOOR'
+            ? weatherHint || `участок ${plant.containerType?.toLowerCase() ?? 'outdoor'} · ${plant.sunExposure?.toLowerCase() ?? 'свет не указан'} · ${plant.outdoorSoilType?.toLowerCase() ?? 'почва не указана'}`
+            : indoorHint || 'умеренный indoor режим с опорой на базовый профиль'}
+        </p>
       </div>
 
       <div>
@@ -457,7 +571,7 @@ function WaterStatusBlock({
       <QuickWaterButton isLoading={isLoading} isOverdue={isOverdue} onWater={onWater} onSuccess={() => undefined} />
 
       <p className="text-xs text-ios-subtext">
-        Цикл полива: {Math.max(1, plant.baseIntervalDays ?? 7)} дн.
+        Источник рекомендации показан честно: manual и fallback не маскируются под AI.
       </p>
     </section>
   );
@@ -571,6 +685,15 @@ function WateringRecommendationCard({
   const [manualWaterMl, setManualWaterMl] = useState(String(Math.max(50, plant.preferredWaterMl ?? 250)));
   const isOutdoor = plant.placement === 'OUTDOOR';
   const badge = recommendationBadge(recommendation?.source ?? null);
+  const sourceTone = getPlantSourceTone(recommendation?.source ?? plant.recommendationSource);
+  const SourceIcon = sourceTone.icon;
+  const factors = buildExplainabilityFactors(plant, recommendation);
+  const warnings = recommendation?.warnings?.filter(Boolean).slice(0, 3) ?? [];
+  const summary =
+    recommendation?.summary?.trim() ||
+    (isOutdoor
+      ? 'Режим собран из погодных условий, сезона и параметров участка.'
+      : 'Режим собран из профиля растения, условий размещения и базового интервала.');
 
   useEffect(() => {
     if (!recommendation) return;
@@ -591,11 +714,14 @@ function WateringRecommendationCard({
     >
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-ios-text">Рекомендация полива</p>
-          <p className="text-xs text-ios-subtext">Smart watering engine</p>
+          <p className="text-sm font-semibold text-ios-text">Почему такой режим</p>
+          <p className="text-xs text-ios-subtext">Короткое объяснение логики рекомендации</p>
         </div>
         <div className="inline-flex items-center gap-2">
-          <span className="rounded-full border border-ios-border/60 px-2 py-1 text-[11px] text-ios-subtext">{badge}</span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${sourceTone.className}`}>
+            <SourceIcon className="h-3.5 w-3.5" />
+            {sourceTone.shortLabel}
+          </span>
           <Button type="button" variant="ghost" className="h-11 rounded-xl px-3 text-xs" disabled={loading} onClick={onRefresh}>
             {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
             Обновить
@@ -633,60 +759,39 @@ function WateringRecommendationCard({
             ? 'border-amber-300/60 bg-amber-50/70 dark:border-amber-700/45 dark:bg-amber-950/25'
             : 'border-emerald-300/60 bg-emerald-50/70 dark:border-emerald-700/45 dark:bg-emerald-950/25'
         }`}>
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded-xl border border-current/15 bg-white/60 p-2 dark:bg-black/10">
-              Интервал: <b>{recommendation.recommendedIntervalDays} дн.</b>
-            </div>
-            <div className="rounded-xl border border-current/15 bg-white/60 p-2 dark:bg-black/10">
-              Объём: <b>{recommendation.recommendedWaterMl} мл</b>
-            </div>
-            <div className="rounded-xl border border-current/15 bg-white/60 p-2 dark:bg-black/10">
-              Режим: <b>{recommendation.wateringMode ?? 'STANDARD'}</b>
-            </div>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
-              Уверенность: {recommendation.confidence != null ? `${Math.round(recommendation.confidence * 100)}%` : 'N/A'}
+              Источник: {badge}
             </span>
             <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
-              Источники: {isOutdoor ? 'weather + model' : 'base profile + model'}
+              Режим: {humanizeWateringMode(recommendation.wateringMode)}
+            </span>
+            <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+              Интервал: {recommendation.recommendedIntervalDays} дн.
             </span>
           </div>
-          <p className="mt-2 text-sm text-ios-text">{recommendation.summary}</p>
+          <p className="mt-3 text-sm leading-6 text-ios-text">{summary}</p>
 
-          {isOutdoor ? (
-            <div className="mt-2 rounded-xl border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
-              Погодное влияние:{' '}
-              {recommendation.weatherContextPreview?.available
-                ? `${recommendation.weatherContextPreview.city || plant.region || 'регион'} · ` +
-                  `${recommendation.weatherContextPreview.temperatureNowC ?? '—'}°C · ` +
-                  `осадки ${recommendation.weatherContextPreview.precipitationForecastMm ?? '—'} мм`
-                : 'нет данных, fallback-коррекция'}
-            </div>
-          ) : (
-            <div className="mt-2 rounded-xl border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
-              Indoor-база: горшок {plant.potVolumeLiters?.toFixed(1) ?? '—'} л · тип {plant.type ?? 'DEFAULT'} · размещение {plant.placement} · базовый интервал {Math.max(1, plant.baseIntervalDays ?? 7)} дн.
-            </div>
-          )}
-          <div className="mt-2 rounded-xl border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
-            Почему такой режим: {isOutdoor
-              ? 'учтены температура, осадки, влажность и сезон.'
-              : 'учтены тип растения, объём горшка, размещение и сезон.'}
+          <div className="mt-3 rounded-xl border border-current/15 bg-white/60 p-3 dark:bg-black/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Факторы влияния</p>
+            <ul className="mt-2 space-y-1.5 text-sm text-ios-text">
+              {factors.map((item, idx) => (
+                <li key={`${item}-${idx}`} className="leading-5">
+                  • {item}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          {recommendation.reasoning?.length ? (
-            <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
-              {recommendation.reasoning.map((item, idx) => (
-                <li key={`${item}-${idx}`}>• {item}</li>
-              ))}
-            </ul>
-          ) : null}
-          {recommendation.warnings?.length ? (
-            <ul className="mt-2 space-y-1 text-xs text-amber-700 dark:text-amber-300">
-              {recommendation.warnings.map((item, idx) => (
-                <li key={`${item}-${idx}`}>• {item}</li>
-              ))}
-            </ul>
+          {warnings.length ? (
+            <div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-50/70 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Важные замечания</p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-100">
+                {warnings.map((item, idx) => (
+                  <li key={`${item}-${idx}`}>• {item}</li>
+                ))}
+              </ul>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -739,20 +844,54 @@ function WateringRecommendationCard({
 
 function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
   return (
-    <section className="rounded-3xl border border-red-300/50 bg-red-50/60 p-4 dark:border-red-700/40 dark:bg-red-950/25">
-      <p className="text-sm font-semibold text-red-700 dark:text-red-300">Опасная зона</p>
-      <p className="mt-1 text-xs text-red-600/90 dark:text-red-200/90">
-        Удаление стирает растение, фото роста и связанную историю.
+    <section className="rounded-3xl border border-ios-border/60 bg-white/70 p-4 dark:bg-zinc-950/55">
+      <p className="text-sm font-semibold text-ios-text">Управление растением</p>
+      <p className="mt-1 text-xs text-ios-subtext">
+        Редкое действие. Удаление стирает растение, фото роста и связанную историю.
       </p>
       <Button
         type="button"
         variant="ghost"
-        className="mt-3 h-11 w-full rounded-2xl border border-red-300/70 bg-red-50/70 px-3 text-red-600 hover:bg-red-100/70 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300"
+        className="mt-3 h-11 w-full rounded-2xl border border-red-200/70 bg-red-50/40 px-3 text-red-600 hover:bg-red-100/60 dark:border-red-800/50 dark:bg-red-950/20 dark:text-red-300"
         onClick={onDeleteClick}
       >
         <Trash2 className="mr-2 h-4 w-4" />
         Удалить растение
       </Button>
+    </section>
+  );
+}
+
+function RecommendationHistorySection({
+  plant,
+  recommendation
+}: {
+  plant: PlantDto;
+  recommendation: WateringRecommendationPreviewDto | null;
+}) {
+  const updatedAt = formatRecommendationMoment(plant.recommendationGeneratedAt);
+  const source = recommendationBadge(recommendation?.source ?? plant.recommendationSource ?? null);
+  const summary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'Последняя рекомендация сохранена для следующего обновления.';
+
+  return (
+    <section className="rounded-3xl border border-ios-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/55">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-ios-text">История рекомендаций</p>
+          <p className="mt-1 text-xs text-ios-subtext">Пока показываем последний сохранённый срез. Полная история будет здесь же.</p>
+        </div>
+        <span className="rounded-full border border-ios-border/60 px-2.5 py-1 text-[11px] text-ios-subtext">{source}</span>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-ios-border/55 bg-white/70 p-3 dark:bg-zinc-900/45">
+        <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">Последняя рекомендация</p>
+        <p className="mt-2 text-sm leading-5 text-ios-text">{summary}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+          <span className="rounded-full border border-ios-border/55 px-2 py-1">Интервал: {plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7} дн.</span>
+          <span className="rounded-full border border-ios-border/55 px-2 py-1">Объём: {plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250} мл</span>
+          {updatedAt ? <span className="rounded-full border border-ios-border/55 px-2 py-1">Обновлено: {updatedAt}</span> : null}
+        </div>
+      </div>
     </section>
   );
 }

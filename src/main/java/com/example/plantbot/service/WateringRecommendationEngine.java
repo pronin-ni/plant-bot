@@ -100,11 +100,12 @@ public class WateringRecommendationEngine {
           ? RecommendationSource.WEATHER_ADJUSTED
           : RecommendationSource.BASE_PROFILE;
       double confidence = weatherAdjustedValues.changed() ? 0.68 : 0.58;
+      confidence = adjustConfidenceForWeather(confidence, env, weatherContext);
       return asResponse(withOptionalSensors, env, source, confidence, sensorContext, weatherContext);
     }
 
     if (mode == RecommendationMode.HEURISTIC) {
-      return asResponse(withOptionalSensors, env, RecommendationSource.HEURISTIC, 0.62, sensorContext, weatherContext);
+      return asResponse(withOptionalSensors, env, RecommendationSource.HEURISTIC, adjustConfidenceForWeather(0.62, env, weatherContext), sensorContext, weatherContext);
     }
 
     if (mode == RecommendationMode.FALLBACK) {
@@ -115,7 +116,7 @@ public class WateringRecommendationEngine {
     Optional<Recommendation> aiRecommendation = buildAi(user, env, request, weatherContext, sensorContext);
     if (mode == RecommendationMode.AI) {
       if (aiRecommendation.isPresent()) {
-        return asResponse(aiRecommendation.get(), env, RecommendationSource.AI, 0.84, sensorContext, weatherContext);
+        return asResponse(aiRecommendation.get(), env, RecommendationSource.AI, adjustConfidenceForWeather(0.84, env, weatherContext), sensorContext, weatherContext);
       }
       Recommendation fallback = withOptionalSensors
           .withSummary("AI недоступен, использован fallback-расчёт.")
@@ -126,7 +127,7 @@ public class WateringRecommendationEngine {
     // HYBRID (default): AI + базовая модель (weather/season aware), либо fallback.
     if (aiRecommendation.isPresent()) {
       Recommendation hybrid = blend(aiRecommendation.get(), withOptionalSensors, env);
-      return asResponse(hybrid, env, RecommendationSource.HYBRID, 0.78, sensorContext, weatherContext);
+      return asResponse(hybrid, env, RecommendationSource.HYBRID, adjustConfidenceForWeather(0.78, env, weatherContext), sensorContext, weatherContext);
     }
 
     Recommendation fallback = withOptionalSensors
@@ -235,22 +236,43 @@ public class WateringRecommendationEngine {
     if ((rain24h != null && rain24h >= 6.0) || (forecastRain != null && forecastRain >= 8.0)) {
       interval = clamp(interval + 2, 1, 30);
       waterMl = clamp((int) Math.round(waterMl * 0.82), 100, 8000);
-      reasoning.add("Weather adjustment: дождь/высокие осадки -> полив отложен.");
+      if (rain24h != null && rain24h >= 6.0) {
+        reasoning.add(String.format("За последние 24 часа выпало %.1f мм осадков — полив можно отложить.", rain24h));
+      } else {
+        reasoning.add(String.format("В ближайшие дни ожидается около %.1f мм осадков — полив без спешки.", forecastRain));
+      }
       changed = true;
     }
 
     if ((tempNow != null && tempNow >= 30.0) || (tempMax3d != null && tempMax3d >= 32.0)) {
       interval = clamp(interval - 1, 1, 30);
       waterMl = clamp((int) Math.round(waterMl * 1.15), 100, 8000);
-      reasoning.add("Weather adjustment: жара -> интервал сокращён, объём увеличен.");
+      if (tempMax3d != null && tempMax3d >= 32.0) {
+        reasoning.add(String.format("Ожидается жара до %.0f°C — интервал сокращён, объём увеличен.", tempMax3d));
+      } else {
+        reasoning.add(String.format("Сейчас жарко (%.0f°C) — интервал сокращён, объём увеличен.", tempNow));
+      }
       changed = true;
     }
 
     if (tempNow != null && tempNow <= 12.0 && humidity != null && humidity >= 75.0) {
       interval = clamp(interval + 1, 1, 30);
       waterMl = clamp((int) Math.round(waterMl * 0.90), 100, 8000);
-      reasoning.add("Weather adjustment: прохлада + влажность -> интервал увеличен.");
+      reasoning.add("Сейчас прохладно и влажно — полив можно немного отложить.");
       changed = true;
+    }
+
+    if (!changed && rain24h != null && rain24h <= 1.0 && (forecastRain == null || forecastRain <= 2.0)) {
+      reasoning.add(String.format("Дождя почти не было: %.1f мм за 24 часа, поэтому сохраняем более сухой outdoor-режим.", rain24h));
+    }
+
+    if (weatherContext.fallbackUsed()) {
+      warnings.add(weatherContext.staleFallbackUsed()
+          ? "Погодный контекст взят из сохранённого кэша, рекомендации могут быть менее точными."
+          : "Использован резервный погодный источник.");
+    }
+    if (weatherContext.degraded()) {
+      warnings.add("Погодный контекст частично недоступен, рекомендация использует degraded outdoor mode.");
     }
 
     warnings.addAll(weatherContext.warnings());
@@ -435,6 +457,10 @@ public class WateringRecommendationEngine {
     if (!weatherContext.available()) {
       return new WeatherContextPreviewResponse(
           false,
+          weatherContext.degraded(),
+          weatherContext.fallbackUsed(),
+          weatherContext.staleFallbackUsed(),
+          weatherContext.providerUsed() == null ? null : weatherContext.providerUsed().name(),
           weatherContext.city(),
           weatherContext.region(),
           null,
@@ -449,6 +475,10 @@ public class WateringRecommendationEngine {
     }
     return new WeatherContextPreviewResponse(
         true,
+        weatherContext.degraded(),
+        weatherContext.fallbackUsed(),
+        weatherContext.staleFallbackUsed(),
+        weatherContext.providerUsed() == null ? null : weatherContext.providerUsed().name(),
         weatherContext.city(),
         weatherContext.region(),
         weatherContext.temperatureNowC(),
@@ -460,6 +490,25 @@ public class WateringRecommendationEngine {
         weatherContext.confidence().name(),
         weatherContext.warnings()
     );
+  }
+
+  private double adjustConfidenceForWeather(double baseConfidence,
+                                            PlantEnvironmentType env,
+                                            NormalizedWeatherContext weatherContext) {
+    if (env == PlantEnvironmentType.INDOOR) {
+      return baseConfidence;
+    }
+    double adjusted = baseConfidence;
+    if (!weatherContext.available()) {
+      adjusted -= 0.12;
+    }
+    if (weatherContext.fallbackUsed()) {
+      adjusted -= weatherContext.staleFallbackUsed() ? 0.12 : 0.06;
+    }
+    if (weatherContext.degraded()) {
+      adjusted -= 0.08;
+    }
+    return Math.max(0.25, Math.min(0.95, adjusted));
   }
 
   private boolean isValidByProfile(PlantEnvironmentType env, int interval, int waterMl) {

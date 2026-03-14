@@ -25,16 +25,22 @@ export function CategoryTabs({
   onChange: (next: PlantCategoryFilter) => void;
 }) {
   return (
-    <div className="ios-blur-card p-1.5">
+    <motion.div
+      className="ios-blur-card rounded-[24px] p-1.5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+    >
       <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
         {TABS.map((tab) => {
           const active = tab.key === value;
           const Icon = tab.icon;
           return (
-            <button
+            <motion.button
               key={tab.key}
               type="button"
               onClick={() => onChange(tab.key)}
+              whileTap={{ scale: 0.97 }}
               className={cn(
                 'touch-target relative min-h-11 shrink-0 rounded-ios-button px-3 py-2.5 text-[13px] font-medium transition-colors',
                 active ? 'text-ios-text' : 'text-ios-subtext'
@@ -43,7 +49,7 @@ export function CategoryTabs({
               {active ? (
                 <motion.span
                   layoutId="plants-category-tab-indicator"
-                  className="absolute inset-0 rounded-ios-button bg-white/85 shadow-ios dark:bg-zinc-900/75"
+                  className="absolute inset-0 rounded-ios-button bg-white/90 shadow-[0_10px_26px_rgba(15,23,42,0.09)] dark:bg-zinc-900/80"
                   transition={{ type: 'spring', stiffness: 360, damping: 30, mass: 1 }}
                 />
               ) : null}
@@ -51,10 +57,10 @@ export function CategoryTabs({
                 <Icon className="h-3.5 w-3.5" />
                 {tab.label}
               </span>
-            </button>
+            </motion.button>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }
