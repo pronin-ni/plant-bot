@@ -63,8 +63,25 @@ public class OpenRouterVisionService {
 
   public OpenRouterIdentifyResponse identifyPlant(User user, String imageBase64) {
     validateImage(imageBase64);
-    String modelToUse = resolveIdentifyModel(user);
-    JsonNode payload = callOpenRouter(user, modelToUse, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
+    JsonNode payload = null;
+    String modelToUse = null;
+    ResponseStatusException lastError = null;
+    for (String candidate : resolveIdentifyModelCandidates(user)) {
+      try {
+        payload = callOpenRouter(user, candidate, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
+        modelToUse = candidate;
+        break;
+      } catch (ResponseStatusException ex) {
+        lastError = ex;
+        log.warn("OpenRouter identify failed for model='{}': {}", candidate, ex.getReason());
+      }
+    }
+    if (payload == null) {
+      if (lastError != null) {
+        throw lastError;
+      }
+      throw new ResponseStatusException(BAD_GATEWAY, "Не удалось выполнить распознавание растения");
+    }
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -115,8 +132,25 @@ public class OpenRouterVisionService {
       throw new ResponseStatusException(BAD_REQUEST, "plantName обязателен");
     }
 
-    String modelToUse = resolveDiagnoseModel(user);
-    JsonNode payload = callOpenRouter(user, modelToUse, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
+    JsonNode payload = null;
+    String modelToUse = null;
+    ResponseStatusException lastError = null;
+    for (String candidate : resolveDiagnoseModelCandidates(user)) {
+      try {
+        payload = callOpenRouter(user, candidate, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
+        modelToUse = candidate;
+        break;
+      } catch (ResponseStatusException ex) {
+        lastError = ex;
+        log.warn("OpenRouter diagnose failed for model='{}': {}", candidate, ex.getReason());
+      }
+    }
+    if (payload == null) {
+      if (lastError != null) {
+        throw lastError;
+      }
+      throw new ResponseStatusException(BAD_GATEWAY, "Не удалось выполнить диагностику растения");
+    }
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -278,6 +312,16 @@ public class OpenRouterVisionService {
     return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
   }
 
+  private List<String> resolveIdentifyModelCandidates(User user) {
+    List<String> candidates = new ArrayList<>();
+    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
+    addCandidate(candidates, photoIdentifyModel);
+    addCandidate(candidates, plantModel);
+    addCandidate(candidates, fallbackModel);
+    addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    return candidates;
+  }
+
   private String resolveDiagnoseModel(User user) {
     // OR3: модель для диагностики берём из глобальных настроек.
     String globalDiagnose = openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel();
@@ -301,6 +345,29 @@ public class OpenRouterVisionService {
       return normalizeModelId(fallbackModel);
     }
     return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
+  }
+
+  private List<String> resolveDiagnoseModelCandidates(User user) {
+    List<String> candidates = new ArrayList<>();
+    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel());
+    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
+    addCandidate(candidates, photoDiagnoseModel);
+    addCandidate(candidates, photoIdentifyModel);
+    addCandidate(candidates, plantModel);
+    addCandidate(candidates, fallbackModel);
+    addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    return candidates;
+  }
+
+  private void addCandidate(List<String> candidates, String raw) {
+    String normalized = normalizeModelId(raw);
+    if (normalized == null || normalized.isBlank()) {
+      return;
+    }
+    boolean exists = candidates.stream().anyMatch(item -> item.equalsIgnoreCase(normalized));
+    if (!exists) {
+      candidates.add(normalized);
+    }
   }
 
   private String normalizeModelId(String raw) {

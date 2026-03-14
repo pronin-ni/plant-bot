@@ -206,7 +206,7 @@ function buildFallbackRecommendation(environmentType: EnvironmentType, interval:
 function normalizeRecommendationText(value: string): string {
   return value
     .replace(/^HYBRID:/, 'Гибридный режим:')
-    .replace(/^Профиль:\s*INDOOR$/, 'Профиль: indoor')
+    .replace(/^Профиль:\s*INDOOR$/, 'Профиль: домашнее растение')
     .replace(/^Профиль:\s*OUTDOOR_ORNAMENTAL$/, 'Профиль: уличное декоративное')
     .replace(/^Профиль:\s*OUTDOOR_GARDEN$/, 'Профиль: уличное садовое')
     .replace(/\bDEFAULT\b/g, 'обычное')
@@ -1063,7 +1063,7 @@ export function WizardAddPlant() {
                             ? `Погода доступна: ${weatherContextPreview.city || region || 'город не указан'}`
                             : 'Погодный контекст недоступен'}
                           description={weatherContextPreview.available
-                            ? `Confidence: ${weatherContextPreview.confidence || 'N/A'}`
+                            ? `Уверенность: ${weatherContextPreview.confidence || 'н/д'}`
                             : 'Будет использован fallback без погодных корректировок.'}
                         />
                         {weatherContextPreview.available ? (
@@ -1429,7 +1429,7 @@ export function WizardAddPlant() {
                 <InfoChip
                   label="Контекст сенсоров"
                   value={latestRecommendationPreview?.sensorContext?.available
-                    ? `HA · ${latestRecommendationPreview.sensorContext.roomName || 'комната не выбрана'} · confidence ${latestRecommendationPreview.sensorContext.confidence}`
+                    ? `HA · ${latestRecommendationPreview.sensorContext.roomName || 'комната не выбрана'} · уверенность ${latestRecommendationPreview.sensorContext.confidence}`
                     : 'Без HA контекста'}
                 />
                 <InfoChip
@@ -1695,7 +1695,7 @@ function RecommendationCard({
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
         <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
-          Уверенность: {confidence != null ? `${Math.round(confidence * 100)}%` : 'N/A'}
+          Уверенность: {confidence != null ? `${Math.round(confidence * 100)}%` : 'н/д'}
         </span>
         <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
           Погода: {weatherUsed ? 'учтена' : 'не основной фактор'}
@@ -1704,7 +1704,7 @@ function RecommendationCard({
       {sensorContext?.available ? (
         <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
           HA: {sensorContext.roomName || 'комната не выбрана'}
-          {sensorContext.confidence ? ` · confidence ${sensorContext.confidence}` : ''}
+          {sensorContext.confidence ? ` · уверенность ${sensorContext.confidence}` : ''}
         </div>
       ) : null}
       {environmentType !== 'INDOOR' ? (
@@ -1716,7 +1716,7 @@ function RecommendationCard({
         </div>
       ) : (
         <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
-          Базовый indoor контекст: {indoorContext.potVolumeLiters.toFixed(1)} л · {normalizeRecommendationText(indoorContext.plantType)} · интервал {indoorContext.baseIntervalDays} дн.
+          Базовый домашний контекст: {indoorContext.potVolumeLiters.toFixed(1)} л · {normalizeRecommendationText(indoorContext.plantType)} · интервал {indoorContext.baseIntervalDays} дн.
         </div>
       )}
       <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">

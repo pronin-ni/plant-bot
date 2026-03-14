@@ -4,6 +4,7 @@ import com.example.plantbot.bot.PlantTelegramBot;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
@@ -20,6 +21,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TelegramConfig {
   private final PlantTelegramBot plantTelegramBot;
+
+  @Value("${telegram.bot.fail-fast:false}")
+  private boolean failFast;
 
   @PostConstruct
   public void registerBot() {
@@ -38,7 +42,11 @@ public class TelegramConfig {
       botsApi.registerBot(plantTelegramBot);
       log.info("Telegram bot registered: {}", username);
     } catch (Exception ex) {
-      throw new IllegalStateException("Failed to register Telegram bot", ex);
+      if (failFast) {
+        throw new IllegalStateException("Failed to register Telegram bot", ex);
+      }
+      log.error("Telegram bot registration failed; backend will continue without live bot polling: {}", ex.getMessage(), ex);
+      return;
     }
     try {
       registerCommands();

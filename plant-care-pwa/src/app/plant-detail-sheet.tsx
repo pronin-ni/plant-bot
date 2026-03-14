@@ -106,6 +106,22 @@ function humanizeWateringMode(mode?: string | null): string {
   }
 }
 
+function humanizeWateringProfile(profile?: string | null): string | null {
+  const normalized = (profile ?? '').trim().toUpperCase();
+  switch (normalized) {
+    case 'INDOOR':
+      return 'домашний';
+    case 'OUTDOOR':
+      return 'уличный';
+    case 'OUTDOOR_ORNAMENTAL':
+      return 'уличный декоративный';
+    case 'OUTDOOR_GARDEN':
+      return 'садовый';
+    default:
+      return profile?.trim() ? profile.toLowerCase() : null;
+  }
+}
+
 function normalizeReasoningItem(item: string): string {
   const trimmed = item.trim();
   if (!trimmed) {
@@ -158,7 +174,7 @@ function buildExplainabilityFactors(
     plant.type ? `тип растения: ${plant.type.toLowerCase()}` : 'учтён тип растения',
     plant.potVolumeLiters != null ? `горшок: ${plant.potVolumeLiters.toFixed(1)} л` : 'учтён объём горшка',
     plant.baseIntervalDays ? `базовый интервал: ${plant.baseIntervalDays} дн.` : 'учтён базовый интервал',
-    plant.wateringProfile ? `профиль: ${plant.wateringProfile.toLowerCase()}` : 'учтён indoor профиль'
+    humanizeWateringProfile(plant.wateringProfile) ? `профиль: ${humanizeWateringProfile(plant.wateringProfile)}` : 'учтён домашний профиль'
   ].filter(Boolean);
 }
 
@@ -524,7 +540,7 @@ function WaterStatusBlock({
     : null;
   const indoorHint = [
     plant.potVolumeLiters != null ? `горшок ${plant.potVolumeLiters.toFixed(1)} л` : null,
-    plant.wateringProfile ? `профиль ${plant.wateringProfile.toLowerCase()}` : null,
+    humanizeWateringProfile(plant.wateringProfile) ? `профиль ${humanizeWateringProfile(plant.wateringProfile)}` : null,
     plant.baseIntervalDays ? `база ${plant.baseIntervalDays} дн.` : null
   ].filter(Boolean).join(' · ');
   const wateredToday = hasWateredToday(plant);
@@ -574,12 +590,12 @@ function WaterStatusBlock({
 
       <div className="rounded-2xl border border-ios-border/55 bg-white/70 p-3 dark:bg-zinc-900/55">
         <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
-          {plant.placement === 'OUTDOOR' ? 'Outdoor акценты' : 'Indoor акценты'}
+          {plant.placement === 'OUTDOOR' ? 'Уличные акценты' : 'Домашние акценты'}
         </p>
         <p className="mt-2 text-sm leading-5 text-ios-text">
           {plant.placement === 'OUTDOOR'
-            ? weatherHint || `участок ${plant.containerType?.toLowerCase() ?? 'outdoor'} · ${plant.sunExposure?.toLowerCase() ?? 'свет не указан'} · ${plant.outdoorSoilType?.toLowerCase() ?? 'почва не указана'}`
-            : indoorHint || 'умеренный indoor режим с опорой на базовый профиль'}
+            ? weatherHint || `участок ${plant.containerType?.toLowerCase() ?? 'на улице'} · ${plant.sunExposure?.toLowerCase() ?? 'свет не указан'} · ${plant.outdoorSoilType?.toLowerCase() ?? 'почва не указана'}`
+            : indoorHint || 'умеренный домашний режим с опорой на базовый профиль'}
         </p>
       </div>
 
@@ -612,7 +628,7 @@ function WaterStatusBlock({
       ) : null}
 
       <p className="text-xs text-ios-subtext">
-        Источник рекомендации показан честно: manual и fallback не маскируются под AI.
+        Источник рекомендации показан честно: ручной режим и резервный сценарий не маскируются под AI.
       </p>
     </section>
   );

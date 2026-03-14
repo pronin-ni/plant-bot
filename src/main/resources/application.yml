@@ -116,6 +116,7 @@ scheduler:
 telegram:
   bot:
     enabled: ${TELEGRAM_BOT_ENABLED:true}
+    fail-fast: ${TELEGRAM_BOT_FAIL_FAST:false}
   auth:
     max-age-seconds: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:86400}
 

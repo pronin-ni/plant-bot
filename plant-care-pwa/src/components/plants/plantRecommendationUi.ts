@@ -30,7 +30,7 @@ export function getPlantCategoryLabel(plant: PlantDto): string {
 }
 
 export function getPlantEnvironmentLabel(plant: PlantDto): string {
-  return plant.placement === 'OUTDOOR' ? 'outdoor' : 'indoor';
+  return plant.placement === 'OUTDOOR' ? 'на улице' : 'в доме';
 }
 
 export function getPlantStatusTone(daysLeft: number, source?: PlantDto['recommendationSource']): PlantStatusTone {
@@ -77,7 +77,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
   switch (source) {
     case 'AI':
       return {
-        label: 'AI recommendation',
+        label: 'AI-рекомендация',
         shortLabel: 'AI',
         tone: 'ai',
         className: 'bg-sky-50/90 text-sky-700 ring-1 ring-sky-200/70 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-800/55',
@@ -85,32 +85,32 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
       };
     case 'WEATHER_ADJUSTED':
       return {
-        label: 'Weather-adjusted',
-        shortLabel: 'Weather',
+        label: 'С учётом погоды',
+        shortLabel: 'Погода',
         tone: 'weather',
         className: 'bg-cyan-50/90 text-cyan-700 ring-1 ring-cyan-200/70 dark:bg-cyan-950/35 dark:text-cyan-300 dark:ring-cyan-800/55',
         icon: CloudRain
       };
     case 'HYBRID':
       return {
-        label: 'AI + weather',
-        shortLabel: 'AI + Weather',
+        label: 'AI + погода',
+        shortLabel: 'AI + Погода',
         tone: 'weather',
         className: 'bg-teal-50/90 text-teal-700 ring-1 ring-teal-200/70 dark:bg-teal-950/35 dark:text-teal-300 dark:ring-teal-800/55',
         icon: Sparkles
       };
     case 'FALLBACK':
       return {
-        label: 'Fallback',
-        shortLabel: 'Fallback',
+        label: 'Резервный режим',
+        shortLabel: 'Резерв',
         tone: 'fallback',
         className: 'bg-stone-100/85 text-stone-700 ring-1 ring-stone-200/70 dark:bg-stone-900/70 dark:text-stone-200 dark:ring-stone-700/60',
         icon: UserCog
       };
     case 'MANUAL':
       return {
-        label: 'Manual',
-        shortLabel: 'Manual',
+        label: 'Вручную',
+        shortLabel: 'Вручную',
         tone: 'manual',
         className: 'bg-slate-100/85 text-slate-700 ring-1 ring-slate-200/70 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-700/60',
         icon: UserCog
@@ -119,8 +119,8 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
     case 'HEURISTIC':
     default:
       return {
-        label: 'Profile-based',
-        shortLabel: 'Profile',
+        label: 'По профилю растения',
+        shortLabel: 'Профиль',
         tone: 'profile',
         className: 'bg-emerald-50/90 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-800/55',
         icon: Sparkles
@@ -147,10 +147,10 @@ export function getPlantRecommendationHint(plant: PlantDto): string {
   }
 
   if (plant.placement === 'OUTDOOR') {
-    return 'Outdoor-профиль учитывает сезон и условия участка.';
+    return 'Уличный профиль учитывает сезон и условия участка.';
   }
 
-  return 'Умеренный indoor режим для повседневного ухода.';
+  return 'Умеренный домашний режим для повседневного ухода.';
 }
 
 export function getPlantReasonTone(source?: PlantDto['recommendationSource']): string {

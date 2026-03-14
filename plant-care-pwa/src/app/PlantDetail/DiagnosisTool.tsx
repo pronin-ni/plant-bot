@@ -20,6 +20,10 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
     onSuccess: () => hapticNotify('success'),
     onError: () => hapticNotify('error')
   });
+  const diagnosisError =
+    diagnoseMutation.isError && diagnoseMutation.error instanceof Error
+      ? diagnoseMutation.error.message
+      : 'Не удалось выполнить диагностику. Попробуйте ещё раз позже.';
 
   return (
     <div className="ios-blur-card space-y-3 p-4">
@@ -65,7 +69,7 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
 
 
       {diagnoseMutation.isError ? (
-        <p className="text-[12px] text-red-500">Не удалось выполнить диагностику. Проверьте ключ OpenRouter, модель и лимиты.</p>
+        <p className="text-[12px] text-red-500">{diagnosisError}</p>
       ) : null}
 
       {diagnoseMutation.data ? (

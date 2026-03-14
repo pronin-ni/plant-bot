@@ -130,7 +130,7 @@ export function PlantHero({
           </p>
           <h2 className="mt-2 text-[2rem] font-semibold leading-tight tracking-[-0.03em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">{plant.name}</h2>
           <p className="mt-1 max-w-[26rem] text-sm leading-5 text-white/85 drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-            {plant.placement === 'OUTDOOR' ? 'Outdoor dashboard' : 'Indoor dashboard'} · текущий режим полива и уход
+            {plant.placement === 'OUTDOOR' ? 'Уличный уход' : 'Домашний уход'} · текущий режим полива и ухода
           </p>
         </div>
       </div>

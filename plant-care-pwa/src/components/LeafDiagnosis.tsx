@@ -36,6 +36,10 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
   });
 
   const result = diagnoseMutation.data;
+  const diagnosisError =
+    diagnoseMutation.isError && diagnoseMutation.error instanceof Error
+      ? diagnoseMutation.error.message
+      : 'Не удалось выполнить диагностику. Попробуйте ещё раз позже.';
 
   return (
     <motion.section
@@ -121,7 +125,7 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
       </button>
 
       {diagnoseMutation.isError ? (
-        <p className="text-[12px] text-red-500">Не удалось выполнить диагностику. Проверьте модель OpenRouter и лимиты.</p>
+        <p className="text-[12px] text-red-500">{diagnosisError}</p>
       ) : null}
 
       {result ? (
