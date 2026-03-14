@@ -1,11 +1,12 @@
 import { BellRing, Clock3, Droplets } from 'lucide-react';
 
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import type { PlantDto } from '@/types/api';
 
 export function SmartReminderCard({ plant }: { plant: PlantDto }) {
-  const nextDate = plant.nextWateringDate ? new Date(plant.nextWateringDate) : null;
-  const today = new Date();
-  const daysLeft = nextDate ? Math.floor((nextDate.getTime() - today.getTime()) / 86_400_000) : null;
+  const nextDate = plant.nextWateringDate ? parseDateOnly(plant.nextWateringDate) : null;
+  const today = startOfLocalDay(new Date());
+  const daysLeft = nextDate ? Math.floor((startOfLocalDay(nextDate).getTime() - today.getTime()) / 86_400_000) : null;
 
   const context = (() => {
     if (daysLeft == null) {

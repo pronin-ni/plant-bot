@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { hapticImpact, hapticSelectionChanged } from '@/lib/telegram';
 import { useMotionGuard } from '@/lib/motion';
+import { startOfLocalDay, toLocalDateKey } from '@/lib/date';
 
 export interface CalendarStripEvent {
   date: string;
@@ -26,10 +27,6 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-function toDayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -44,7 +41,7 @@ export function CalendarStrip({
 }: CalendarStripProps) {
   const { reduceMotion } = useMotionGuard();
   const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStart = startOfLocalDay(today);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarStripEvent[]>();
@@ -60,9 +57,9 @@ export function CalendarStrip({
   const windowDays = useMemo(() => {
     return Array.from({ length: daysCount }, (_, index) => {
       const date = addDays(anchorDate, index);
-      const dayKey = toDayKey(date);
+      const dayKey = toLocalDateKey(date);
       const dayEvents = eventsByDay.get(dayKey) ?? [];
-      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dayStart = startOfLocalDay(date);
       const overdue = dayStart.getTime() < todayStart.getTime() && dayEvents.length > 0;
       const isToday = sameDay(dayStart, todayStart);
       return {
@@ -108,7 +105,7 @@ export function CalendarStrip({
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={toDayKey(anchorDate)}
+          key={toLocalDateKey(anchorDate)}
           className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1.5"
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}

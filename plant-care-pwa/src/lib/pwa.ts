@@ -8,6 +8,7 @@ type BeforeInstallPromptEvent = Event & {
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 let installAvailable = false;
 const installListeners = new Set<(available: boolean) => void>();
+const SERVICE_WORKER_READY_TIMEOUT_MS = 4000;
 
 function notifyInstallListeners() {
   installListeners.forEach((listener) => listener(installAvailable));
@@ -102,6 +103,24 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+export async function waitForServiceWorkerRegistration(timeoutMs = SERVICE_WORKER_READY_TIMEOUT_MS): Promise<ServiceWorkerRegistration> {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('SERVICE_WORKER_UNAVAILABLE');
+  }
+
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) {
+    return existing;
+  }
+
+  return await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('SERVICE_WORKER_TIMEOUT')), timeoutMs);
+    })
+  ]);
+}
+
 export async function ensurePushSubscription(vapidPublicKey: string): Promise<PushSubscription | null> {
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
     return null;
@@ -110,7 +129,7 @@ export async function ensurePushSubscription(vapidPublicKey: string): Promise<Pu
   if (permission !== 'granted') {
     return null;
   }
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await waitForServiceWorkerRegistration();
   const existing = await registration.pushManager.getSubscription();
   if (existing) {
     return existing;
@@ -125,7 +144,7 @@ export async function removePushSubscription(): Promise<string | null> {
   if (!('serviceWorker' in navigator)) {
     return null;
   }
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await waitForServiceWorkerRegistration();
   const existing = await registration.pushManager.getSubscription();
   if (!existing) {
     return null;

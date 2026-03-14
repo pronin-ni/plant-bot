@@ -12,14 +12,15 @@ import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plan
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
 import { apiFetch, deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useUiStore } from '@/lib/store';
 import type { PlantCareAdviceDto, PlantDto, WateringRecommendationPreviewDto } from '@/types/api';
 
 function getProgress(plant: PlantDto): number {
-  const last = new Date(plant.lastWateredDate);
+  const last = parseDateOnly(plant.lastWateredDate);
   const next = plant.nextWateringDate
-    ? new Date(plant.nextWateringDate)
+    ? parseDateOnly(plant.nextWateringDate)
     : new Date(last.getTime() + Math.max(1, plant.baseIntervalDays ?? 7) * 86_400_000);
   const now = new Date();
   const cycleDays = Math.max(1, Math.floor((next.getTime() - last.getTime()) / 86_400_000));
@@ -31,20 +32,24 @@ function getIsOverdue(plant: PlantDto): boolean {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const next = plant.nextWateringDate
-    ? new Date(plant.nextWateringDate)
-    : new Date(new Date(plant.lastWateredDate).getTime() + Math.max(1, plant.baseIntervalDays ?? 7) * 86_400_000);
+    ? parseDateOnly(plant.nextWateringDate)
+    : new Date(parseDateOnly(plant.lastWateredDate).getTime() + Math.max(1, plant.baseIntervalDays ?? 7) * 86_400_000);
   const target = new Date(next.getFullYear(), next.getMonth(), next.getDate());
   return target.getTime() < today.getTime();
 }
 
 function getNextDate(plant: PlantDto): Date {
   if (plant.nextWateringDate) {
-    return new Date(plant.nextWateringDate);
+    return parseDateOnly(plant.nextWateringDate);
   }
-  const last = new Date(plant.lastWateredDate);
+  const last = parseDateOnly(plant.lastWateredDate);
   const next = new Date(last);
   next.setDate(next.getDate() + Math.max(1, plant.baseIntervalDays ?? 7));
   return next;
+}
+
+function hasWateredToday(plant: PlantDto): boolean {
+  return startOfLocalDay(parseDateOnly(plant.lastWateredDate)).getTime() === startOfLocalDay(new Date()).getTime();
 }
 
 function normalizeAdviceText(data?: PlantCareAdviceDto | null): string | null {
@@ -75,13 +80,13 @@ function normalizeAdviceText(data?: PlantCareAdviceDto | null): string | null {
 
 function recommendationBadge(source?: string | null): string {
   const normalized = (source ?? '').toUpperCase();
-  if (!normalized) return 'N/A';
-  if (normalized.includes('WEATHER')) return 'Weather adjusted';
-  if (normalized.includes('HYBRID')) return 'Hybrid';
-  if (normalized.includes('FALLBACK') || normalized.includes('HEURISTIC') || normalized.includes('BASE')) return 'Fallback';
-  if (normalized.includes('MANUAL')) return 'Manual';
+  if (!normalized) return 'Неизвестно';
+  if (normalized.includes('WEATHER')) return 'С учётом погоды';
+  if (normalized.includes('HYBRID')) return 'Гибридный';
+  if (normalized.includes('FALLBACK') || normalized.includes('HEURISTIC') || normalized.includes('BASE')) return 'Резервный';
+  if (normalized.includes('MANUAL')) return 'Вручную';
   if (normalized.includes('AI') || normalized.includes('OPENROUTER')) return 'AI';
-  return source ?? 'N/A';
+  return source ?? 'Неизвестно';
 }
 
 function humanizeWateringMode(mode?: string | null): string {
@@ -101,13 +106,37 @@ function humanizeWateringMode(mode?: string | null): string {
   }
 }
 
+function normalizeReasoningItem(item: string): string {
+  const trimmed = item.trim();
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('HYBRID:')) {
+    return trimmed.replace('HYBRID:', 'Гибридный режим:');
+  }
+  if (trimmed.includes('DEFAULT тип')) {
+    return trimmed.replace('DEFAULT тип', 'стандартному профилю');
+  }
+  return trimmed;
+}
+
+function formatAiAdviceSource(source: string | null): string {
+  if (!source) {
+    return 'AI';
+  }
+  if (source.toLowerCase().startsWith('openrouter:')) {
+    return 'AI через OpenRouter';
+  }
+  return source;
+}
+
 function buildExplainabilityFactors(
   plant: PlantDto,
   recommendation: WateringRecommendationPreviewDto | null
 ): string[] {
   if (recommendation?.reasoning?.length) {
     return recommendation.reasoning
-      .map((item) => item.trim())
+      .map(normalizeReasoningItem)
       .filter(Boolean)
       .slice(0, 4);
   }
@@ -199,7 +228,7 @@ export function PlantDetailSheet() {
           source: 'MANUAL',
           recommendedIntervalDays: intervalDays,
           recommendedWaterMl: waterMl,
-          summary: 'Manual override from plant detail card.'
+          summary: 'Ручная настройка из карточки растения.'
         })
       }),
     onSuccess: async () => {
@@ -498,6 +527,7 @@ function WaterStatusBlock({
     plant.wateringProfile ? `профиль ${plant.wateringProfile.toLowerCase()}` : null,
     plant.baseIntervalDays ? `база ${plant.baseIntervalDays} дн.` : null
   ].filter(Boolean).join(' · ');
+  const wateredToday = hasWateredToday(plant);
 
   return (
     <section className={`space-y-4 rounded-3xl border bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75 ${status.borderClassName}`}>
@@ -538,7 +568,7 @@ function WaterStatusBlock({
         </div>
         <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
           <p className="text-xs text-ios-subtext">Режим</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{wateringMode}</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{humanizeWateringMode(wateringMode)}</p>
         </div>
       </div>
 
@@ -568,7 +598,18 @@ function WaterStatusBlock({
         </div>
       </div>
 
-      <QuickWaterButton isLoading={isLoading} isOverdue={isOverdue} onWater={onWater} onSuccess={() => undefined} />
+      <QuickWaterButton
+        isLoading={isLoading}
+        isOverdue={isOverdue}
+        disabled={wateredToday}
+        disabledLabel="Сегодня уже отмечено"
+        onWater={onWater}
+        onSuccess={() => undefined}
+      />
+
+      {wateredToday ? (
+        <p className="text-xs text-ios-subtext">Полив уже отмечен сегодня. Повторное нажатие не изменит график.</p>
+      ) : null}
 
       <p className="text-xs text-ios-subtext">
         Источник рекомендации показан честно: manual и fallback не маскируются под AI.
@@ -636,7 +677,7 @@ function AIAdviceCard({
         <div className="rounded-2xl border border-emerald-300/50 bg-emerald-50/75 p-3 dark:border-emerald-700/40 dark:bg-emerald-950/25">
           <p className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
             <Bot className="h-4 w-4" />
-            Источник: {source ?? 'OpenRouter'}
+            Источник: {formatAiAdviceSource(source)}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ios-text">{advice}</p>
         </div>
@@ -797,7 +838,7 @@ function WateringRecommendationCard({
       ) : null}
 
       <div className="rounded-2xl border border-ios-border/50 bg-white/70 p-3 dark:bg-zinc-900/55">
-        <p className="text-xs font-medium text-ios-text">Manual override</p>
+        <p className="text-xs font-medium text-ios-text">Ручная настройка</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <input
             type="number"

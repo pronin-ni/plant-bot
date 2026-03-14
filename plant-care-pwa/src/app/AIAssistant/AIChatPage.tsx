@@ -113,12 +113,48 @@ function trimMessages(messages: ChatMessageItem[]): ChatMessageItem[] {
   return messages.slice(-MAX_LOCAL_MESSAGES);
 }
 
-function mergeMessages(current: ChatMessageItem[], incoming: ChatMessageItem[]): ChatMessageItem[] {
-  const mergedMap = new Map<string, ChatMessageItem>();
-  for (const item of [...current, ...incoming]) {
-    mergedMap.set(item.id, item);
+function messageFingerprint(message: ChatMessageItem): string {
+  return [
+    message.author,
+    message.text.trim(),
+    message.imageUrl ?? '',
+    message.model ?? ''
+  ].join('::');
+}
+
+function isNearDuplicate(left: ChatMessageItem, right: ChatMessageItem): boolean {
+  if (messageFingerprint(left) !== messageFingerprint(right)) {
+    return false;
   }
-  return trimMessages(sortByCreatedAt(Array.from(mergedMap.values())));
+
+  if (!left.createdAt || !right.createdAt) {
+    return true;
+  }
+
+  const leftTs = Date.parse(left.createdAt);
+  const rightTs = Date.parse(right.createdAt);
+  if (Number.isNaN(leftTs) || Number.isNaN(rightTs)) {
+    return true;
+  }
+
+  return Math.abs(leftTs - rightTs) <= 120_000;
+}
+
+function mergeMessages(current: ChatMessageItem[], incoming: ChatMessageItem[]): ChatMessageItem[] {
+  const merged: ChatMessageItem[] = [];
+  for (const item of [...current, ...incoming]) {
+    const duplicateIndex = merged.findIndex((existing) => isNearDuplicate(existing, item));
+    if (duplicateIndex >= 0) {
+      merged[duplicateIndex] = {
+        ...merged[duplicateIndex],
+        ...item,
+        id: merged[duplicateIndex].id
+      };
+      continue;
+    }
+    merged.push(item);
+  }
+  return trimMessages(sortByCreatedAt(merged));
 }
 
 async function loadLocalMessages(): Promise<ChatMessageItem[]> {

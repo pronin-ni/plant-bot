@@ -13,7 +13,9 @@ export async function fetchOpenMeteoCities(query: string, signal?: AbortSignal):
     const url = `https://geocoding-api.open-meteo.com/v1/search?count=5&language=ru&name=${encodeURIComponent(query.trim())}`;
     const response = await fetch(url, { signal });
     const payload = (await response.json()) as { results?: Array<{ name: string; country?: string }> };
-    return (payload.results ?? []).map((item) => (item.country ? `${item.name}, ${item.country}` : item.name));
+    return Array.from(
+      new Set((payload.results ?? []).map((item) => (item.country ? `${item.name}, ${item.country}` : item.name)))
+    );
   } catch {
     return [];
   }

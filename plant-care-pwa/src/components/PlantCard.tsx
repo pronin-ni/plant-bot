@@ -10,6 +10,7 @@ import {
   getPlantSourceTone,
   getPlantStatusTone
 } from '@/components/plants/plantRecommendationUi';
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import type { PlantDto } from '@/types/api';
 
 interface PlantCardProps {
@@ -44,6 +45,13 @@ function nextWateringLabel(daysLeft: number, nextWateringText: string): string {
     .replace(/^Просрочено\s+/i, '');
 }
 
+function hasWateredToday(plant: PlantDto): boolean {
+  if (!plant.lastWateredDate) {
+    return false;
+  }
+  return startOfLocalDay(parseDateOnly(plant.lastWateredDate)).getTime() === startOfLocalDay(new Date()).getTime();
+}
+
 export function PlantCard({
   plant,
   progress,
@@ -59,6 +67,7 @@ export function PlantCard({
   const hint = getPlantRecommendationHint(plant);
   const cycleProgress = Math.max(8, Math.min(100, Math.round(progress)));
   const hintTone = getPlantReasonTone(plant.recommendationSource);
+  const wateredToday = hasWateredToday(plant);
 
   return (
     <motion.article
@@ -145,7 +154,13 @@ export function PlantCard({
           e.stopPropagation();
         }}
       >
-        <QuickWaterButton isLoading={isWatering} isOverdue={daysLeft <= 0} onWater={onWater} />
+        <QuickWaterButton
+          isLoading={isWatering}
+          isOverdue={daysLeft <= 0}
+          disabled={wateredToday}
+          disabledLabel="Уже полито сегодня"
+          onWater={onWater}
+        />
       </div>
     </motion.article>
   );

@@ -25,6 +25,18 @@ export function WeatherPanel() {
   const [status, setStatus] = useState<string>('');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
+  const normalizeStatusMessage = (value?: string | null) => {
+    const raw = value?.trim();
+    if (!raw) {
+      return null;
+    }
+    const technicalStatuses = new Set(['provider-success', 'provider-fallback', 'stale-cache', 'degraded']);
+    if (technicalStatuses.has(raw.toLowerCase())) {
+      return null;
+    }
+    return raw;
+  };
+
   const syncAuthCity = (payload: { userId?: string; username?: string; firstName?: string; city?: string; isAdmin?: boolean; ok?: boolean }) => {
     const currentAuth = useAuthStore.getState();
     setAuth({
@@ -36,7 +48,8 @@ export function WeatherPanel() {
       isAdmin: payload.isAdmin ?? currentAuth.isAdmin,
       roles: currentAuth.roles,
       accessToken: currentAuth.accessToken,
-      isAuthorized: payload.ok ?? currentAuth.isAuthorized
+      isAuthorized: payload.ok ?? currentAuth.isAuthorized,
+      isGuest: currentAuth.isGuest
     });
   };
 
@@ -180,7 +193,9 @@ export function WeatherPanel() {
               <span>{forecast?.days?.length ? `${forecast.days.length} дн. прогноза` : 'Прогноз готовится'}</span>
               <span>{lastUpdatedAt ? `Обновлено в ${lastUpdatedAt}` : 'Ещё не обновлялось'}</span>
             </div>
-            {current.statusMessage ? <p className="mt-2 text-[11px] text-ios-subtext">{current.statusMessage}</p> : null}
+            {normalizeStatusMessage(current.statusMessage) ? (
+              <p className="mt-2 text-[11px] text-ios-subtext">{normalizeStatusMessage(current.statusMessage)}</p>
+            ) : null}
           </div>
         ) : null}
 

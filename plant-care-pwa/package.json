@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:audit": "VITE_TEST_AUDIT_MODE=true VITE_API_BASE_URL=http://localhost:8080 VITE_BASE_PATH=/ vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "pwa:generate": "vite build"

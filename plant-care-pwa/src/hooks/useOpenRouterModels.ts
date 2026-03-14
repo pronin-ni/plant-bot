@@ -29,22 +29,23 @@ function normalizeModelId(value: string | null | undefined): string {
 // ORB4: загружаем глобальные модели на старте и сохраняем в клиентском сторе.
 export function useOpenRouterModels() {
   const isAuthorized = useAuthStore((s) => s.isAuthorized);
+  const isGuest = useAuthStore((s) => s.isGuest);
   const setModels = useOpenRouterModelsStore((s) => s.setModels);
   const resetToDefault = useOpenRouterModelsStore((s) => s.resetToDefault);
 
   const modelsQuery = useQuery({
     queryKey: ['openrouter-global-models', 'runtime'],
     queryFn: fetchOpenRouterRuntimeSettings,
-    enabled: isAuthorized,
+    enabled: isAuthorized && !isGuest,
     staleTime: 60_000,
     retry: 1
   });
 
   useEffect(() => {
-    if (!isAuthorized) {
+    if (!isAuthorized || isGuest) {
       resetToDefault();
     }
-  }, [isAuthorized, resetToDefault]);
+  }, [isAuthorized, isGuest, resetToDefault]);
 
   useEffect(() => {
     if (!modelsQuery.data) {

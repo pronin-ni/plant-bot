@@ -153,11 +153,12 @@ public class ResendEmailService implements EmailService {
       return autoResolved;
     }
 
-    if (configuredFrom != null) {
+    if (configuredFrom != null && !shouldAutoResolve(configuredFrom)) {
       return configuredFrom;
     }
 
-    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Не удалось определить resend.from-email автоматически");
+    log.warn("Resend auto from resolution unavailable, using fallback sender resend-default@resend.dev");
+    return "resend-default@resend.dev";
   }
 
   private boolean shouldAutoResolve(String configuredFrom) {
@@ -202,7 +203,9 @@ public class ResendEmailService implements EmailService {
           .bodyToMono(JsonNode.class)
           .block(REQUEST_TIMEOUT);
     } catch (ResponseStatusException ex) {
-      throw ex;
+      log.warn("Resend domains request rejected, fallback sender will be used: status={}, message={}",
+          ex.getStatusCode().value(), ex.getReason());
+      return null;
     } catch (Exception ex) {
       log.warn("Resend domains request error: {}", ex.getMessage());
       return null;

@@ -13,6 +13,7 @@ import { QuickTip } from '@/components/QuickTip';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
 import { cacheSet } from '@/lib/indexeddb';
 import { pwaLoginTelegram, pwaLoginTelegramWidget, pwaRequestEmailMagicLink, pwaVerifyEmailMagicLink } from '@/lib/api';
+import { isTestAuditMode } from '@/lib/runtime';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import type { CalendarEventDto, PlantDto } from '@/types/api';
@@ -23,11 +24,13 @@ type LoginTheme = 'dark' | 'light';
 type LoginSuccessOverlay = { title: string; subtitle: string } | null;
 type AuthSuccessPayload = {
   isAuthorized: boolean;
+  isGuest?: boolean;
   accessToken?: string;
   telegramUserId?: number;
   username?: string;
   firstName?: string;
   email?: string;
+  city?: string;
   roles?: string[];
   isAdmin?: boolean;
 };
@@ -250,6 +253,7 @@ export function LoginScreen() {
   const magicLinkTokenFromUrl = useMemo(() => getMagicLinkTokenFromUrl(), []);
   const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const testAuditMode = isTestAuditMode();
 
   const scheduleAuthSuccess = (payload: AuthSuccessPayload, subtitle: string) => {
     if (successTimerRef.current) {
@@ -260,7 +264,6 @@ export function LoginScreen() {
       subtitle
     });
     hapticImpact('heavy');
-    navigator.vibrate?.([80, 40, 140]);
 
     successTimerRef.current = window.setTimeout(() => {
       useAuthStore.getState().setAuth(payload);
@@ -422,7 +425,6 @@ export function LoginScreen() {
   useEffect(() => {
     // Приветственный haptic-паттерн для логин-экрана.
     hapticImpact('light');
-    navigator.vibrate?.([50, 100, 50, 100]);
   }, []);
 
   useEffect(() => {
@@ -443,14 +445,22 @@ export function LoginScreen() {
   }, []);
 
   const activateGuestMode = async () => {
+    if (testAuditMode) {
+      setLoginError('Demo mode отключён для test audit. Используйте реальную авторизацию.');
+      hapticNotify('warning');
+      return;
+    }
+
     const demoPlants = createDemoPlants();
     await cacheSet('api:cache:/api/plants', demoPlants);
     await cacheSet('api:cache:/api/calendar', createDemoCalendar(demoPlants));
 
     scheduleAuthSuccess({
       isAuthorized: true,
+      isGuest: true,
       username: 'guest_demo',
       firstName: 'Гость',
+      city: 'Санкт-Петербург',
       roles: [],
       isAdmin: false
     }, 'Демо-режим активирован');
@@ -462,7 +472,8 @@ export function LoginScreen() {
     hapticImpact('light');
   };
 
-  const isMagicLinkVerifying = magicLinkVerifyState === 'running' || magicLinkVerifyMutation.isPending;
+  // Опираемся на явный state, чтобы UI гарантированно разблокировался после ошибки verify.
+  const isMagicLinkVerifying = magicLinkVerifyState === 'running';
 
   const submitMagicLink = () => {
     if (isMagicLinkVerifying) {
@@ -604,7 +615,7 @@ export function LoginScreen() {
               transition={{ type: 'spring', stiffness: 300, damping: 24 }}
               className="mt-3 rounded-2xl border border-amber-400/35 bg-amber-400/12 px-3 py-2 text-xs text-amber-100"
             >
-              Оффлайн: вход через провайдеры временно недоступен. Можно продолжить в демо-режиме.
+              Оффлайн: вход через провайдеры временно недоступен.
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -653,7 +664,7 @@ export function LoginScreen() {
         transition={{ type: 'spring', stiffness: 320, damping: 28, delay: 0.14 }}
         className="space-y-3"
       >
-        <GuestModeButton onActivate={activateGuestMode} isOffline={isOffline} />
+        {!testAuditMode ? <GuestModeButton onActivate={activateGuestMode} isOffline={isOffline} /> : null}
         <QuickTip />
         <PrivacyNote />
       </motion.div>

@@ -40,6 +40,19 @@ export function getTelegramInitData(): string {
   return getTelegramWebApp()?.initData ?? '';
 }
 
+function canUseBrowserVibration(): boolean {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
+    return false;
+  }
+
+  const userActivation = navigator.userActivation;
+  if (userActivation && !userActivation.isActive) {
+    return false;
+  }
+
+  return true;
+}
+
 export function applyTelegramThemeParams() {
   const webApp = getTelegramWebApp();
   const themeParams = webApp?.themeParams;
@@ -135,12 +148,12 @@ function hexToRgbTriplet(hex: string): string | null {
 
 export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'light') {
   const webApp = getTelegramWebApp();
-  if (webApp?.HapticFeedback) {
+  if (webApp?.HapticFeedback && getTelegramInitData()) {
     webApp.HapticFeedback.impactOccurred(style);
     return;
   }
   // Fallback для PWA вне Telegram: Vibration API.
-  if (navigator.vibrate) {
+  if (canUseBrowserVibration()) {
     const isAndroid = document.documentElement.classList.contains('android');
     const patternByStyle: Record<typeof style, number | number[]> = isAndroid
       ? { light: 12, medium: 20, heavy: [24, 16, 30], rigid: 14, soft: 10 }
@@ -151,16 +164,18 @@ export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'so
 
 export function hapticSelectionChanged() {
   const webApp = getTelegramWebApp();
-  if (webApp?.HapticFeedback) {
+  if (webApp?.HapticFeedback && getTelegramInitData()) {
     webApp.HapticFeedback.selectionChanged();
     return;
   }
-  navigator.vibrate?.(8);
+  if (canUseBrowserVibration()) {
+    navigator.vibrate(8);
+  }
 }
 
 export function hapticNotify(type: 'error' | 'success' | 'warning') {
   const webApp = getTelegramWebApp();
-  if (webApp?.HapticFeedback) {
+  if (webApp?.HapticFeedback && getTelegramInitData()) {
     webApp.HapticFeedback.notificationOccurred(type);
     return;
   }
@@ -169,7 +184,9 @@ export function hapticNotify(type: 'error' | 'success' | 'warning') {
     warning: [20, 16, 20],
     error: [30, 12, 30, 12, 30]
   };
-  navigator.vibrate?.(pattern[type]);
+  if (canUseBrowserVibration()) {
+    navigator.vibrate(pattern[type]);
+  }
 }
 
 // Обертка для @telegram-apps/sdk-react без жесткой привязки к конкретному API экспорта
@@ -217,24 +234,62 @@ export function TelegramSdkProviderBridge({ children }: { children: ReactNode })
 
 
 export async function cloudStorageGet(key: string): Promise<string | null> {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  if (!getTelegramInitData()) {
+    return window.localStorage.getItem(key);
+  }
+
   const webApp = getTelegramWebApp();
   const cloudStorage = (webApp as unknown as { CloudStorage?: { getItem: (k: string, cb: (err: string | null, value: string | null) => void) => void } }).CloudStorage;
   if (!cloudStorage) {
-    return null;
+    return window.localStorage.getItem(key);
   }
   return new Promise((resolve) => {
-    cloudStorage.getItem(key, (_err, value) => resolve(value ?? null));
+    try {
+      cloudStorage.getItem(key, (err, value) => {
+        if (err) {
+          resolve(window.localStorage.getItem(key));
+          return;
+        }
+        resolve(value ?? window.localStorage.getItem(key));
+      });
+    } catch {
+      resolve(window.localStorage.getItem(key));
+    }
   });
 }
 
 export async function cloudStorageSet(key: string, value: string): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!getTelegramInitData()) {
+    window.localStorage.setItem(key, value);
+    return;
+  }
+
   const webApp = getTelegramWebApp();
   const cloudStorage = (webApp as unknown as { CloudStorage?: { setItem: (k: string, v: string, cb: (err: string | null) => void) => void } }).CloudStorage;
   if (!cloudStorage) {
+    window.localStorage.setItem(key, value);
     return;
   }
   await new Promise<void>((resolve) => {
-    cloudStorage.setItem(key, value, () => resolve());
+    try {
+      cloudStorage.setItem(key, value, (err) => {
+        if (err) {
+          window.localStorage.setItem(key, value);
+        }
+        resolve();
+      });
+    } catch {
+      window.localStorage.setItem(key, value);
+      resolve();
+    }
   });
 }
 

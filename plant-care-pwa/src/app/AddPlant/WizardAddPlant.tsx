@@ -203,6 +203,19 @@ function buildFallbackRecommendation(environmentType: EnvironmentType, interval:
   };
 }
 
+function normalizeRecommendationText(value: string): string {
+  return value
+    .replace(/^HYBRID:/, 'Гибридный режим:')
+    .replace(/^Профиль:\s*INDOOR$/, 'Профиль: indoor')
+    .replace(/^Профиль:\s*OUTDOOR_ORNAMENTAL$/, 'Профиль: уличное декоративное')
+    .replace(/^Профиль:\s*OUTDOOR_GARDEN$/, 'Профиль: уличное садовое')
+    .replace(/\bDEFAULT\b/g, 'обычное')
+    .replace(/\bTROPICAL\b/g, 'тропическое')
+    .replace(/\bFERN\b/g, 'папоротник')
+    .replace(/\bSUCCULENT\b/g, 'суккулент')
+    .replace(/\bCONIFER\b/g, 'хвойное');
+}
+
 function mapPreviewSourceToApplied(source?: BackendRecommendationSource | WateringRecommendationPreviewDto['source']): AppliedRecommendationSource {
   if (!source) {
     return 'none';
@@ -255,17 +268,52 @@ function sourceBadgeLabel(source: AppliedRecommendationSource): string {
     case 'ai':
       return 'AI';
     case 'weather-adjusted':
-      return 'Weather adjusted';
+      return 'С учётом погоды';
     case 'hybrid':
-      return 'Hybrid';
+      return 'AI + погода';
     case 'fallback':
-      return 'Fallback';
+      return 'Базовый fallback';
     case 'base-profile':
-      return 'Base profile';
+      return 'Профиль растения';
     case 'manual':
-      return 'Manual';
+      return 'Вручную';
     default:
       return 'Не выбран';
+  }
+}
+
+function normalizeHaContextMessage(message?: string | null, available?: boolean): string {
+  const raw = message?.trim();
+  if (!raw) {
+    return available ? 'Данные сенсоров будут учтены в AI шаге.' : 'Проверьте комнату и выбранные сенсоры.';
+  }
+  if (raw === 'Optional sensor context provider is disabled.') {
+    return 'Интеграция Home Assistant сейчас выключена на сервере.';
+  }
+  return raw;
+}
+
+function environmentLabel(value: EnvironmentType): string {
+  switch (value) {
+    case 'OUTDOOR_ORNAMENTAL':
+      return 'Уличное декоративное';
+    case 'OUTDOOR_GARDEN':
+      return 'Уличное садовое';
+    case 'INDOOR':
+    default:
+      return 'Домашнее растение';
+  }
+}
+
+function categoryLabel(value: PlantCategory): string {
+  switch (value) {
+    case 'OUTDOOR_DECORATIVE':
+      return 'Декор';
+    case 'OUTDOOR_GARDEN':
+      return 'Сад';
+    case 'HOME':
+    default:
+      return 'Дом';
   }
 }
 
@@ -1155,7 +1203,7 @@ export function WizardAddPlant() {
                     <StatusCard
                       tone={haContextPreview.available ? 'neutral' : 'danger'}
                       title={haContextPreview.available ? 'HA контекст найден' : 'HA контекст недоступен'}
-                      description={haContextPreview.message ?? (haContextPreview.available ? 'Данные сенсоров будут учтены в AI шаге.' : 'Проверьте комнату/сенсоры.')}
+                      description={normalizeHaContextMessage(haContextPreview.message, haContextPreview.available)}
                     />
                   ) : null}
                 </div>
@@ -1372,8 +1420,8 @@ export function WizardAddPlant() {
               <p className="text-ios-body font-semibold">Сводка</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <InfoChip label="Растение" value={name || '—'} />
-                <InfoChip label="Профиль" value={environmentType} />
-                <InfoChip label="Категория" value={category} />
+                <InfoChip label="Профиль" value={environmentLabel(environmentType)} />
+                <InfoChip label="Категория" value={categoryLabel(category)} />
                 <InfoChip label="Источник" value={sourceBadgeLabel(appliedRecommendationSource)} />
               </div>
 
@@ -1423,7 +1471,7 @@ export function WizardAddPlant() {
                 {aiRecommendation?.reasoning?.length ? (
                   <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
                     {aiRecommendation.reasoning.map((item, index) => (
-                      <li key={`${item}-${index}`}>• {item}</li>
+                      <li key={`${item}-${index}`}>• {normalizeRecommendationText(item)}</li>
                     ))}
                   </ul>
                 ) : null}
@@ -1607,10 +1655,10 @@ function RecommendationCard({
   const isFallback = recommendation.source === 'fallback' || recommendation.source === 'base-profile';
   const badge =
     recommendation.source === 'ai' ? 'AI' :
-      recommendation.source === 'weather-adjusted' ? 'Weather adjusted' :
-        recommendation.source === 'hybrid' ? 'Hybrid' :
-          recommendation.source === 'manual' ? 'Manual' :
-            recommendation.source === 'base-profile' ? 'Base profile' : 'Fallback';
+            recommendation.source === 'weather-adjusted' ? 'С учётом погоды' :
+              recommendation.source === 'hybrid' ? 'AI + погода' :
+                recommendation.source === 'manual' ? 'Вручную' :
+                  recommendation.source === 'base-profile' ? 'Профиль растения' : 'Базовый fallback';
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -1632,7 +1680,7 @@ function RecommendationCard({
             {badge}
           </span>
           <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
-            {recommendation.profile}
+            {environmentLabel(recommendation.profile)}
           </span>
         </div>
       </div>
@@ -1668,7 +1716,7 @@ function RecommendationCard({
         </div>
       ) : (
         <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
-          Базовый indoor контекст: {indoorContext.potVolumeLiters.toFixed(1)} л · {indoorContext.plantType} · интервал {indoorContext.baseIntervalDays} дн.
+          Базовый indoor контекст: {indoorContext.potVolumeLiters.toFixed(1)} л · {normalizeRecommendationText(indoorContext.plantType)} · интервал {indoorContext.baseIntervalDays} дн.
         </div>
       )}
       <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
@@ -1681,7 +1729,7 @@ function RecommendationCard({
           {recommendation.reasoning.map((item, index) => (
             <li key={`${item}-${index}`} className="inline-flex items-start gap-1.5">
               <CloudSun className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{item}</span>
+              <span>{normalizeRecommendationText(item)}</span>
             </li>
           ))}
         </ul>

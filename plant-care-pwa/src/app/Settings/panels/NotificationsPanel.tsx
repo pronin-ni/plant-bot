@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { getPwaPushPublicKey, getPwaPushStatus, sendAdminPushTest, subscribePwaPush, unsubscribePwaPush } from '@/lib/api';
+import { waitForServiceWorkerRegistration } from '@/lib/pwa';
 import { useAuthStore } from '@/lib/store';
 import { hapticImpact } from '@/lib/telegram';
 
@@ -22,6 +23,22 @@ export function NotificationsPanel() {
   const persist = (nextTime: string, nextPattern: string) => {
     localStorage.setItem(NOTIFICATION_TIME_KEY, nextTime);
     localStorage.setItem(NOTIFICATION_PATTERN_KEY, nextPattern);
+  };
+
+  const getPushErrorMessage = (error: unknown, fallback: string) => {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'SERVICE_WORKER_TIMEOUT') {
+      return 'Service Worker для push ещё не готов. Перезагрузите страницу или откройте установленную PWA.';
+    }
+    if (code === 'SERVICE_WORKER_UNAVAILABLE') {
+      return 'Service Worker недоступен в этом браузере.';
+    }
+    return fallback;
+  };
+
+  const shouldSilencePushError = (error: unknown) => {
+    const code = error instanceof Error ? error.message : '';
+    return code === 'SERVICE_WORKER_TIMEOUT' || code === 'SERVICE_WORKER_UNAVAILABLE';
   };
 
   const refresh = async () => {
@@ -85,7 +102,7 @@ export function NotificationsPanel() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await waitForServiceWorkerRegistration();
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToArrayBuffer(pushKey)
@@ -96,8 +113,10 @@ export function NotificationsPanel() {
       setStatus('Push подписка успешно включена.');
       await refresh();
     } catch (error) {
-      console.error(error);
-      setStatus('Не удалось включить push.');
+      if (!shouldSilencePushError(error)) {
+        console.error(error);
+      }
+      setStatus(getPushErrorMessage(error, 'Не удалось включить push.'));
     } finally {
       setAction(null);
     }
@@ -113,7 +132,7 @@ export function NotificationsPanel() {
         setStatus('Service Worker недоступен.');
         return;
       }
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await waitForServiceWorkerRegistration();
       const sub = await registration.pushManager.getSubscription();
       if (sub?.endpoint) {
         await unsubscribePwaPush(sub.endpoint);
@@ -122,8 +141,10 @@ export function NotificationsPanel() {
       setStatus('Push подписка отключена.');
       await refresh();
     } catch (error) {
-      console.error(error);
-      setStatus('Не удалось отключить push.');
+      if (!shouldSilencePushError(error)) {
+        console.error(error);
+      }
+      setStatus(getPushErrorMessage(error, 'Не удалось отключить push.'));
     } finally {
       setAction(null);
     }
@@ -197,7 +218,7 @@ export function NotificationsPanel() {
       </div>
 
       <div className="rounded-xl border border-ios-border/60 bg-white/70 p-4 text-xs text-ios-subtext dark:bg-zinc-900/50">
-        <p>Статус: {pushState.subscribed ? 'Подписаны' : 'Не подписаны'} · endpoint: {pushState.count}</p>
+        <p>Статус: {pushState.subscribed ? 'Подписаны' : 'Не подписаны'} · активных подписок: {pushState.count}</p>
         <p className="mt-1">Push на сервере: {pushState.enabled ? 'включён' : 'выключен'}</p>
         <p className="mt-1">Разрешение браузера: {typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'}</p>
       </div>
@@ -242,3 +263,13 @@ export function NotificationsPanel() {
     </div>
   );
 }
+  const getPushErrorMessage = (error: unknown, fallback: string) => {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'SERVICE_WORKER_TIMEOUT') {
+      return 'Service Worker для push ещё не готов. Перезагрузите страницу или откройте установленную PWA.';
+    }
+    if (code === 'SERVICE_WORKER_UNAVAILABLE') {
+      return 'Service Worker недоступен в этом браузере.';
+    }
+    return fallback;
+  };

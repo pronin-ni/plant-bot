@@ -24,7 +24,7 @@ import { applyThemeToDocument, useThemeStore } from '@/lib/theme/themeStore';
 export function App() {
   useTelegramThemeSync();
 
-  const { isAuthorized, isReady } = useAuthStore();
+  const { isAuthorized, isGuest, isReady } = useAuthStore();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -114,10 +114,10 @@ export function App() {
       return;
     }
     hasAutoAuthAttemptRef.current = true;
-    if (localStorage.getItem('plant-pwa-jwt')) {
+    if (!isGuest && localStorage.getItem('plant-pwa-jwt')) {
       meMutation.mutate();
     }
-  }, [isReady, meMutation.mutate]);
+  }, [isGuest, isReady, meMutation.mutate]);
 
   useEffect(() => {
     if (!isAdmin && activeTab === 'admin') {
@@ -142,7 +142,7 @@ export function App() {
     };
   }, []);
 
-  if (!isAuthorized) {
+  if (!isAuthorized && !isGuest) {
     return (
       <main className="app-shell">
         <InstallPrompt />

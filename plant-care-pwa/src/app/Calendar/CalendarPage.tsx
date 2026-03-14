@@ -12,6 +12,7 @@ import { DayCard } from '@/components/DayCard';
 import { MassWaterButton } from '@/components/MassWaterButton';
 import { ConditionsForecast } from '@/components/ConditionsForecast';
 import { useMotionGuard } from '@/lib/motion';
+import { parseDateOnly, startOfLocalDay, toLocalDateKey } from '@/lib/date';
 
 type CalendarActionFilter = 'all' | 'watering' | 'fertilizer' | 'repotting' | 'cutting';
 
@@ -22,11 +23,11 @@ interface ActionTabItem {
 }
 
 function startOfDay(value: Date): Date {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  return startOfLocalDay(value);
 }
 
 function dayKeyFromDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
+  return toLocalDateKey(value);
 }
 
 function addDays(date: Date, days: number): Date {
@@ -142,7 +143,7 @@ export function CalendarPage() {
   const enrichedEvents = useMemo(() => {
     return (calendarQuery.data ?? [])
       .map((event) => {
-        const eventDate = startOfDay(new Date(event.date));
+        const eventDate = startOfDay(parseDateOnly(event.date));
         const diffDays = Math.floor((eventDate.getTime() - today.getTime()) / 86_400_000);
         return {
           ...event,
@@ -184,7 +185,7 @@ export function CalendarPage() {
     const weekEnd = addDays(weekStart, 6);
 
     const weekEvents = enrichedEvents.filter((event) => {
-      const eventDate = startOfDay(new Date(event.date));
+      const eventDate = startOfDay(parseDateOnly(event.date));
       return eventDate.getTime() >= weekStart.getTime() && eventDate.getTime() <= weekEnd.getTime();
     });
 

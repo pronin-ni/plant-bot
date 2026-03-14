@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import { hapticImpact } from '@/lib/telegram';
 import type { PlantDto } from '@/types/api';
 
@@ -16,19 +17,18 @@ interface CycleProgressProps {
 
 function getNextDate(plant: PlantDto): Date {
   if (plant.nextWateringDate) {
-    return new Date(plant.nextWateringDate);
+    return parseDateOnly(plant.nextWateringDate);
   }
-  const last = new Date(plant.lastWateredDate);
+  const last = parseDateOnly(plant.lastWateredDate);
   const next = new Date(last);
   next.setDate(next.getDate() + Math.max(1, plant.baseIntervalDays ?? 7));
   return next;
 }
 
 function getDaysLeft(plant: PlantDto): number {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = startOfLocalDay(new Date());
   const next = getNextDate(plant);
-  const target = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+  const target = startOfLocalDay(next);
   return Math.floor((target.getTime() - today.getTime()) / 86_400_000);
 }
 

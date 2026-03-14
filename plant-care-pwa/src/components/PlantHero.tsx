@@ -4,6 +4,7 @@ import { Camera, Home, Sprout, TreePine } from 'lucide-react';
 
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { Button } from '@/components/ui/button';
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import { hapticImpact } from '@/lib/telegram';
 import type { PlantDto } from '@/types/api';
 
@@ -30,9 +31,9 @@ function categoryMeta(plant: PlantDto): { label: string; icon: typeof Home } {
 
 function nextWateringDate(plant: PlantDto): Date {
   if (plant.nextWateringDate) {
-    return new Date(plant.nextWateringDate);
+    return parseDateOnly(plant.nextWateringDate);
   }
-  const last = new Date(plant.lastWateredDate);
+  const last = parseDateOnly(plant.lastWateredDate);
   const next = new Date(last);
   next.setDate(next.getDate() + Math.max(1, plant.baseIntervalDays ?? 7));
   return next;
@@ -51,10 +52,9 @@ export function PlantHero({
   const Icon = meta.icon;
 
   const heroState = useMemo(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = startOfLocalDay(new Date());
     const next = nextWateringDate(plant);
-    const target = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+    const target = startOfLocalDay(next);
     const daysLeft = Math.floor((target.getTime() - today.getTime()) / 86_400_000);
     return {
       status: getPlantStatusTone(daysLeft, plant.recommendationSource),

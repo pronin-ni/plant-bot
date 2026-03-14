@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, Sprout } from 'lucide-react';
 
 import { PlantActionItem, type PlantActionEvent } from '@/components/PlantActionItem';
+import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 
 interface DayCardProps {
   dateKey: string;
@@ -12,11 +13,11 @@ interface DayCardProps {
 }
 
 function getDayHeader(dateKey: string): { title: string; subtitle: string } {
-  const target = new Date(dateKey);
+  const target = parseDateOnly(dateKey);
   const now = new Date();
 
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const start = startOfLocalDay(now);
+  const targetStart = startOfLocalDay(target);
   const diff = Math.floor((targetStart.getTime() - start.getTime()) / 86_400_000);
 
   let title = targetStart.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' });

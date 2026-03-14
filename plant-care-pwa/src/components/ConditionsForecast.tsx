@@ -43,9 +43,9 @@ function buildTip(input: { temp?: number; humidity?: number; adjustment?: number
     return `Температура около ${temp.toFixed(0)}°C — придерживайтесь базового графика полива.`;
   }
   if (hasWeatherFallback) {
-    return 'Подсказка на основе выбранного погодного провайдера. Подключите HA, чтобы учитывать комнатные датчики.';
+    return 'Подсказка основана на автоматически выбранном погодном источнике. Подключите HA, чтобы учитывать комнатные датчики.';
   }
-  return 'Укажите город и провайдера погоды в Настройках или подключите HA.';
+  return 'Укажите город в Настройках или подключите HA, чтобы учитывать локальные датчики.';
 }
 
 export function ConditionsForecast({ plantId, plantName }: ConditionsForecastProps) {

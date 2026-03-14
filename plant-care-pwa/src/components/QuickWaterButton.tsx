@@ -8,6 +8,8 @@ import { hapticImpact } from '@/lib/telegram';
 interface QuickWaterButtonProps {
   isLoading?: boolean;
   isOverdue?: boolean;
+  disabled?: boolean;
+  disabledLabel?: string;
   onWater: () => Promise<unknown> | unknown;
   onSuccess?: (meta: { rescued: boolean }) => void;
   onBurstStart?: () => void;
@@ -51,6 +53,8 @@ function buildWaterDrops(): DropPiece[] {
 export function QuickWaterButton({
   isLoading = false,
   isOverdue = false,
+  disabled = false,
+  disabledLabel = 'Уже отмечено',
   onWater,
   onSuccess,
   onBurstStart,
@@ -64,7 +68,7 @@ export function QuickWaterButton({
   const waterDrops = useMemo(() => buildWaterDrops(), []);
 
   const handleClick = async () => {
-    if (isLoading || isRunning) {
+    if (disabled || isLoading || isRunning) {
       return;
     }
 
@@ -161,8 +165,12 @@ export function QuickWaterButton({
       <Button
         variant="secondary"
         size="sm"
-        className="h-11 w-full rounded-2xl bg-ios-accent/14 text-ios-accent shadow-[0_8px_24px_rgba(52,199,89,0.16)] hover:bg-ios-accent/22 android:rounded-[16px]"
-        disabled={isLoading || isRunning}
+        className={`h-11 w-full rounded-2xl shadow-[0_8px_24px_rgba(52,199,89,0.16)] android:rounded-[16px] ${
+          disabled
+            ? 'bg-slate-100 text-slate-400 shadow-none hover:bg-slate-100'
+            : 'bg-ios-accent/14 text-ios-accent hover:bg-ios-accent/22'
+        }`}
+        disabled={disabled || isLoading || isRunning}
         onClick={handleClick}
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -188,7 +196,7 @@ export function QuickWaterButton({
               transition={{ type: 'spring', stiffness: 360, damping: 28 }}
             >
               <Droplets className="h-4 w-4" />
-              {isLoading || isRunning ? 'Сохраняем...' : 'Полито'}
+              {disabled ? disabledLabel : isLoading || isRunning ? 'Сохраняем...' : 'Полито'}
             </motion.span>
           )}
         </AnimatePresence>

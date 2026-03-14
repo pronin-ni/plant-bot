@@ -48,6 +48,33 @@ const HA_SETUP_INSTRUCTION_TEXT = [
 
 const HA_SELECTION_STORAGE_KEY = 'ha-selection-preferences';
 
+function getHomeAssistantErrorMessage(error: unknown): string {
+  const fallback = 'Не удалось подключиться к Home Assistant. Проверьте URL, token и доступность сервера.';
+  const message = error instanceof Error ? error.message : '';
+
+  if (!message) {
+    return fallback;
+  }
+
+  if (/failed to fetch|networkerror|network request failed/i.test(message)) {
+    return 'Не удалось связаться с Home Assistant. Проверьте сеть и адрес сервера.';
+  }
+
+  if (/401|403|unauthorized|forbidden/i.test(message)) {
+    return 'Home Assistant отклонил token. Создайте новый Long-Lived Access Token и попробуйте снова.';
+  }
+
+  if (/404|not found/i.test(message)) {
+    return 'Не удалось найти Home Assistant по этому адресу. Проверьте URL и порт.';
+  }
+
+  if (/i\/o error|unknownhost|connection refused|timed out|example\\.invalid/i.test(message)) {
+    return 'Не удалось связаться с Home Assistant по указанному адресу. Проверьте URL, порт и доступность сервера.';
+  }
+
+  return fallback;
+}
+
 export function HomeAssistantSetup() {
   type ConnectionState = 'idle' | 'loading' | 'success' | 'error';
   type SummaryState = {
@@ -107,9 +134,8 @@ export function HomeAssistantSetup() {
     },
     onError: (error) => {
       hapticNotify('error');
-      const message = error instanceof Error ? error.message : 'Проверка не прошла. Проверьте URL и token.';
       setConnectionState('error');
-      setConnectionMessage(message);
+      setConnectionMessage(getHomeAssistantErrorMessage(error));
       setSelectionMessage(null);
     }
   });

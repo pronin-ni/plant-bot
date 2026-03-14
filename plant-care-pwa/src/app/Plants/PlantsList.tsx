@@ -8,6 +8,7 @@ import { CategoryTabs, type PlantCategoryFilter } from '@/components/CategoryTab
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { Button } from '@/components/ui/button';
 import { getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
+import { parseDateOnly } from '@/lib/date';
 import { hapticImpact, hapticNotify } from '@/lib/telegram';
 import { useAuthStore, useOfflineStore, useUiStore } from '@/lib/store';
 import type { PlantDto } from '@/types/api';
@@ -24,7 +25,7 @@ function isToday(dateIso?: string): boolean {
   if (!dateIso) {
     return false;
   }
-  const date = startOfDay(new Date(dateIso));
+  const date = startOfDay(parseDateOnly(dateIso));
   return date.getTime() === startOfDay(new Date()).getTime();
 }
 
@@ -47,12 +48,12 @@ function getIntervalDays(plant: PlantDto): number {
 }
 
 function getLastWateredDate(plant: PlantDto): Date {
-  return plant.lastWateredDate ? startOfDay(new Date(plant.lastWateredDate)) : startOfDay(new Date());
+  return plant.lastWateredDate ? startOfDay(parseDateOnly(plant.lastWateredDate)) : startOfDay(new Date());
 }
 
 function getNextWateringDate(plant: PlantDto): Date {
   if (plant.nextWateringDate) {
-    return startOfDay(new Date(plant.nextWateringDate));
+    return startOfDay(parseDateOnly(plant.nextWateringDate));
   }
   const last = getLastWateredDate(plant);
   const next = new Date(last);

@@ -1,5 +1,30 @@
 import { getTelegramInitData } from '@/lib/telegram';
 import {
+  buildDemoAssistantReply,
+  buildDemoCareAdvice,
+  buildDemoDiagnosisResult,
+  buildDemoIdentifyResult,
+  buildDemoPlantConditions,
+  buildDemoPlantConditionsHistory,
+  buildDemoRecommendation,
+  buildDemoSensorContext,
+  buildDemoWeatherContextPreview,
+  buildDemoWeatherCurrent,
+  buildDemoWeatherForecast,
+  createDemoCalendar,
+  createDemoPlantFromPayload,
+  getDemoOpenRouterSettings,
+  getDemoPushPublicKey,
+  getDemoPushStatus,
+  getDemoPushSubscribe,
+  readDemoAssistantHistory,
+  readDemoPlants,
+  searchDemoPlants,
+  searchDemoPresets,
+  suggestDemoPlantProfile,
+  writeDemoPlants
+} from '@/lib/demoMode';
+import {
   cacheGet,
   cacheSet,
   deleteQueuedMutation,
@@ -7,6 +32,7 @@ import {
   mutationQueueCount,
   upsertQueuedMutation
 } from '@/lib/indexeddb';
+import { getApiBaseUrl, isTestAuditMode } from '@/lib/runtime';
 import { useAuthStore, useOfflineStore } from '@/lib/store';
 import type {
   AuthValidationResponse,
@@ -69,7 +95,7 @@ import type {
   PlantRoomBindingRequest
 } from '@/types/home-assistant';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? '';
+const API_BASE_URL = getApiBaseUrl();
 const AUTH_TOKEN_KEY = 'plant-pwa-jwt';
 const CACHE_PREFIX = 'api:cache:';
 
@@ -91,6 +117,33 @@ export class ApiError extends Error {
 
 function cacheKey(path: string): string {
   return `${CACHE_PREFIX}${path}`;
+}
+
+function isGuestMode(): boolean {
+  return useAuthStore.getState().isGuest;
+}
+
+function ensureGuestModeAllowed() {
+  if (isTestAuditMode() && isGuestMode()) {
+    throw new ApiError(412, 'Demo mode disabled in test audit mode. Use real authentication.');
+  }
+}
+
+function extractPathname(path: string): string {
+  try {
+    return new URL(path, 'https://plantbot.local').pathname;
+  } catch {
+    return path.split('?')[0] ?? path;
+  }
+}
+
+function extractQuery(path: string): URLSearchParams {
+  try {
+    return new URL(path, 'https://plantbot.local').searchParams;
+  } catch {
+    const query = path.includes('?') ? path.slice(path.indexOf('?') + 1) : '';
+    return new URLSearchParams(query);
+  }
 }
 
 function isLikelyNetworkError(error: unknown): boolean {
@@ -172,6 +225,233 @@ async function buildOfflineFallback<T>(path: string, init: RequestInit): Promise
   return null;
 }
 
+async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T | null> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const pathname = extractPathname(path);
+  const query = extractQuery(path);
+  const plants = readDemoPlants();
+
+  if (method === 'GET' && pathname === '/api/plants') {
+    await cacheSet(cacheKey('/api/plants'), plants);
+    return plants as T;
+  }
+
+  if (method === 'GET' && pathname.startsWith('/api/plants/') && pathname.endsWith('/care-advice')) {
+    const plantId = Number(pathname.split('/')[3]);
+    const plant = plants.find((item) => item.id === plantId);
+    return (plant ? buildDemoCareAdvice(plant) : null) as T | null;
+  }
+
+  if (method === 'GET' && /^\/api\/plants\/\d+$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    return (plants.find((item) => item.id === plantId) ?? null) as T | null;
+  }
+
+  if (method === 'GET' && pathname === '/api/plants/search') {
+    const q = query.get('q') ?? '';
+    const category = query.get('category') as PlantDto['category'] | null;
+    return searchDemoPlants(q, category ?? undefined) as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/plants/presets') {
+    const category = (query.get('category') as PlantPresetSuggestionDto['category']) ?? 'HOME';
+    const q = query.get('q') ?? '';
+    const limit = Number(query.get('limit') ?? 12);
+    return searchDemoPresets(category, q, Number.isFinite(limit) ? limit : 12) as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/plants/suggest-profile') {
+    return suggestDemoPlantProfile(query.get('name') ?? '') as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/calendar') {
+    const calendar = createDemoCalendar(plants);
+    await cacheSet(cacheKey('/api/calendar'), calendar);
+    return calendar as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/settings/openrouter') {
+    return getDemoOpenRouterSettings() as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/assistant/history') {
+    const limit = Number(query.get('limit') ?? 50);
+    return readDemoAssistantHistory().slice(0, Number.isFinite(limit) ? limit : 50) as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/weather/current') {
+    return buildDemoWeatherCurrent(query.get('city') ?? '') as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/weather/forecast') {
+    return buildDemoWeatherForecast(query.get('city') ?? '') as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/watering/recommendation/ha/options') {
+    return {
+      connected: false,
+      rooms: [],
+      sensors: [],
+      message: 'В демо-режиме Home Assistant недоступен.'
+    } as T;
+  }
+
+  if (method === 'GET' && /^\/api\/plants\/\d+\/conditions$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    return buildDemoPlantConditions(plantId) as T;
+  }
+
+  if (method === 'GET' && /^\/api\/plants\/\d+\/history-conditions$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const days = Number(query.get('days') ?? 7);
+    return buildDemoPlantConditionsHistory(plantId, Number.isFinite(days) ? days : 7) as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/users/city') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { city?: string }) : {};
+    const nextCity = body.city?.trim() || useAuthStore.getState().city || 'Санкт-Петербург';
+    const auth = useAuthStore.getState();
+    const payload: AuthValidationResponse = {
+      ok: true,
+      userId: String(auth.telegramUserId ?? 'guest-demo'),
+      username: auth.username ?? 'guest_demo',
+      firstName: auth.firstName ?? 'Гость',
+      city: nextCity,
+      isAdmin: auth.isAdmin
+    };
+    return payload as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/auth/validate') {
+    const auth = useAuthStore.getState();
+    return {
+      ok: true,
+      userId: String(auth.telegramUserId ?? 'guest-demo'),
+      username: auth.username ?? 'guest_demo',
+      firstName: auth.firstName ?? 'Гость',
+      city: auth.city ?? 'Санкт-Петербург',
+      isAdmin: auth.isAdmin
+    } as T;
+  }
+
+  if (method === 'PUT' && /^\/api\/plants\/\d+\/water$/.test(pathname)) {
+    return buildOfflineFallback<T>(pathname, { ...init, method });
+  }
+
+  if (method === 'POST' && pathname === '/api/assistant/chat') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { question?: string }) : {};
+    return buildDemoAssistantReply(body.question ?? '') as T;
+  }
+
+  if (method === 'DELETE' && pathname === '/api/assistant/history') {
+    window.localStorage.removeItem('plant-pwa-demo-assistant-history');
+    return { ok: true } as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/watering/recommendation/preview') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { plantName?: string; environmentType?: string; baseIntervalDays?: number; recommendedWaterMl?: number; city?: string }) : {};
+    const previewPlant: PlantDto = {
+      id: 999999,
+      name: body.plantName?.trim() || 'Новое растение',
+      placement: body.environmentType === 'INDOOR' ? 'INDOOR' : 'OUTDOOR',
+      category: body.environmentType === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : body.environmentType === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_DECORATIVE' : 'HOME',
+      wateringProfile: body.environmentType === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : body.environmentType === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_ORNAMENTAL' : 'INDOOR',
+      region: body.city ?? 'Санкт-Петербург',
+      lastWateredDate: new Date().toISOString(),
+      nextWateringDate: new Date().toISOString(),
+      baseIntervalDays: Math.max(1, Number(body.baseIntervalDays ?? 4)),
+      preferredWaterMl: Math.max(100, Number(body.recommendedWaterMl ?? 220))
+    };
+    return buildDemoRecommendation(previewPlant) as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/watering/recommendation/weather/preview') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { city?: string | null; region?: string | null }) : {};
+    return buildDemoWeatherContextPreview(body.city ?? body.region ?? null) as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/watering/recommendation/ha/context-preview') {
+    return buildDemoSensorContext() as T;
+  }
+
+  if (method === 'POST' && /^\/api\/watering\/recommendation\/\d+\/refresh$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[4]);
+    const plant = plants.find((item) => item.id === plantId);
+    return (plant ? buildDemoRecommendation(plant) : null) as T | null;
+  }
+
+  if (method === 'POST' && /^\/api\/watering\/recommendation\/\d+\/apply$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[4]);
+    const plant = plants.find((item) => item.id === plantId);
+    if (!plant) {
+      return null;
+    }
+    const body = init.body ? (JSON.parse(String(init.body)) as { source?: PlantDto['recommendationSource']; recommendedIntervalDays?: number; recommendedWaterMl?: number; summary?: string }) : {};
+    const updatedPlant: PlantDto = {
+      ...plant,
+      baseIntervalDays: Math.max(1, Number(body.recommendedIntervalDays ?? plant.baseIntervalDays ?? 4)),
+      preferredWaterMl: Math.max(80, Number(body.recommendedWaterMl ?? plant.preferredWaterMl ?? 200)),
+      recommendedIntervalDays: Math.max(1, Number(body.recommendedIntervalDays ?? plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 4)),
+      recommendedWaterMl: Math.max(80, Number(body.recommendedWaterMl ?? plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 200)),
+      recommendationSource: body.source ?? plant.recommendationSource ?? 'MANUAL',
+      recommendationSummary: body.summary ?? plant.recommendationSummary ?? 'Рекомендация обновлена в демо-режиме.',
+      recommendationGeneratedAt: new Date().toISOString()
+    };
+    const updatedPlants = plants.map((item) => (item.id === plantId ? updatedPlant : item));
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    return {
+      ok: true,
+      plantId,
+      source: updatedPlant.recommendationSource ?? 'MANUAL',
+      baseIntervalDays: updatedPlant.baseIntervalDays ?? 4,
+      preferredWaterMl: updatedPlant.preferredWaterMl ?? 200,
+      recommendationUpdatedAt: updatedPlant.recommendationGeneratedAt ?? new Date().toISOString()
+    } as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/plants') {
+    const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    const created = createDemoPlantFromPayload(body);
+    const updatedPlants = readDemoPlants();
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    await cacheSet(cacheKey('/api/calendar'), createDemoCalendar(updatedPlants));
+    return created as T;
+  }
+
+  if (method === 'DELETE' && /^\/api\/plants\/\d+$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const updatedPlants = plants.filter((item) => item.id !== plantId);
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    await cacheSet(cacheKey('/api/calendar'), createDemoCalendar(updatedPlants));
+    return undefined as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/plant/identify-openrouter') {
+    return buildDemoIdentifyResult() as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/plant/diagnose-openrouter') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { plantName?: string }) : {};
+    return buildDemoDiagnosisResult(body.plantName ?? 'растение') as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/pwa/push/public-key') {
+    return getDemoPushPublicKey() as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/pwa/push/status') {
+    return getDemoPushStatus() as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/pwa/push/subscribe') {
+    return getDemoPushSubscribe() as T;
+  }
+
+  return null;
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as ApiErrorPayload;
@@ -189,6 +469,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   const method = (init.method ?? 'GET').toUpperCase();
   const headers = new Headers(init.headers ?? {});
   const accessToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  ensureGuestModeAllowed();
 
   headers.set('Content-Type', 'application/json');
   if (initData) {
@@ -203,6 +484,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     method,
     headers
   };
+
+  if (isGuestMode()) {
+    const guestPayload = await buildGuestResponse<T>(path, requestInit);
+    if (guestPayload !== null) {
+      useOfflineStore.getState().setOffline(false);
+      return guestPayload;
+    }
+  }
 
   if (method === 'GET') {
     try {
@@ -219,7 +508,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       return payload;
     } catch (error) {
       const cached = await cacheGet<T>(cacheKey(path));
-      if (cached !== null) {
+      if (cached !== null && isLikelyNetworkError(error)) {
         useOfflineStore.getState().setOffline(true);
         return cached;
       }
@@ -286,15 +575,27 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 async function pwaAuthFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers ?? {});
   const accessToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  const method = (init.method ?? 'GET').toUpperCase();
+  ensureGuestModeAllowed();
   headers.set('Content-Type', 'application/json');
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const requestInit: RequestInit = {
     ...init,
+    method,
     headers
-  });
+  };
+
+  if (isGuestMode()) {
+    const guestPayload = await buildGuestResponse<T>(path, requestInit);
+    if (guestPayload !== null) {
+      return guestPayload;
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
   if (!response.ok) {
     throw new ApiError(response.status, await parseErrorMessage(response));
   }

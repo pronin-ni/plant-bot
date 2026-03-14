@@ -9,7 +9,7 @@ out/
 *.war
 *.ear
 hs_err_pid*
-
+for-stack.txt
 # Runtime data
 data/
 *.db
@@ -32,3 +32,6 @@ Thumbs.db
 
 # Project helper output
 bin/
+for-stack.txt
+
+for-stack.txt

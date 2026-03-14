@@ -13,6 +13,7 @@ import {
   Home,
   Info,
   LifeBuoy,
+  LogOut,
   Palette,
   Settings2,
   ShieldCheck,
@@ -252,7 +253,7 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
   },
   weather: {
     title: 'Город и погода',
-    description: 'Выбор провайдера и предпросмотр текущих условий.'
+    description: 'Выберите город и проверьте автоматический погодный источник.'
   },
   'home-assistant': {
     title: 'Home Assistant',
@@ -303,6 +304,9 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const email = useAuthStore((s) => s.email);
+  const username = useAuthStore((s) => s.username);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
 
   const [activeDetail, setActiveDetail] = useState<SettingsDetailId | null>(null);
@@ -340,6 +344,15 @@ export function SettingsPage() {
     }
   };
 
+  const handleLogout = async () => {
+    hapticImpact('medium');
+    clearAuth();
+    setActiveDetail(null);
+    setActiveTab('home');
+    await queryClient.cancelQueries();
+    queryClient.clear();
+  };
+
   return (
     <PlatformPullToRefresh onRefresh={handleRefresh}>
       <section className="settings-premium-shell space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))]">
@@ -348,6 +361,24 @@ export function SettingsPage() {
           <h2 className="platform-top-title">Коротко и по делу</h2>
           <p className="platform-top-subtitle text-sm">Навигационный экран: открывайте только нужный раздел, без длинной простыни.</p>
         </header>
+
+        <section className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/72 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-ios dark:bg-zinc-950/62">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-ios-subtext">Аккаунт</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ios-text">{email ?? username ?? 'Аккаунт Plant Bot'}</p>
+              <p className="mt-0.5 text-xs text-ios-subtext">Можно безопасно выйти и зайти снова по magic link.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="touch-target inline-flex min-h-11 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+            >
+              <LogOut className="h-4 w-4" />
+              Выйти
+            </button>
+          </div>
+        </section>
 
         {visibleGroups.map((group) => (
           <SettingsGroupCard key={group.id} title={group.title}>

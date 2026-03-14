@@ -1,11 +1,23 @@
 import { create } from 'zustand';
 import type { AppTabKey } from '@/types/navigation';
+import { isTestAuditMode } from '@/lib/runtime';
 
 const AUTH_TOKEN_KEY = 'plant-pwa-jwt';
+const GUEST_MODE_KEY = 'plant-pwa-guest';
+
+function readInitialGuestMode(): boolean {
+  const storedGuestMode = localStorage.getItem(GUEST_MODE_KEY) === '1';
+  if (storedGuestMode && isTestAuditMode()) {
+    localStorage.removeItem(GUEST_MODE_KEY);
+    return false;
+  }
+  return storedGuestMode;
+}
 
 interface AuthState {
   isReady: boolean;
   isAuthorized: boolean;
+  isGuest: boolean;
   accessToken?: string;
   roles: string[];
   telegramUserId?: number;
@@ -24,6 +36,7 @@ interface AuthState {
     roles?: string[];
     accessToken?: string;
     isAuthorized: boolean;
+    isGuest?: boolean;
   }) => void;
   clearAuth: () => void;
   setReady: (value: boolean) => void;
@@ -32,6 +45,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   isReady: false,
   isAuthorized: Boolean(localStorage.getItem(AUTH_TOKEN_KEY)),
+  isGuest: readInitialGuestMode(),
   accessToken: localStorage.getItem(AUTH_TOKEN_KEY) ?? undefined,
   roles: [],
   telegramUserId: undefined,
@@ -40,9 +54,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   email: undefined,
   city: undefined,
   isAdmin: false,
-  setAuth: ({ telegramUserId, username, firstName, email, city, isAdmin, roles, accessToken, isAuthorized }) => {
+  setAuth: ({ telegramUserId, username, firstName, email, city, isAdmin, roles, accessToken, isAuthorized, isGuest }) => {
     if (accessToken) {
       localStorage.setItem(AUTH_TOKEN_KEY, accessToken);
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } else if (isGuest) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.setItem(GUEST_MODE_KEY, '1');
+    } else {
+      localStorage.removeItem(GUEST_MODE_KEY);
     }
     set({
       telegramUserId,
@@ -53,13 +73,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       roles: roles ?? [],
       accessToken: accessToken ?? localStorage.getItem(AUTH_TOKEN_KEY) ?? undefined,
       isAdmin: Boolean(isAdmin) || Boolean(roles?.includes('ROLE_ADMIN')),
-      isAuthorized
+      isAuthorized,
+      isGuest: Boolean(isGuest)
     });
   },
   clearAuth: () => {
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(GUEST_MODE_KEY);
     set({
       isAuthorized: false,
+      isGuest: false,
       accessToken: undefined,
       roles: [],
       telegramUserId: undefined,
