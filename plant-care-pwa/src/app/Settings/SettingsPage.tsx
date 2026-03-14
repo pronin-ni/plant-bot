@@ -25,6 +25,8 @@ import {
 
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { ThemeSelector } from '@/components/settings/ThemeSelector';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { OpenRouterSettings } from '@/components/OpenRouterSettings';
 import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useUiStore } from '@/lib/store';
@@ -310,6 +312,7 @@ export function SettingsPage() {
   const setActiveTab = useUiStore((s) => s.setActiveTab);
 
   const [activeDetail, setActiveDetail] = useState<SettingsDetailId | null>(null);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const handleRefresh = async () => {
     hapticImpact('light');
@@ -348,6 +351,7 @@ export function SettingsPage() {
     hapticImpact('medium');
     clearAuth();
     setActiveDetail(null);
+    setLogoutConfirmOpen(false);
     setActiveTab('home');
     await queryClient.cancelQueries();
     queryClient.clear();
@@ -356,30 +360,6 @@ export function SettingsPage() {
   return (
     <PlatformPullToRefresh onRefresh={handleRefresh}>
       <section className="settings-premium-shell space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))]">
-        <header className="space-y-2 px-1">
-          <p className="text-ios-caption uppercase tracking-wide text-ios-subtext">Настройки</p>
-          <h2 className="platform-top-title">Коротко и по делу</h2>
-          <p className="platform-top-subtitle text-sm">Навигационный экран: открывайте только нужный раздел, без длинной простыни.</p>
-        </header>
-
-        <section className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/72 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-ios dark:bg-zinc-950/62">
-          <p className="text-[12px] font-medium uppercase tracking-wide text-ios-subtext">Аккаунт</p>
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ios-text">{email ?? username ?? 'Аккаунт Plant Bot'}</p>
-              <p className="mt-0.5 text-xs text-ios-subtext">Можно безопасно выйти и зайти снова по magic link.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              className="touch-target inline-flex min-h-11 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
-            >
-              <LogOut className="h-4 w-4" />
-              Выйти
-            </button>
-          </div>
-        </section>
-
         {visibleGroups.map((group) => (
           <SettingsGroupCard key={group.id} title={group.title}>
             {group.items.map((item, index) => (
@@ -393,6 +373,37 @@ export function SettingsPage() {
           </SettingsGroupCard>
         ))}
 
+        <section className="space-y-2.5">
+          <p className="px-1 text-[12px] font-medium uppercase tracking-wide text-ios-subtext">Сессия</p>
+          <div className="theme-surface-1 rounded-2xl border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-semibold text-ios-text">{email ?? username ?? 'Аккаунт Plant Bot'}</p>
+                <p className="mt-1 text-xs leading-5 text-ios-subtext">
+                  Выход очистит текущую сессию на этом устройстве. После этого защищённые разделы снова потребуют вход.
+                </p>
+              </div>
+              <span className="theme-surface-subtle inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[hsl(var(--destructive))]">
+                <LogOut className="h-5 w-5" />
+              </span>
+            </div>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  hapticImpact('light');
+                  setLogoutConfirmOpen(true);
+                }}
+                className="theme-badge-danger touch-target inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border px-4 text-sm font-medium transition hover:border-[hsl(var(--destructive)/0.34)]"
+              >
+                <LogOut className="h-4 w-4" />
+                Выйти из аккаунта
+              </button>
+            </div>
+          </div>
+        </section>
+
         <AnimatePresence>
           {activeDetail ? (
             <SettingsDetailDialog
@@ -403,6 +414,37 @@ export function SettingsPage() {
             />
           ) : null}
         </AnimatePresence>
+
+        <Dialog
+          open={logoutConfirmOpen}
+          onOpenChange={setLogoutConfirmOpen}
+          title="Выйти из аккаунта?"
+          description="Мы очистим текущую сессию на этом устройстве и вернём вас на экран входа."
+        >
+          <div className="space-y-3">
+            <p className="theme-banner-warning rounded-2xl border px-3 py-2 text-xs">
+              После выхода защищённые разделы снова потребуют авторизацию.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setLogoutConfirmOpen(false)}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="flex-1"
+                onClick={() => void handleLogout()}
+              >
+                Выйти
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       </section>
     </PlatformPullToRefresh>
   );
@@ -412,7 +454,7 @@ function SettingsGroupCard({ title, children }: { title: string; children: React
   return (
     <section className="space-y-2.5">
       <p className="px-1 text-[12px] font-medium uppercase tracking-wide text-ios-subtext">{title}</p>
-      <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/72 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-ios dark:bg-zinc-950/62">
+      <div className="theme-surface-1 overflow-hidden rounded-2xl border">
         {children}
       </div>
     </section>
@@ -426,16 +468,16 @@ function SettingsRow({ item, withDivider, onClick }: { item: SettingsItem; withD
     <button
       type="button"
       onClick={onClick}
-      className={`touch-target android-ripple flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors duration-200 ease-out active:bg-black/[0.03] dark:active:bg-white/[0.04] ${withDivider ? 'border-b border-ios-border/50' : ''}`}
+      className={`android-ripple flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors duration-200 ease-out active:bg-[hsl(var(--foreground)/0.04)] ${withDivider ? 'border-b border-ios-border/50' : ''}`}
     >
-      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ios-border/60 bg-white/85 text-ios-accent shadow-sm dark:bg-zinc-900/75">
+      <span className="theme-surface-subtle mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-ios-accent shadow-sm">
         <Icon className="h-5 w-5" />
       </span>
-      <span className="min-w-0 flex-1 pr-1">
+      <span className="min-w-0 flex-1 self-center pr-1">
         <span className="block break-words text-[15px] font-medium leading-5 text-ios-text">{item.title}</span>
-        <span className="mt-0.5 block break-words text-xs leading-[1.2rem] text-ios-subtext">{item.subtitle}</span>
+        <span className="mt-1 block break-words text-xs leading-[1.2rem] text-ios-subtext">{item.subtitle}</span>
       </span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-ios-subtext/85" />
+      <ChevronRight className="mt-1 h-5 w-5 shrink-0 self-start text-ios-subtext/85" />
     </button>
   );
 }
@@ -456,7 +498,7 @@ function SettingsDetailDialog({
     <motion.div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex min-h-[100dvh] w-screen overflow-hidden bg-black/30 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] w-screen overflow-hidden bg-[rgb(10_15_20/0.32)] backdrop-blur-sm"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -464,17 +506,17 @@ function SettingsDetailDialog({
       onClick={() => onClose()}
     >
       <motion.div
-        className="relative ml-auto flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-white dark:bg-zinc-950"
+        className="relative ml-auto flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-[hsl(var(--background))] text-[hsl(var(--foreground))]"
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', stiffness: 320, damping: 34 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3 shadow-sm">
+        <header className="flex items-center gap-3 border-b border-[hsl(var(--border)/0.55)] px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3 shadow-sm">
           <button
             type="button"
-            className="touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-slate-100 text-ios-text dark:bg-zinc-900"
+            className="theme-surface-subtle touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border text-ios-text"
             onClick={onClose}
             aria-label="Назад"
           >

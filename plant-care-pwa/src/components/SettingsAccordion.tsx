@@ -7,33 +7,33 @@ type Tone = 'default' | 'emerald' | 'amber' | 'red' | 'blue';
 
 const toneClasses: Record<Tone, { badge: string; border: string; bg: string; icon: string }> = {
   default: {
-    badge: 'bg-black/5 text-ios-subtext dark:bg-white/10',
-    border: 'border-ios-border/60 dark:border-emerald-500/20',
-    bg: 'bg-white/60 dark:bg-zinc-950/55',
+    badge: 'theme-surface-subtle text-ios-subtext',
+    border: 'border-ios-border/60',
+    bg: 'theme-surface-1',
     icon: 'text-ios-accent'
   },
   emerald: {
-    badge: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+    badge: 'theme-badge-success',
     border: 'border-emerald-500/25',
-    bg: 'bg-emerald-500/8 dark:bg-emerald-500/10',
+    bg: 'theme-banner-success',
     icon: 'text-emerald-500'
   },
   amber: {
-    badge: 'bg-amber-500/12 text-amber-800 dark:text-amber-200',
+    badge: 'theme-badge-warning',
     border: 'border-amber-500/25',
-    bg: 'bg-amber-500/8 dark:bg-amber-500/10',
+    bg: 'theme-banner-warning',
     icon: 'text-amber-500'
   },
   red: {
-    badge: 'bg-red-500/12 text-red-700 dark:text-red-300',
+    badge: 'theme-badge-danger',
     border: 'border-red-500/25',
-    bg: 'bg-red-500/8 dark:bg-red-500/10',
+    bg: 'theme-banner-danger',
     icon: 'text-red-500'
   },
   blue: {
-    badge: 'bg-sky-500/12 text-sky-700 dark:text-sky-200',
+    badge: 'theme-badge-info',
     border: 'border-sky-500/25',
-    bg: 'bg-sky-500/8 dark:bg-sky-500/10',
+    bg: 'theme-badge-info',
     icon: 'text-sky-500'
   }
 };
@@ -70,7 +70,7 @@ export function SettingsAccordion({
         onClick={() => onToggle(id)}
         className="android-ripple flex w-full items-center gap-3 px-4 py-3 text-left"
       >
-        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-ios-border/60 bg-white/70 ${toneCls.icon}`}>
+        <span className={`theme-surface-subtle inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border ${toneCls.icon}`}>
           <Icon className="h-4 w-4" />
         </span>
 
@@ -102,7 +102,7 @@ export function SettingsAccordion({
             transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.85 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-ios-border/55 px-4 pb-4 pt-3 dark:border-emerald-500/15">{children}</div>
+            <div className="border-t border-ios-border/55 px-4 pb-4 pt-3">{children}</div>
           </motion.div>
         ) : null}
       </AnimatePresence>

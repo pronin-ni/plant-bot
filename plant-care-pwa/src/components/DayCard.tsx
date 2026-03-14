@@ -61,7 +61,7 @@ export function DayCard({
           <p className="text-[11px] capitalize text-ios-subtext">{header.subtitle}</p>
         </div>
 
-        <span className="inline-flex items-center gap-1 rounded-full border border-ios-border/55 bg-white/65 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/55">
+        <span className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] text-ios-subtext">
           <CalendarDays className="h-3.5 w-3.5" />
           {events.length}
         </span>
@@ -74,7 +74,7 @@ export function DayCard({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="rounded-2xl border border-dashed border-ios-border/60 bg-white/45 px-4 py-5 text-center text-sm text-ios-subtext dark:bg-zinc-900/45"
+            className="theme-surface-subtle rounded-2xl border border-dashed px-4 py-5 text-center text-sm text-ios-subtext"
           >
             <motion.span
               className="mx-auto mb-2.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-ios-accent/15 text-ios-accent"

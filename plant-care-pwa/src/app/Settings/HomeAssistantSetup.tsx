@@ -29,7 +29,7 @@ const springTransition = {
 } as const;
 
 const cardClass =
-  'rounded-ios-button border border-ios-border/60 bg-gradient-to-br from-white/82 via-white/74 to-white/62 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)] dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-900/72 dark:via-zinc-900/62 dark:to-zinc-900/52';
+  'theme-surface-1 rounded-ios-button border p-4 shadow-[0_14px_34px_rgba(15,23,42,0.07)]';
 
 const HA_SETUP_STEPS = [
   'Откройте Home Assistant: Profile -> Long-Lived Access Tokens.',
@@ -260,7 +260,7 @@ export function HomeAssistantSetup() {
       className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
     >
       <section className={cardClass}>
-        <div className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-ios-border/60 bg-white/80 text-ios-accent dark:bg-zinc-900/70">
+        <div className="theme-surface-subtle inline-flex h-9 w-9 items-center justify-center rounded-2xl border text-ios-accent">
           <Home className="h-4 w-4" />
         </div>
         <h3 className="mt-3 text-lg font-semibold text-ios-text">Home Assistant</h3>
@@ -273,19 +273,19 @@ export function HomeAssistantSetup() {
       <section className={cardClass}>
         <p className="text-sm font-medium text-ios-text">Что даст подключение</p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ios-subtext">
-          <div className="flex items-center gap-2 rounded-xl border border-ios-border/55 bg-white/75 px-3 py-2 dark:bg-zinc-900/65">
+          <div className="theme-surface-subtle flex items-center gap-2 rounded-xl border px-3 py-2">
             <Thermometer className="h-4 w-4 text-rose-500" />
             Температура
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-ios-border/55 bg-white/75 px-3 py-2 dark:bg-zinc-900/65">
+          <div className="theme-surface-subtle flex items-center gap-2 rounded-xl border px-3 py-2">
             <Droplets className="h-4 w-4 text-sky-500" />
             Влажность
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-ios-border/55 bg-white/75 px-3 py-2 dark:bg-zinc-900/65">
+          <div className="theme-surface-subtle flex items-center gap-2 rounded-xl border px-3 py-2">
             <Sun className="h-4 w-4 text-amber-500" />
             Освещённость
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-ios-border/55 bg-white/75 px-3 py-2 dark:bg-zinc-900/65">
+          <div className="theme-surface-subtle flex items-center gap-2 rounded-xl border px-3 py-2">
             <Sprout className="h-4 w-4 text-emerald-500" />
             Влажность почвы
           </div>
@@ -316,7 +316,7 @@ export function HomeAssistantSetup() {
             spellCheck={false}
             autoComplete="url"
             inputMode="url"
-            className="h-12 w-full rounded-ios-button border border-ios-border/70 bg-white/80 px-4 text-[16px] leading-6 text-ios-text outline-none backdrop-blur-ios dark:border-emerald-500/20 dark:bg-zinc-900/60"
+            className="theme-field h-12 w-full rounded-ios-button border px-4 text-[16px] leading-6 text-ios-text outline-none backdrop-blur-ios"
           />
           <span className="mt-1.5 block text-[12px] leading-4 text-ios-subtext">
             Полный адрес Home Assistant, обязательно с `http://` или `https://`.
@@ -338,7 +338,7 @@ export function HomeAssistantSetup() {
               autoCorrect="off"
               spellCheck={false}
               autoComplete="off"
-              className="h-12 w-full rounded-ios-button border border-ios-border/70 bg-white/80 pl-10 pr-4 font-mono text-[16px] leading-6 text-ios-text outline-none backdrop-blur-ios dark:border-emerald-500/20 dark:bg-zinc-900/60"
+              className="theme-field h-12 w-full rounded-ios-button border pl-10 pr-4 font-mono text-[16px] leading-6 text-ios-text outline-none backdrop-blur-ios"
             />
           </div>
           <span className="mt-1.5 block text-[12px] leading-4 text-ios-subtext">
@@ -372,7 +372,7 @@ export function HomeAssistantSetup() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2 }}
-              className="mt-3 rounded-xl border border-ios-border/60 bg-white/70 px-3 py-2 text-[12px] leading-5 text-ios-subtext dark:bg-zinc-900/55"
+              className="theme-surface-2 mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5 text-ios-subtext"
             >
               Заполните URL и token, затем запустите проверку подключения.
             </motion.div>
@@ -385,7 +385,7 @@ export function HomeAssistantSetup() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2 }}
-              className="mt-3 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[12px] leading-5 text-sky-700 dark:text-sky-200"
+              className="theme-badge-info mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5"
             >
               <span className="inline-flex items-center gap-1.5">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -401,7 +401,7 @@ export function HomeAssistantSetup() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22 }}
-              className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700 dark:text-emerald-300"
+              className="theme-banner-success mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5"
             >
               <span className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4" />
@@ -412,7 +412,7 @@ export function HomeAssistantSetup() {
         </AnimatePresence>
 
         {connectionState === 'success' ? (
-          <div className="mt-3 rounded-xl border border-ios-border/60 bg-white/75 px-3 py-3 text-[12px] leading-5 text-ios-subtext dark:border-emerald-500/20 dark:bg-zinc-900/60">
+          <div className="theme-surface-2 mt-3 rounded-xl border px-3 py-3 text-[12px] leading-5 text-ios-subtext">
             <p className="text-sm font-medium text-ios-text">Подключено успешно</p>
             {roomsSensorsQuery.isLoading || roomsSensorsQuery.isFetching ? (
               <p className="mt-1 inline-flex items-center gap-1.5">
@@ -446,20 +446,20 @@ export function HomeAssistantSetup() {
             ) : null}
 
             {summaryMessage ? (
-              <p className="mt-2 text-amber-700 dark:text-amber-200">{summaryMessage}</p>
+              <p className="theme-banner-warning mt-2 rounded-lg border px-3 py-2">{summaryMessage}</p>
             ) : null}
           </div>
         ) : null}
 
         {connectionState === 'success' ? (
-          <div className="mt-3 rounded-xl border border-ios-border/60 bg-white/75 px-3 py-3 text-[12px] leading-5 text-ios-subtext dark:border-emerald-500/20 dark:bg-zinc-900/60">
+          <div className="theme-surface-2 mt-3 rounded-xl border px-3 py-3 text-[12px] leading-5 text-ios-subtext">
             <p className="text-sm font-medium text-ios-text">Выбор комнат и датчиков</p>
             <p className="mt-1">
               Выберите, какие данные Home Assistant использовать в Plant Bot.
             </p>
 
             {!roomsSensorsQuery.data?.connected ? (
-              <p className="mt-2 text-amber-700 dark:text-amber-200">
+              <p className="theme-banner-warning mt-2 rounded-lg border px-3 py-2">
                 {roomsSensorsQuery.data?.message ?? 'Home Assistant не подключен.'}
               </p>
             ) : null}
@@ -472,7 +472,7 @@ export function HomeAssistantSetup() {
             ) : null}
 
             {roomsSensorsQuery.isError ? (
-              <p className="mt-2 text-amber-700 dark:text-amber-200">
+              <p className="theme-banner-warning mt-2 rounded-lg border px-3 py-2">
                 Не удалось загрузить список комнат и датчиков.
               </p>
             ) : null}
@@ -484,7 +484,7 @@ export function HomeAssistantSetup() {
                   <select
                     value={selectedRoomId}
                     onChange={(event) => setSelectedRoomId(event.target.value)}
-                    className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/80 px-3 text-[16px] text-ios-text outline-none dark:border-emerald-500/20 dark:bg-zinc-900/60"
+                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-[16px] text-ios-text outline-none"
                   >
                     <option value="">Не выбрано</option>
                     {roomsSensorsQuery.data.rooms.map((room) => (
@@ -525,7 +525,7 @@ export function HomeAssistantSetup() {
                   Сохранить выбор
                 </Button>
                 {selectionMessage ? (
-                  <p className="text-[12px] text-emerald-700 dark:text-emerald-300">{selectionMessage}</p>
+                  <p className="theme-banner-success rounded-lg border px-3 py-2 text-[12px]">{selectionMessage}</p>
                 ) : null}
               </div>
             ) : null}
@@ -533,7 +533,7 @@ export function HomeAssistantSetup() {
         ) : null}
 
         {connectionState === 'error' ? (
-          <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] leading-5 text-amber-800 dark:text-amber-200">
+          <div className="theme-banner-warning mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5">
             <div className="inline-flex items-center gap-1.5">
               <AlertTriangle className="h-4 w-4" />
               {connectionMessage ?? 'Не удалось подключиться. Проверьте URL, token и доступность Home Assistant.'}
@@ -575,7 +575,7 @@ export function HomeAssistantSetup() {
             <div className="space-y-2 text-xs leading-5 text-ios-subtext">
               {HA_SETUP_STEPS.map((step, index) => (
                 <div key={step} className="flex items-start gap-2">
-                  <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-ios-border/60 bg-white/80 text-[11px] font-semibold text-ios-accent dark:bg-zinc-900/70">
+                  <span className="theme-surface-subtle mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold text-ios-accent">
                     {index + 1}
                   </span>
                   <p>{step}</p>
@@ -616,7 +616,7 @@ function SensorSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/80 px-3 text-[16px] text-ios-text outline-none dark:border-emerald-500/20 dark:bg-zinc-900/60"
+        className="theme-field h-11 w-full rounded-ios-button border px-3 text-[16px] text-ios-text outline-none"
       >
         <option value="">Не выбрано</option>
         {options.map((sensor) => (

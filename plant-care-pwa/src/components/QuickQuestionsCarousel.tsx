@@ -51,7 +51,7 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
             key={item}
             type="button"
             whileTap={{ scale: 0.97 }}
-            className="touch-target android-ripple h-11 max-w-[82vw] shrink-0 truncate rounded-full border border-ios-border/55 bg-white/70 px-3.5 text-left text-xs text-ios-text shadow-sm dark:bg-zinc-900/60"
+            className="theme-surface-subtle touch-target android-ripple h-11 max-w-[82vw] shrink-0 truncate rounded-full border px-3.5 text-left text-xs text-ios-text shadow-sm"
             title={item}
             onPointerDown={() => startLongPress(item)}
             onPointerUp={clearLongPressTimer}
@@ -84,7 +84,7 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="pointer-events-none absolute inset-x-0 top-[calc(100%+4px)] z-20 rounded-xl border border-ios-border/70 bg-white/95 px-3 py-2 text-xs leading-5 text-ios-text shadow-[0_10px_28px_rgba(0,0,0,0.14)] dark:bg-zinc-900/95"
+            className="theme-surface-1 pointer-events-none absolute inset-x-0 top-[calc(100%+4px)] z-20 rounded-xl border px-3 py-2 text-xs leading-5 text-ios-text shadow-[0_10px_28px_rgb(0_0_0/0.14)]"
           >
             {expandedQuestion}
           </motion.div>

@@ -72,9 +72,9 @@ export function MagicLinkForm({
   const timerLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
-    <div className="mt-4 rounded-ios-button border border-emerald-500/20 bg-emerald-500/5 p-3.5">
+    <div className="theme-surface-1 mt-4 rounded-ios-button border p-3.5">
       <div className="mb-2 flex items-center gap-2">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
+        <span className="theme-badge-success inline-flex h-7 w-7 items-center justify-center rounded-full border">
           <Mail className="h-4 w-4" />
         </span>
         <div>
@@ -94,23 +94,23 @@ export function MagicLinkForm({
             className="space-y-3"
           >
             <motion.div
-              className="rounded-2xl border border-emerald-400/35 bg-emerald-500/12 p-3"
+              className="theme-banner-success rounded-2xl border p-3"
               animate={prefersReducedMotion ? undefined : { boxShadow: ['0 0 0 rgba(16,185,129,0)', '0 0 0.8rem rgba(16,185,129,0.18)', '0 0 0 rgba(16,185,129,0)'] }}
               transition={prefersReducedMotion ? undefined : { duration: 1.2, ease: 'easeInOut', repeat: 1 }}
             >
               <div className="flex items-start gap-2.5">
-                <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/25 text-emerald-200">
+                <span className="theme-badge-success mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full border">
                   <CheckCircle2 className="h-4.5 w-4.5" />
                 </span>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-emerald-100">Проверьте почту — мы отправили волшебную ссылку! ✨</p>
-                  <p className="text-xs text-emerald-200/90">
+                  <p className="text-sm font-semibold text-ios-text">Проверьте почту — мы отправили волшебную ссылку! ✨</p>
+                  <p className="text-xs text-ios-subtext">
                     {sentToEmail ? `Письмо отправлено на ${sentToEmail}.` : 'Письмо отправлено на указанный email.'}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-100">
+              <div className="theme-pill-active mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium">
                 <Clock3 className="h-3.5 w-3.5" />
                 Ссылка активна: {timerLabel}
               </div>
@@ -122,7 +122,7 @@ export function MagicLinkForm({
                 whileTap={{ scale: disabled || loading ? 1 : 0.98 }}
                 onClick={onResend}
                 disabled={disabled || loading}
-                className="touch-target inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(16,185,129,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="touch-target inline-flex items-center justify-center gap-1.5 rounded-xl bg-[hsl(var(--primary))] px-3 text-xs font-semibold text-[hsl(var(--primary-foreground))] shadow-[0_8px_20px_hsl(var(--primary)/0.28)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <>
@@ -140,7 +140,7 @@ export function MagicLinkForm({
               <button
                 type="button"
                 onClick={onResetSent}
-                className="touch-target rounded-xl border border-ios-border/70 bg-white/80 text-xs font-medium text-ios-subtext transition hover:bg-white/95 dark:border-zinc-700/70 dark:bg-zinc-900/75"
+                className="theme-surface-subtle touch-target rounded-xl border px-3 text-xs font-medium text-ios-subtext transition hover:border-ios-accent/35"
               >
                 Изменить email
               </button>
@@ -170,7 +170,7 @@ export function MagicLinkForm({
                 value={email}
                 onChange={(event) => onEmailChange(event.target.value)}
                 disabled={disabled || loading}
-                className="touch-target w-full rounded-xl border border-ios-border/70 bg-white/85 px-3 text-sm text-ios-label outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700/70 dark:bg-zinc-900/80"
+                className="theme-field touch-target w-full rounded-xl border px-3 text-sm text-ios-label outline-none transition focus:border-ios-accent/45 focus:ring-2 focus:ring-[hsl(var(--ring)/0.18)] disabled:cursor-not-allowed disabled:opacity-60"
               />
             </label>
 
@@ -178,7 +178,7 @@ export function MagicLinkForm({
               type="submit"
               whileTap={{ scale: submitDisabled ? 1 : 0.98 }}
               disabled={submitDisabled}
-              className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.30)] transition disabled:cursor-not-allowed disabled:opacity-55"
+              className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] text-sm font-semibold text-[hsl(var(--primary-foreground))] shadow-[0_10px_24px_hsl(var(--primary)/0.30)] transition disabled:cursor-not-allowed disabled:opacity-55"
             >
               {loading ? (
                 <>
@@ -204,7 +204,7 @@ export function MagicLinkForm({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="mt-2.5 rounded-xl border border-red-400/35 bg-red-500/10 px-2.5 py-2 text-xs text-red-200 dark:text-red-300"
+            className="theme-banner-danger mt-2.5 rounded-xl border px-2.5 py-2 text-xs"
           >
             {error}
           </motion.p>

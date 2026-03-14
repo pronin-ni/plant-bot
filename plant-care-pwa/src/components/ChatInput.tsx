@@ -33,9 +33,9 @@ export function ChatInput({
   const canSend = (value.trim().length >= 2 || Boolean(attachedLabel)) && !disabled && !sending;
 
   return (
-    <section className="space-y-2 rounded-xl border border-ios-border/60 bg-ios-card/88 p-2 shadow-sm backdrop-blur-ios dark:border-emerald-500/20 dark:bg-zinc-950/85">
+    <section className="theme-surface-1 space-y-2 rounded-xl border p-2 shadow-sm backdrop-blur-ios">
       {attachedLabel ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-ios-border/60 bg-white/70 px-3 py-1.5 text-xs text-ios-subtext dark:bg-zinc-900/70">
+        <div className="theme-surface-subtle flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-xs text-ios-subtext">
           <span className="min-w-0 truncate">Фото: {attachedLabel}</span>
           <button
             type="button"
@@ -52,7 +52,7 @@ export function ChatInput({
       ) : null}
 
       <div className="flex items-end gap-2">
-        <label className="touch-target android-ripple inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-ios-border/60 bg-white/70 text-ios-subtext dark:bg-zinc-900/70">
+        <label className="theme-surface-subtle touch-target android-ripple inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border text-ios-subtext">
           <input
             type="file"
             accept="image/*"
@@ -71,12 +71,12 @@ export function ChatInput({
           <Paperclip className="h-4 w-4" />
         </label>
 
-        <div className="relative min-h-11 flex-1 rounded-xl border border-ios-border/65 bg-white/75 px-3 py-2 dark:bg-zinc-900/72">
+        <div className="theme-surface-subtle relative min-h-11 flex-1 rounded-xl border px-3 py-2">
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
             placeholder="Введите вопрос..."
-            className="max-h-36 min-h-[24px] w-full resize-none bg-transparent pr-8 text-[14px] text-ios-text outline-none placeholder:text-ios-subtext"
+            className="max-h-36 min-h-[24px] w-full resize-none bg-transparent pr-8 text-[14px] text-ios-text outline-none placeholder:text-[hsl(var(--muted-foreground))]"
             disabled={disabled}
             rows={1}
             onKeyDown={(event) => {
@@ -118,7 +118,11 @@ export function ChatInput({
 
         <button
           type="button"
-          className={`touch-target android-ripple inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition ${canSend ? 'bg-ios-accent' : 'bg-ios-accent/45'}`}
+          className={`touch-target android-ripple inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl shadow-sm transition ${
+            canSend
+              ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+              : 'bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]'
+          }`}
           onClick={() => {
             if (!canSend) {
               return;

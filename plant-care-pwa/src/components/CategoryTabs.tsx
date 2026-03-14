@@ -19,14 +19,16 @@ const TABS: Array<{
 
 export function CategoryTabs({
   value,
-  onChange
+  onChange,
+  embedded = false
 }: {
   value: PlantCategoryFilter;
   onChange: (next: PlantCategoryFilter) => void;
+  embedded?: boolean;
 }) {
   return (
     <motion.div
-      className="ios-blur-card rounded-[24px] p-1.5 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
+      className={embedded ? 'rounded-[20px] bg-[hsl(var(--background)/0.28)] p-1' : 'ios-blur-card rounded-[24px] p-1.5 shadow-[0_14px_34px_rgb(15_23_42/0.08)]'}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 340, damping: 28 }}
@@ -49,7 +51,7 @@ export function CategoryTabs({
               {active ? (
                 <motion.span
                   layoutId="plants-category-tab-indicator"
-                  className="absolute inset-0 rounded-ios-button bg-white/90 shadow-[0_10px_26px_rgba(15,23,42,0.09)] dark:bg-zinc-900/80"
+                  className="absolute inset-0 rounded-ios-button bg-[hsl(var(--card)/0.96)] shadow-[0_10px_22px_rgb(15_23_42/0.10)]"
                   transition={{ type: 'spring', stiffness: 360, damping: 30, mass: 1 }}
                 />
               ) : null}

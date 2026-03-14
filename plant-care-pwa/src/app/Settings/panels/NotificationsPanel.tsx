@@ -196,7 +196,7 @@ export function NotificationsPanel() {
               setTime(next);
               persist(next, pattern);
             }}
-            className="touch-target w-full rounded-ios-button border border-ios-border/60 bg-white/80 px-3 text-sm outline-none"
+            className="theme-field touch-target w-full rounded-ios-button border px-3 text-sm outline-none"
           />
         </label>
         <label className="space-y-1">
@@ -208,7 +208,7 @@ export function NotificationsPanel() {
               setPattern(next);
               persist(time, next);
             }}
-            className="touch-target w-full rounded-ios-button border border-ios-border/60 bg-white/80 px-3 text-sm outline-none"
+            className="theme-field touch-target w-full rounded-ios-button border px-3 text-sm outline-none"
           >
             <option value="light">Лёгкий</option>
             <option value="medium">Средний</option>
@@ -217,7 +217,7 @@ export function NotificationsPanel() {
         </label>
       </div>
 
-      <div className="rounded-xl border border-ios-border/60 bg-white/70 p-4 text-xs text-ios-subtext dark:bg-zinc-900/50">
+      <div className="theme-surface-2 rounded-xl border p-4 text-xs text-ios-subtext">
         <p>Статус: {pushState.subscribed ? 'Подписаны' : 'Не подписаны'} · активных подписок: {pushState.count}</p>
         <p className="mt-1">Push на сервере: {pushState.enabled ? 'включён' : 'выключен'}</p>
         <p className="mt-1">Разрешение браузера: {typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'}</p>
@@ -239,7 +239,7 @@ export function NotificationsPanel() {
       </div>
 
       {isAdmin ? (
-        <div className="space-y-2 rounded-xl border border-ios-border/60 bg-white/70 p-3 text-xs text-ios-subtext dark:bg-zinc-900/50">
+        <div className="theme-surface-2 space-y-2 rounded-xl border p-3 text-xs text-ios-subtext">
           <p className="font-medium text-ios-text">Админ: тест push по userId</p>
           <div className="flex flex-wrap gap-2">
             <input
@@ -249,7 +249,7 @@ export function NotificationsPanel() {
               value={pushTestUserId}
               onChange={(event) => setPushTestUserId(event.target.value)}
               placeholder="ID пользователя"
-              className="h-11 min-w-[140px] flex-1 rounded-ios-button border border-ios-border/60 bg-white/80 px-3 text-sm outline-none"
+              className="theme-field h-11 min-w-[140px] flex-1 rounded-ios-button border px-3 text-sm outline-none"
             />
             <Button variant="secondary" onClick={runAdminPushTest} disabled={isBusy || pushTestPending}>
               {pushTestPending ? 'Отправляем...' : 'Тест push'}

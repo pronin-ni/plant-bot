@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, BarChart3, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertTriangle, BarChart3, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 
 import { getCalendar, waterPlant } from '@/lib/api';
 import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
 import { useOfflineStore, useUiStore } from '@/lib/store';
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
-import { CalendarStrip } from '@/components/CalendarStrip';
 import { DayCard } from '@/components/DayCard';
 import { MassWaterButton } from '@/components/MassWaterButton';
 import { ConditionsForecast } from '@/components/ConditionsForecast';
@@ -76,11 +75,34 @@ function useAnimatedNumber(value: number, durationMs = 520): number {
 function StatItem({ label, value }: { label: string; value: number }) {
   const animated = useAnimatedNumber(value);
   return (
-    <div className="flex h-full min-h-[82px] flex-col items-center justify-center rounded-2xl border border-ios-border/55 bg-white/50 px-3 py-2.5 text-center dark:bg-zinc-900/50">
+    <div className="theme-surface-subtle flex h-full min-h-[82px] flex-col items-center justify-center rounded-2xl border px-3 py-2.5 text-center">
       <p className="text-[11px] leading-4 text-ios-subtext">{label}</p>
       <p className="mt-1 text-lg font-semibold leading-none text-ios-text">{animated}</p>
     </div>
   );
+}
+
+function getUpcomingEventStatus(diffDays: number): string {
+  if (diffDays < 0) {
+    return `Просрочено на ${Math.abs(diffDays)} дн.`;
+  }
+  if (diffDays === 0) {
+    return 'Сегодня';
+  }
+  if (diffDays === 1) {
+    return 'Завтра';
+  }
+  return `Через ${diffDays} дн.`;
+}
+
+function getUpcomingEventTone(diffDays: number): string {
+  if (diffDays < 0) {
+    return 'theme-badge-danger';
+  }
+  if (diffDays <= 1) {
+    return 'theme-badge-warning';
+  }
+  return 'theme-badge-success';
 }
 
 export function CalendarPage() {
@@ -90,7 +112,6 @@ export function CalendarPage() {
 
   const todayBase = useMemo(() => startOfDay(new Date()), []);
   const [filter, setFilter] = useState<CalendarActionFilter>('all');
-  const [stripAnchorDate, setStripAnchorDate] = useState<Date>(() => addDays(todayBase, -3));
   const [selectedDate, setSelectedDate] = useState<string>(() => dayKeyFromDate(todayBase));
   const [wateringWavePulse, setWateringWavePulse] = useState(0);
   const { reduceMotion } = useMotionGuard();
@@ -172,6 +193,12 @@ export function CalendarPage() {
   const overdueEvents = useMemo(() => {
     return enrichedEvents.filter((item) => item.isOverdue);
   }, [enrichedEvents]);
+
+  const upcomingEvents = useMemo(() => {
+    return filteredByTypeEvents
+      .filter((event) => event.diffDays >= 0)
+      .slice(0, 5);
+  }, [filteredByTypeEvents]);
 
   const overdueCount = overdueEvents.length;
   const todayCount = enrichedEvents.filter((item) => item.isToday).length;
@@ -263,15 +290,13 @@ export function CalendarPage() {
         <div className="ios-blur-card overflow-hidden p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-ios-caption uppercase tracking-wide text-ios-subtext">Календарь ухода</p>
-              <h2 className="mt-1 text-[28px] font-semibold leading-[1.05] text-ios-text">Ваши растения ждут</h2>
-              <p className="mt-1 text-sm text-ios-subtext">Сегодня: {todayCount} · Просрочено: {overdueCount}</p>
+              <p className="text-sm text-ios-subtext">Сегодня: {todayCount} · Просрочено: {overdueCount}</p>
               <p className="mt-1 text-[11px] text-ios-subtext">Последнее обновление: {lastUpdatedLabel}{isOffline ? ' · оффлайн-кэш' : ''}</p>
             </div>
 
             <button
               type="button"
-              className="touch-target android-ripple inline-flex shrink-0 items-center rounded-full border border-ios-border/60 bg-white/60 px-3 text-ios-caption text-ios-subtext dark:bg-zinc-900/55"
+              className="theme-surface-subtle touch-target android-ripple inline-flex shrink-0 items-center rounded-full border px-3 text-ios-caption text-ios-subtext"
               onClick={() => {
                 hapticImpact('light');
                 void calendarQuery.refetch();
@@ -282,8 +307,8 @@ export function CalendarPage() {
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-[84px_1fr] items-center gap-3">
-            <div className="relative h-[84px] w-[84px]">
+          <div className="mt-4 grid grid-cols-[92px_1fr] items-center gap-3">
+            <div className="relative h-[92px] w-[92px]">
               <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth="10" />
                 <motion.circle
@@ -301,20 +326,26 @@ export function CalendarPage() {
                 />
                 <defs>
                   <linearGradient id="calendar-today-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#34C759" />
-                    <stop offset="60%" stopColor="#F59E0B" />
-                    <stop offset="100%" stopColor="#EF4444" />
+                    <stop offset="0%" stopColor="hsl(var(--primary))" />
+                    <stop offset="60%" stopColor="color-mix(in srgb, hsl(var(--accent)) 70%, #f59e0b 30%)" />
+                    <stop offset="100%" stopColor="hsl(var(--destructive))" />
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-lg font-semibold text-ios-text">{progress}%</p>
-                <p className="text-[10px] text-ios-subtext">выполнено</p>
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <p className="text-[22px] font-semibold leading-none text-ios-text">{progress}%</p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-start gap-2.5 rounded-2xl border border-ios-border/55 bg-white/45 px-3.5 py-2.5 dark:bg-zinc-900/45">
+              <div className="theme-surface-subtle rounded-2xl border px-3.5 py-2.5">
+                <p className="text-[11px] uppercase tracking-[0.08em] text-ios-subtext">Выполнение</p>
+                <p className="mt-1 text-sm font-semibold leading-5 text-ios-text">
+                  {progress >= 100 ? 'Все задачи на сегодня закрыты.' : `${progress}% задач уже выполнено.`}
+                </p>
+              </div>
+
+              <div className="theme-surface-subtle flex items-start gap-2.5 rounded-2xl border px-3.5 py-2.5">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-ios-accent" />
                 <p className="text-xs leading-5 text-ios-subtext">
                   {todayCount + overdueCount > 0
@@ -336,16 +367,16 @@ export function CalendarPage() {
 
         {overdueCount > 0 ? (
           <motion.section
-            className="ios-blur-card border border-red-300/60 bg-red-500/10 p-3"
+            className="theme-banner-danger rounded-2xl border p-3"
             animate={reduceMotion ? { x: 0 } : { x: [0, -4, 4, -2, 2, 0] }}
             transition={{ duration: 0.52, ease: 'easeInOut', repeat: reduceMotion ? 0 : Infinity, repeatDelay: 5.5 }}
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-300">
+              <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-[hsl(var(--destructive))]">
                 <AlertTriangle className="h-4 w-4" />
                 Срочно: {overdueCount} просроченных задач
               </p>
-              <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] text-red-600 dark:text-red-300">Требует внимания</span>
+              <span className="theme-badge-danger rounded-full border px-2 py-0.5 text-[11px]">Требует внимания</span>
             </div>
           </motion.section>
         ) : null}
@@ -375,8 +406,8 @@ export function CalendarPage() {
                   type="button"
                   className={`touch-target android-ripple relative shrink-0 rounded-2xl border px-3.5 text-xs font-semibold transition ${
                     active
-                      ? 'border-ios-accent bg-ios-accent text-[#0D2815] shadow-[0_8px_20px_rgba(52,199,89,0.25)]'
-                      : 'border-ios-border/60 bg-white/60 text-ios-subtext hover:text-ios-text dark:bg-zinc-900/55'
+                      ? 'border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-[0_8px_20px_hsl(var(--primary)/0.25)]'
+                      : 'theme-surface-subtle text-ios-subtext hover:text-ios-text'
                   }`}
                   onClick={() => {
                     hapticSelectionChanged();
@@ -385,7 +416,7 @@ export function CalendarPage() {
                 >
                   <span className="relative z-10 inline-flex items-center gap-1.5">
                     {tab.label}
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-black/15 text-[#0D2815]' : 'bg-ios-accent/12 text-ios-accent'}`}>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-[hsl(var(--primary-foreground)/0.14)] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--primary)/0.12)] text-ios-accent'}`}>
                       {tab.count}
                     </span>
                   </span>
@@ -395,23 +426,13 @@ export function CalendarPage() {
           </div>
         </div>
 
-        <CalendarStrip
-          events={filteredByTypeEvents}
-          anchorDate={stripAnchorDate}
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          onShiftWindow={(delta) => {
-            setStripAnchorDate((prev) => addDays(prev, delta));
-          }}
-        />
-
         <ConditionsForecast
           plantId={forecastPlant?.plantId ?? null}
           plantName={forecastPlant?.plantName}
         />
 
         {calendarQuery.isLoading ? <p className="py-6 text-center text-ios-subtext">Загружаем календарь...</p> : null}
-        {calendarQuery.isError ? <p className="py-6 text-center text-red-500">Не удалось загрузить календарь.</p> : null}
+        {calendarQuery.isError ? <p className="theme-banner-danger rounded-xl border px-3 py-3 text-center text-sm">Не удалось загрузить календарь.</p> : null}
 
         {!calendarQuery.isLoading ? (
           <DayCard
@@ -422,6 +443,59 @@ export function CalendarPage() {
             onOpenPlant={(plantId) => openPlantDetail(plantId)}
           />
         ) : null}
+
+        <section className="ios-blur-card overflow-hidden p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-ios-body font-semibold text-ios-text">Ближайшие поливы</p>
+              <p className="text-[11px] text-ios-subtext">Следующие задачи ухода без мёртвых контролов и псевдо-таймлайна.</p>
+            </div>
+            <span className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] text-ios-subtext">
+              {upcomingEvents.length}
+            </span>
+          </div>
+
+          {upcomingEvents.length ? (
+            <div className="space-y-2">
+              {upcomingEvents.map((event) => (
+                <button
+                  key={`upcoming-${event.date}-${event.plantId}`}
+                  type="button"
+                  onClick={() => {
+                    hapticSelectionChanged();
+                    setSelectedDate(event.dayKey);
+                    openPlantDetail(event.plantId);
+                  }}
+                  className="theme-surface-subtle android-ripple flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition active:bg-[hsl(var(--foreground)/0.04)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-semibold text-ios-text">{event.plantName}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-ios-subtext">
+                      {parseDateOnly(event.date).toLocaleDateString('ru-RU', {
+                        day: '2-digit',
+                        month: 'long',
+                        weekday: 'short'
+                      })}
+                    </p>
+                  </div>
+
+                  <span className={`${getUpcomingEventTone(event.diffDays)} inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[11px]`}>
+                    {getUpcomingEventStatus(event.diffDays)}
+                  </span>
+
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ios-subtext" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="theme-surface-subtle rounded-2xl border border-dashed px-4 py-5 text-center">
+              <p className="text-sm font-medium text-ios-text">Ближайших поливов пока нет</p>
+              <p className="mt-1 text-xs leading-5 text-ios-subtext">
+                Когда появятся новые задачи ухода, они будут показаны здесь списком.
+              </p>
+            </div>
+          )}
+        </section>
       </section>
     </PlatformPullToRefresh>
   );

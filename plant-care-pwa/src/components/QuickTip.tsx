@@ -21,8 +21,8 @@ export function QuickTip() {
   }, []);
 
   return (
-    <div className="ios-blur-card border border-emerald-500/20 bg-emerald-500/8 px-3 py-2 text-xs text-emerald-100">
-      <div className="mb-1 inline-flex items-center gap-1.5 text-emerald-200">
+    <div className="theme-banner-success rounded-2xl border px-3 py-2 text-xs">
+      <div className="mb-1 inline-flex items-center gap-1.5 font-medium text-ios-text">
         <Lightbulb className="h-3.5 w-3.5" />
         Быстрый совет
       </div>

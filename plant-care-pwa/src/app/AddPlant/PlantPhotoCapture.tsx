@@ -70,7 +70,7 @@ export function PlantPhotoCapture({
       />
       <label htmlFor="plant-photo-input" className="block">
         <span
-          className={`inline-flex h-12 w-full items-center justify-center rounded-ios-button bg-ios-accent px-5 text-ios-body font-medium text-white shadow-ios ${
+          className={`inline-flex h-12 w-full items-center justify-center rounded-ios-button bg-[hsl(var(--primary))] px-5 text-ios-body font-medium text-[hsl(var(--primary-foreground))] shadow-ios ${
             identifyMutation.isPending ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
           }`}
         >
@@ -80,12 +80,12 @@ export function PlantPhotoCapture({
       </label>
 
       {identifyMutation.data ? (
-        <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 text-sm dark:bg-zinc-900/40">
+        <div className="theme-surface-2 rounded-ios-button border p-3 text-sm">
           <p className="font-semibold text-ios-text">{identifyMutation.data.russianName ?? 'Не удалось определить название'}</p>
           <p className="text-ios-caption text-ios-subtext">{identifyMutation.data.latinName ?? '—'}</p>
           <p className="mt-1 text-ios-caption text-ios-subtext">Уверенность: {identifyMutation.data.confidence}%</p>
           {identifyMutation.data.confidence < 60 ? (
-            <p className="mt-2 text-[12px] text-amber-700">Низкая уверенность. Проверьте название вручную.</p>
+            <p className="theme-banner-warning mt-2 rounded-xl border px-3 py-2 text-[12px]">Низкая уверенность. Проверьте название вручную.</p>
           ) : null}
         </div>
       ) : null}

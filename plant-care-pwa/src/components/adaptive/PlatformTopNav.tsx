@@ -1,11 +1,11 @@
 import type { AppTabKey } from '@/types/navigation';
 
 const TITLES: Record<AppTabKey, { title: string; subtitle: string }> = {
-  home: { title: 'Мои Растения', subtitle: 'Главный экран с карточками растений и быстрым поливом.' },
-  calendar: { title: 'Календарь', subtitle: 'План поливов и напоминания по датам.' },
-  add: { title: 'Добавить', subtitle: 'Новый мастер добавления растений.' },
+  home: { title: 'Мои Растения', subtitle: 'Коллекция, полив и быстрый уход.' },
+  calendar: { title: 'Календарь', subtitle: 'Ближайшие задачи ухода по датам.' },
+  add: { title: 'Добавить', subtitle: 'Новый мастер для добавления растения.' },
   ai: { title: 'AI-ассистент', subtitle: '' },
-  settings: { title: 'Настройки', subtitle: 'Параметры приложения, города и уведомлений.' },
+  settings: { title: 'Настройки', subtitle: 'Темы, уведомления и интеграции.' },
   admin: { title: 'Админ-панель', subtitle: 'Управление пользователями, кэшем и backup базы.' }
 };
 
@@ -20,4 +20,3 @@ export function PlatformTopNav({ tab }: { tab: AppTabKey }) {
     </header>
   );
 }
-

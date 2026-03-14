@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { Home, Image as ImageIcon, SunMedium, TreePine } from 'lucide-react';
+import { Home, SunMedium, TreePine } from 'lucide-react';
 
+import { PlantAvatar } from '@/components/PlantAvatar';
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import {
   getPlantCategoryLabel,
@@ -75,7 +76,7 @@ export function PlantCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
       whileTap={{ scale: 0.988 }}
-      className={`group relative flex flex-col gap-3 overflow-hidden rounded-[28px] border bg-white/95 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(15,23,42,0.09)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${pill.borderClassName}`}
+      className={`group theme-surface-1 relative flex flex-col gap-3 overflow-hidden rounded-[28px] border p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgb(15_23_42/0.14)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))] ${pill.borderClassName}`}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -86,22 +87,26 @@ export function PlantCard({
         }
       }}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(circle_at_top_left,rgba(52,199,89,0.10),transparent_52%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.08),transparent_48%)] opacity-90" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(circle_at_top_right,hsl(var(--accent)/0.12),transparent_48%)] opacity-90" />
       <div className="relative flex gap-3.5">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-slate-100 shadow-inner">
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-[hsl(var(--secondary)/0.92)] shadow-inner">
           {plant.photoUrl ? (
             <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-slate-400">
-              <ImageIcon className="h-6 w-6" />
-            </div>
+            <PlantAvatar
+              name={plant.name}
+              plant={plant}
+              className="h-full w-full rounded-[22px] border-0 shadow-none"
+              labelClassName="bottom-1.5 left-1.5 h-6 min-w-6 px-1.5 text-[10px]"
+              framed={false}
+            />
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 space-y-1">
-              <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-slate-900 sm:text-base">{plant.name}</p>
-              <p className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+              <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-ios-text sm:text-base">{plant.name}</p>
+              <p className="inline-flex items-center gap-1 text-xs font-medium text-ios-subtext">
                 <CategoryIcon plant={plant} className="h-3.5 w-3.5" />
                 {getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}
               </p>
@@ -117,7 +122,7 @@ export function PlantCard({
               <SourceIcon className="h-3.5 w-3.5" />
               {source.shortLabel}
             </span>
-            <span className="text-xs text-slate-500">Следующий полив: {nextWateringLabel(daysLeft, nextWateringText)}</span>
+            <span className="text-xs text-ios-subtext">Следующий полив: {nextWateringLabel(daysLeft, nextWateringText)}</span>
           </div>
         </div>
       </div>
@@ -130,16 +135,16 @@ export function PlantCard({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400/90">Почему сейчас</p>
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-ios-subtext">Почему сейчас</p>
             <p className="mt-1 line-clamp-2 text-sm leading-5">{hint}</p>
           </div>
         </div>
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-slate-500">
+          <div className="flex items-center justify-between text-[11px] text-ios-subtext">
             <span>Цикл полива</span>
             <span>{Math.max(0, Math.min(100, cycleProgress))}%</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/90 dark:bg-zinc-950/70">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">
             <div
               className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400"
               style={{ width: `${cycleProgress}%` }}

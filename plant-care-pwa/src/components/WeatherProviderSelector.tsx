@@ -84,7 +84,7 @@ export function WeatherProviderSelector({
           value={selected ?? ''}
           onChange={(e) => onChange(e.target.value)}
           disabled={saving}
-          className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-3 text-ios-body outline-none backdrop-blur-ios dark:border-emerald-500/20 dark:bg-zinc-900/60"
+          className="theme-field h-11 w-full rounded-ios-button border px-3 text-ios-body outline-none backdrop-blur-ios"
         >
           <option value="" disabled>
             Выберите провайдера
@@ -103,7 +103,7 @@ export function WeatherProviderSelector({
           <motion.div
             key={p.id}
             className={`rounded-2xl border px-3 py-2 text-sm ${
-              p.id === selected ? 'border-ios-accent/55 bg-ios-accent/10 text-ios-text' : 'border-ios-border/60 bg-white/60 dark:bg-zinc-950/60'
+              p.id === selected ? 'theme-pill-active text-ios-text' : 'theme-surface-2'
             }`}
             whileHover={{ scale: 1.01 }}
           >
@@ -113,7 +113,7 @@ export function WeatherProviderSelector({
         ))}
       </div>
 
-      <div className="rounded-2xl border border-ios-border/60 bg-white/60 p-3 dark:border-emerald-500/20 dark:bg-zinc-950/55">
+      <div className="theme-surface-2 rounded-2xl border p-3">
         <div className="mb-2 flex items-center gap-2">
           <Cloud className="h-4 w-4 text-ios-accent" />
           <p className="text-sm font-medium text-ios-text">Предпросмотр погоды</p>
@@ -122,13 +122,13 @@ export function WeatherProviderSelector({
 
         {current ? (
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="inline-flex items-center gap-1 rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 text-[12px] text-ios-text dark:bg-zinc-900/60">
+            <span className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[12px] text-ios-text">
               <ThermometerSun className="h-3.5 w-3.5" /> {formatTemp(current.tempC)}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 text-[12px] text-ios-text dark:bg-zinc-900/60">
+            <span className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[12px] text-ios-text">
               <Droplets className="h-3.5 w-3.5" /> {formatHumidity(current.humidity)} влажность
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 text-[12px] text-ios-text dark:bg-zinc-900/60">
+            <span className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[12px] text-ios-text">
               <WeatherIcon code={current.icon} />
               {translateDescription(current.icon, current.description) ?? 'Погода'}
             </span>
@@ -141,7 +141,7 @@ export function WeatherProviderSelector({
         {forecast?.days?.length ? (
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {forecast.days.slice(0, 3).map((day) => (
-              <div key={day.date} className="rounded-xl border border-ios-border/50 bg-white/60 p-2 text-[12px] dark:bg-zinc-900/60">
+              <div key={day.date} className="theme-surface-subtle rounded-xl border p-2 text-[12px]">
                 <p className="font-semibold text-ios-text">{day.date}</p>
                 <div className="mt-1 flex items-center justify-center gap-1 text-ios-subtext">
                   <WeatherIcon code={day.icon} />

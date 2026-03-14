@@ -58,7 +58,7 @@ export function ModelSelector({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 rounded-2xl border border-ios-border/60 bg-white/70 px-3 py-2 text-sm dark:bg-zinc-950/60">
+      <div className="theme-surface-1 flex items-center justify-between gap-2 rounded-2xl border px-3 py-2 text-sm">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-ios-accent" />
           <span className="font-semibold text-ios-text">Автовыбор моделей</span>
@@ -94,7 +94,7 @@ export function ModelSelector({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="android-ripple inline-flex items-center gap-1 rounded-full border border-ios-border/60 bg-white/70 px-3 py-2 text-sm font-semibold text-ios-text dark:bg-zinc-900/60"
+          className="android-ripple theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-3 py-2 text-sm font-semibold text-ios-text"
           onClick={onSave}
           disabled={saving}
         >
@@ -103,7 +103,7 @@ export function ModelSelector({
         </button>
         <button
           type="button"
-          className="android-ripple inline-flex items-center gap-1 rounded-full border border-ios-border/60 bg-white/70 px-3 py-2 text-sm font-semibold text-ios-text dark:bg-zinc-900/60"
+          className="android-ripple theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-3 py-2 text-sm font-semibold text-ios-text"
           onClick={onTest}
           disabled={testing || !apiKeyMasked}
         >
@@ -111,7 +111,7 @@ export function ModelSelector({
           {testing ? 'Тестируем...' : 'Тест модели'}
         </button>
         {!apiKeyMasked ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200">
+          <span className="theme-badge-warning inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]">
             <Lock className="h-3.5 w-3.5" /> Добавьте ключ для реального запроса
           </span>
         ) : null}
@@ -136,7 +136,7 @@ function ModelCard({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-ios-border/60 bg-white/70 p-3 text-sm dark:bg-zinc-950/60">
+    <div className="theme-surface-1 rounded-2xl border p-3 text-sm">
       <div className="mb-2 flex items-center gap-2 text-ios-text">
         {icon}
         <span className="font-semibold">{title}</span>
@@ -148,7 +148,7 @@ function ModelCard({
               key={m.id}
               type="button"
               className={`w-full rounded-xl border px-3 py-2 text-left ${
-                selected === m.id ? 'border-ios-accent/60 bg-ios-accent/10' : 'border-ios-border/60 bg-white/60 dark:bg-zinc-900/60'
+                selected === m.id ? 'theme-pill-active' : 'theme-surface-subtle'
               }`}
               whileHover={{ scale: 1.01 }}
               onClick={() => onSelect(m.id)}

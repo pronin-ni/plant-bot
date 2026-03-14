@@ -35,8 +35,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={[
           'relative max-w-[88%] overflow-hidden rounded-xl px-4 py-2 text-[14px] leading-5',
           isUser
-            ? 'bg-ios-accent text-white shadow-sm'
-            : 'border border-ios-border/55 bg-ios-card/80 text-ios-text shadow-sm dark:border-emerald-500/20 dark:bg-zinc-900/72'
+            ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-sm'
+            : 'theme-surface-subtle border text-ios-text shadow-sm'
         ].join(' ')}
       >
         {!isUser && !reduceMotion ? (
@@ -62,7 +62,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         ) : null}
 
         <p className="whitespace-pre-wrap break-words">{message.text}</p>
-        <div className={`mt-1 flex items-center gap-1 text-[10px] ${isUser ? 'text-white/75' : 'text-ios-subtext'}`}>
+        <div className={`mt-1 flex items-center gap-1 text-[10px] ${isUser ? 'text-[hsl(var(--primary-foreground)/0.78)]' : 'text-ios-subtext'}`}>
           {timeLabel ? <span>{timeLabel}</span> : null}
           {!isUser && message.model ? <span>· {message.model}</span> : null}
         </div>

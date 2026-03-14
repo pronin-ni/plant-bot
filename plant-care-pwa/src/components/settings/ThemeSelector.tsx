@@ -32,12 +32,12 @@ export function ThemeSelector() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-zinc-950/55">
+      <div className="theme-surface-1 rounded-2xl border p-3">
         <p className="text-[12px] uppercase tracking-wide text-ios-subtext">Тема оформления</p>
         <p className="mt-1 text-sm text-ios-text">
           Выберите визуальный стиль приложения. Тема применяется глобально и сохраняется на устройстве.
         </p>
-        <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-ios-border/60 bg-white/70 px-2.5 py-1 text-[12px] text-ios-subtext dark:bg-zinc-900/60">
+        <div className="theme-surface-subtle mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] text-ios-subtext">
           <Paintbrush className="h-3.5 w-3.5 text-ios-accent" />
           Текущая: <span className="font-medium text-ios-text">{resolvedTheme.name}</span>
           {useSystemTheme ? <span>· Системная</span> : <span>· Ручная</span>}
@@ -50,8 +50,8 @@ export function ThemeSelector() {
           onClick={setSystemTheme}
           className={`touch-target inline-flex items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${
             useSystemTheme
-              ? 'border-emerald-500/55 bg-emerald-500/12 text-emerald-800 dark:text-emerald-200'
-              : 'border-ios-border/60 bg-white/70 text-ios-text hover:border-ios-accent/45 dark:bg-zinc-900/60'
+              ? 'theme-pill-active'
+              : 'theme-surface-subtle text-ios-text hover:border-ios-accent/45'
           } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
         >
           <Monitor className="h-4 w-4" />
@@ -79,8 +79,8 @@ export function ThemeSelector() {
               aria-label={`${theme.name}. ${theme.mood}`}
               className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-colors ${
                 isActive
-                  ? 'border-emerald-500/55 bg-emerald-500/10'
-                  : 'border-ios-border/60 bg-white/65 hover:border-ios-accent/45 dark:bg-zinc-950/55'
+                  ? 'theme-pill-active'
+                  : 'theme-surface-1 hover:border-ios-accent/45'
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -89,7 +89,7 @@ export function ThemeSelector() {
                   <p className="mt-1 text-[12px] leading-5 text-ios-subtext">{theme.mood}</p>
                 </div>
                 {isActive ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/45 bg-emerald-500/12 px-2 py-1 text-[11px] text-emerald-800 dark:text-emerald-200">
+                  <span className="theme-badge-success inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     {isSystemPicked ? 'Системная' : 'Выбрана'}
                   </span>
@@ -100,7 +100,7 @@ export function ThemeSelector() {
                 {theme.previewSwatches.slice(0, 5).map((color) => (
                   <span
                     key={`${theme.id}-${color}`}
-                    className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
+                    className="h-6 w-6 rounded-full border border-[hsl(var(--border)/0.45)] shadow-sm"
                     style={{ backgroundColor: color }}
                     aria-hidden="true"
                   />
@@ -118,7 +118,7 @@ export function ThemeSelector() {
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           aria-live="polite"
-          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[12px] text-emerald-800 dark:text-emerald-200"
+          className="theme-badge-success inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px]"
         >
           <CheckCircle2 className="h-3.5 w-3.5" />
           {justAppliedText}

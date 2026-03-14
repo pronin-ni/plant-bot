@@ -87,7 +87,7 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
       </div>
 
       {!roomsSensorsQuery.data?.connected ? (
-        <p className="text-ios-caption text-red-500">{roomsSensorsQuery.data?.message ?? 'Home Assistant не подключен'}</p>
+        <p className="theme-banner-danger rounded-lg border px-3 py-2 text-ios-caption">{roomsSensorsQuery.data?.message ?? 'Home Assistant не подключен'}</p>
       ) : null}
 
       <div className="grid grid-cols-2 gap-2">
@@ -115,7 +115,7 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
             const room = roomOptions.find((item) => item.id === id);
             setSelectedRoomName(room?.name ?? '');
           }}
-          className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-3 text-ios-body outline-none backdrop-blur-ios dark:bg-zinc-900/60"
+          className="theme-field h-11 w-full rounded-ios-button border px-3 text-ios-body outline-none backdrop-blur-ios"
         >
           <option value="">Не выбрано</option>
           {roomOptions.map((room) => (
@@ -138,7 +138,7 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
       <button
         type="button"
         onClick={() => setAutoAdjustmentEnabled((prev) => !prev)}
-        className="flex w-full items-center justify-between rounded-ios-button border border-ios-border/70 bg-white/60 px-3 py-2 text-left dark:bg-zinc-900/50"
+        className="theme-surface-subtle flex w-full items-center justify-between rounded-ios-button border px-3 py-2 text-left"
       >
         <span className="inline-flex items-center gap-2 text-ios-body">
           <Home className="h-4 w-4 text-ios-accent" />
@@ -152,7 +152,7 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
       </Button>
 
       {bindMutation.isError ? (
-        <p className="text-ios-caption text-red-500">{(bindMutation.error as Error).message}</p>
+        <p className="theme-banner-danger rounded-lg border px-3 py-2 text-ios-caption">{(bindMutation.error as Error).message}</p>
       ) : null}
     </motion.div>
   );
@@ -180,7 +180,7 @@ function SensorSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-3 text-[13px] outline-none backdrop-blur-ios dark:bg-zinc-900/60"
+        className="theme-field h-10 w-full rounded-ios-button border px-3 text-[13px] outline-none backdrop-blur-ios"
       >
         <option value="">Не выбрано</option>
         {options.map((sensor) => (

@@ -38,7 +38,7 @@ export function SettingsInputGroup({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/70 px-4 text-ios-body outline-none backdrop-blur-ios dark:border-emerald-500/20 dark:bg-zinc-900/60"
+          className="theme-field h-11 w-full rounded-ios-button border px-4 text-ios-body outline-none backdrop-blur-ios"
         />
       </label>
 
@@ -61,7 +61,7 @@ export function SettingsInputGroup({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300"
+            className="theme-banner-success relative overflow-hidden rounded-2xl border px-3 py-2 text-xs"
           >
             {!reduceMotion ? (
               <motion.span

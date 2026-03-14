@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Camera, Home, Sprout, TreePine } from 'lucide-react';
 
+import { PlantAvatar } from '@/components/PlantAvatar';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { Button } from '@/components/ui/button';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
@@ -84,9 +85,12 @@ export function PlantHero({
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(52,199,89,0.26),transparent_42%),radial-gradient(circle_at_80%_10%,rgba(255,205,120,0.22),transparent_45%),linear-gradient(145deg,rgba(248,252,247,0.85),rgba(233,246,236,0.72))] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(52,199,89,0.28),transparent_46%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.2),transparent_46%),linear-gradient(145deg,rgba(25,34,29,0.88),rgba(18,25,21,0.84))]">
             <div className="flex flex-col items-center gap-3 px-6 text-center">
-              <div className="rounded-full bg-white/70 p-4 text-emerald-700 shadow-sm dark:bg-zinc-900/60 dark:text-emerald-300">
-                <Sprout className="h-7 w-7" />
-              </div>
+              <PlantAvatar
+                name={plant.name}
+                plant={plant}
+                className="h-28 w-28 rounded-[30px] border-white/40 shadow-[0_18px_38px_rgba(15,23,42,0.12)]"
+                labelClassName="bottom-2.5 left-2.5 h-8 min-w-8 text-xs"
+              />
               <div>
                 <p className="text-sm font-semibold text-ios-text">Добавьте фото растения</p>
                 <p className="mt-1 text-xs text-ios-subtext">Так проще отслеживать рост и изменения листьев.</p>

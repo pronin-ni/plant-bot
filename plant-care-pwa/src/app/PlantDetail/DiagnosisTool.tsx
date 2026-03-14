@@ -61,7 +61,7 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
       />
       <button
         type="button"
-        className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50"
+        className="theme-surface-subtle inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-ios-button border px-5 text-ios-body font-medium"
         onClick={() => inputRef.current?.click()}
       >
         {diagnoseMutation.isPending ? 'Диагностируем...' : 'Проверить лист'}
@@ -69,11 +69,11 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
 
 
       {diagnoseMutation.isError ? (
-        <p className="text-[12px] text-red-500">{diagnosisError}</p>
+        <p className="theme-banner-danger rounded-xl border px-3 py-2 text-[12px]">{diagnosisError}</p>
       ) : null}
 
       {diagnoseMutation.data ? (
-        <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 text-sm dark:bg-zinc-900/40">
+        <div className="theme-surface-2 rounded-ios-button border p-3 text-sm">
           <p className="font-semibold">{diagnoseMutation.data.problem ?? 'Проблема не определена'}</p>
           <p className="text-ios-caption text-ios-subtext">Уверенность: {diagnoseMutation.data.confidence}%</p>
           {diagnoseMutation.data.description ? <p className="mt-2">{diagnoseMutation.data.description}</p> : null}
@@ -81,7 +81,7 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
           {diagnoseMutation.data.prevention ? <p className="mt-1"><b>Профилактика:</b> {diagnoseMutation.data.prevention}</p> : null}
           <p className="mt-2 text-xs">Срочность: {diagnoseMutation.data.urgency}</p>
           {diagnoseMutation.data.confidence < 60 ? (
-            <p className="mt-2 text-[12px] text-amber-700">Низкая уверенность. Проверьте условия и фото вручную.</p>
+            <p className="theme-banner-warning mt-2 rounded-xl border px-3 py-2 text-[12px]">Низкая уверенность. Проверьте условия и фото вручную.</p>
           ) : null}
         </div>
       ) : null}

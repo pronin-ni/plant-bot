@@ -9,10 +9,10 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // iOS-overrides: glass + vibrancy + мягкая глубина.
-        default: 'ios:bg-ios-accent ios:text-white ios:shadow-ios ios:hover:brightness-95 android:bg-[#4CAF50] android:text-white android:shadow-[0_2px_8px_rgba(76,175,80,0.35)] android:hover:brightness-95',
-        ghost: 'ios:bg-white/35 ios:text-ios-text ios:backdrop-blur-[24px] ios:border ios:border-white/35 android:bg-transparent android:text-ios-text android:border android:border-ios-border/70',
-        secondary: 'ios:bg-ios-card/55 ios:text-ios-text ios:border ios:border-ios-border/50 ios:backdrop-blur-[26px] ios:shadow-[0_4px_24px_rgba(0,0,0,0.08)] android:bg-[#E8F5E9] android:text-[#1B5E20] android:border android:border-[#C8E6C9] android:shadow-[0_1px_3px_rgba(0,0,0,0.15)]',
-        destructive: 'ios:bg-rose-500 ios:text-white ios:shadow-[0_10px_24px_rgba(244,63,94,0.24)] android:bg-[#D32F2F] android:text-white android:shadow-[0_2px_8px_rgba(211,47,47,0.35)]'
+        default: 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-[0_10px_24px_hsl(var(--primary)/0.28)] hover:brightness-[0.98]',
+        ghost: 'border border-[hsl(var(--border)/0.55)] bg-[hsl(var(--secondary)/0.4)] text-[hsl(var(--foreground))] backdrop-blur-[24px] hover:bg-[hsl(var(--secondary)/0.62)]',
+        secondary: 'border border-[hsl(var(--border)/0.55)] bg-[hsl(var(--secondary)/0.82)] text-[hsl(var(--secondary-foreground))] shadow-[0_4px_24px_rgb(0_0_0/0.08)] backdrop-blur-[24px] hover:bg-[hsl(var(--secondary)/0.96)]',
+        destructive: 'bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground))] shadow-[0_10px_24px_hsl(var(--destructive)/0.28)] hover:brightness-[0.98]'
       },
       size: {
         default: 'h-12 px-5',

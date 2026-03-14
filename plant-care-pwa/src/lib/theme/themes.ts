@@ -34,6 +34,8 @@ export interface ThemeShadcnTokens {
   border: string;
   input: string;
   ring: string;
+  destructive: string;
+  destructiveForeground: string;
 }
 
 export interface AppTheme {
@@ -43,6 +45,10 @@ export interface AppTheme {
   mode: ThemeMode;
   palette: ThemePalette;
   previewSwatches: string[];
+}
+
+function getDestructiveHex(mode: ThemeMode): string {
+  return mode === 'dark' ? '#FF7A90' : '#D92D4C';
 }
 
 // Значения по умолчанию из задачи.
@@ -273,7 +279,9 @@ export function getShadcnTokens(theme: AppTheme): ThemeShadcnTokens {
   const primaryForeground = pickContrastForegroundHex(palette.primary);
   const accentForeground = pickContrastForegroundHex(palette.accent);
   const secondaryForeground = pickContrastForegroundHex(palette.surface);
-  const mutedForeground = ensureMinContrastHex(palette.muted, palette.background, palette.text, 4.5);
+  const mutedForeground = ensureMinContrastHex(palette.muted, palette.surface, palette.text, 5.2);
+  const destructive = getDestructiveHex(theme.mode);
+  const destructiveForeground = pickContrastForegroundHex(destructive);
 
   return {
     background: hexToHslChannels(palette.background),
@@ -290,7 +298,9 @@ export function getShadcnTokens(theme: AppTheme): ThemeShadcnTokens {
     accentForeground: hexToHslChannels(accentForeground),
     border: hexToHslChannels(palette.border),
     input: hexToHslChannels(palette.border),
-    ring: hexToHslChannels(palette.primary)
+    ring: hexToHslChannels(palette.primary),
+    destructive: hexToHslChannels(destructive),
+    destructiveForeground: hexToHslChannels(destructiveForeground)
   };
 }
 
@@ -298,7 +308,7 @@ export function getShadcnTokens(theme: AppTheme): ThemeShadcnTokens {
 export function getThemeCssVariables(theme: AppTheme): Record<string, string> {
   const shadcn = getShadcnTokens(theme);
   const { palette } = theme;
-  const accessibleMuted = ensureMinContrastHex(palette.muted, palette.background, palette.text, 4.5);
+  const accessibleMuted = ensureMinContrastHex(palette.muted, palette.surface, palette.text, 5.2);
 
   return {
     '--background': shadcn.background,
@@ -316,6 +326,8 @@ export function getThemeCssVariables(theme: AppTheme): Record<string, string> {
     '--border': shadcn.border,
     '--input': shadcn.input,
     '--ring': shadcn.ring,
+    '--destructive': shadcn.destructive,
+    '--destructive-foreground': shadcn.destructiveForeground,
 
     // Совместимость с текущими ios-* токенами в проекте.
     '--ios-bg': hexToRgbChannels(palette.background),

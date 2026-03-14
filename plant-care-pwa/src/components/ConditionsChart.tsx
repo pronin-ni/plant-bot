@@ -114,12 +114,12 @@ export function ConditionsChart({ plantId }: { plantId: number }) {
             <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-44 w-full">
               <defs>
                 <linearGradient id="temp-line" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#34C759" />
-                  <stop offset="100%" stopColor="#22C55E" />
+                  <stop offset="0%" stopColor="hsl(var(--primary))" />
+                  <stop offset="100%" stopColor="hsl(var(--accent))" />
                 </linearGradient>
                 <linearGradient id="hum-line" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#0A84FF" />
-                  <stop offset="100%" stopColor="#60A5FA" />
+                  <stop offset="0%" stopColor="hsl(var(--accent))" />
+                  <stop offset="100%" stopColor="hsl(var(--ring))" />
                 </linearGradient>
               </defs>
 
@@ -135,8 +135,8 @@ export function ConditionsChart({ plantId }: { plantId: number }) {
 
               {chart.mapped.map((p, idx) => (
                 <g key={`${p.label}-${idx}`}>
-                  {p.tempY != null ? <circle cx={p.x} cy={p.tempY} r="2.4" fill="#34C759" /> : null}
-                  {p.humY != null ? <circle cx={p.x} cy={p.humY} r="2.2" fill="#0A84FF" /> : null}
+                  {p.tempY != null ? <circle cx={p.x} cy={p.tempY} r="2.4" fill="hsl(var(--primary))" /> : null}
+                  {p.humY != null ? <circle cx={p.x} cy={p.humY} r="2.2" fill="hsl(var(--accent))" /> : null}
                 </g>
               ))}
 
@@ -148,8 +148,8 @@ export function ConditionsChart({ plantId }: { plantId: number }) {
             </svg>
 
             <div className="mt-2 flex items-center gap-4 text-[11px] text-ios-subtext">
-              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#34C759]" />Температура</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#0A84FF]" />Влажность</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--primary))]" />Температура</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--accent))]" />Влажность</span>
             </div>
 
             <p className="mt-1 text-[11px] text-ios-subtext">
@@ -161,7 +161,7 @@ export function ConditionsChart({ plantId }: { plantId: number }) {
         ) : (
           <motion.div
             key="empty"
-            className="rounded-2xl border border-dashed border-ios-border/60 bg-white/45 p-4 text-center dark:bg-zinc-900/45"
+            className="theme-surface-subtle rounded-2xl border border-dashed p-4 text-center"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}

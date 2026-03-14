@@ -37,8 +37,8 @@ export function ExportImportSection({
           className={[
             'android-ripple rounded-2xl border p-3 text-left transition',
             mergeMode
-              ? 'border-emerald-500/40 bg-emerald-500/10'
-              : 'border-ios-border/60 bg-white/60 dark:border-emerald-500/20 dark:bg-zinc-900/40'
+              ? 'theme-pill-active'
+              : 'theme-surface-2'
           ].join(' ')}
         >
           <p className="text-sm font-semibold text-ios-text">Объединить</p>
@@ -51,8 +51,8 @@ export function ExportImportSection({
           className={[
             'android-ripple rounded-2xl border p-3 text-left transition',
             !mergeMode
-              ? 'border-amber-500/45 bg-amber-500/12'
-              : 'border-ios-border/60 bg-white/60 dark:border-emerald-500/20 dark:bg-zinc-900/40'
+              ? 'theme-banner-warning'
+              : 'theme-surface-2'
           ].join(' ')}
         >
           <p className="text-sm font-semibold text-ios-text">Заменить</p>
@@ -60,7 +60,7 @@ export function ExportImportSection({
         </button>
       </div>
 
-      <div className="rounded-2xl border border-ios-border/60 bg-white/60 p-3 text-xs text-ios-subtext dark:border-emerald-500/20 dark:bg-zinc-900/45">
+      <div className="theme-surface-2 rounded-2xl border p-3 text-xs text-ios-subtext">
         <p className="inline-flex items-center gap-1.5 font-medium text-ios-text">
           <AlertTriangle className="h-3.5 w-3.5" />
           Важно
@@ -92,7 +92,7 @@ export function ExportImportSection({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300"
+            className="theme-banner-success relative overflow-hidden rounded-2xl border px-3 py-2 text-xs"
           >
             <motion.div
               className="pointer-events-none absolute inset-0"
@@ -109,7 +109,7 @@ export function ExportImportSection({
         ) : null}
       </AnimatePresence>
 
-      {importError ? <p className="text-xs text-red-600">{importError}</p> : null}
+      {importError ? <p className="theme-banner-danger rounded-xl border px-3 py-2 text-xs">{importError}</p> : null}
     </div>
   );
 }

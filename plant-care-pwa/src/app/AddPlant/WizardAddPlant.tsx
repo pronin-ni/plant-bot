@@ -777,10 +777,9 @@ export function WizardAddPlant() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium tracking-wide text-ios-subtext">Шаг {stepIndex + 1} из {STEPS.length}</p>
-            <h2 className="mt-1 text-[clamp(1.2rem,4.9vw,1.5rem)] font-semibold leading-tight text-ios-text">Добавление растения</h2>
-            <p className="mt-1 text-sm text-ios-subtext">{STEPS[stepIndex].title}</p>
+            <p className="mt-1 text-[clamp(1.2rem,4.9vw,1.5rem)] font-semibold leading-tight text-ios-text">{STEPS[stepIndex].title}</p>
           </div>
-          <span className="rounded-full border border-ios-border/60 bg-white/60 px-2.5 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/50">
+          <span className="theme-surface-subtle rounded-full border px-2.5 py-1 text-[11px] text-ios-subtext">
             Далее: {nextStepTitle}
           </span>
         </div>
@@ -827,7 +826,7 @@ export function WizardAddPlant() {
                       'ios-blur-card relative overflow-hidden rounded-ios-card border p-4 text-left',
                       active
                         ? 'border-ios-accent/70 bg-ios-accent/10 shadow-ios'
-                        : 'border-ios-border/60 bg-white/60 hover:border-ios-accent/35 dark:bg-zinc-900/45'
+                        : 'theme-surface-2 hover:border-ios-accent/35'
                     )}
                     onClick={() => {
                       hapticSelectionChanged();
@@ -866,7 +865,7 @@ export function WizardAddPlant() {
                         setName(event.target.value);
                       }}
                       placeholder="Например: Фикус, Роза, Томат"
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 pl-9 pr-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border pl-9 pr-3 text-base outline-none"
                     />
                   </div>
                   <Button
@@ -880,7 +879,7 @@ export function WizardAddPlant() {
                 </div>
 
                 {searchQuery.trim() && !searchMutation.isPending && !lastSearchHadResults ? (
-                  <p className="mt-3 rounded-ios-button border border-ios-border/60 bg-white/60 p-3 text-sm text-ios-subtext dark:bg-zinc-900/50">
+                  <p className="theme-surface-2 mt-3 rounded-ios-button border p-3 text-sm text-ios-subtext">
                     Ничего не найдено. Попробуйте другое название или используйте AI-определение по фото.
                   </p>
                 ) : null}
@@ -891,7 +890,7 @@ export function WizardAddPlant() {
                       <button
                         key={`${item.category}:${item.name}`}
                         type="button"
-                        className="rounded-full border border-ios-border/60 bg-white/65 px-3 py-1.5 text-xs dark:bg-zinc-900/50"
+                        className="theme-surface-subtle rounded-full border px-3 py-1.5 text-xs"
                         onClick={() => {
                           hapticSelectionChanged();
                           setName(item.name);
@@ -943,7 +942,7 @@ export function WizardAddPlant() {
                   min={1}
                   value={baseIntervalDays}
                   onChange={(event) => setBaseIntervalDays(event.target.value)}
-                  className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                  className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                 />
               </Field>
 
@@ -952,7 +951,7 @@ export function WizardAddPlant() {
                   value={region}
                   onChange={(event) => setRegion(event.target.value)}
                   placeholder="Например: Санкт-Петербург"
-                  className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                  className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                 />
               </Field>
 
@@ -965,14 +964,14 @@ export function WizardAddPlant() {
                       step={0.1}
                       value={potVolumeLiters}
                       onChange={(event) => setPotVolumeLiters(event.target.value)}
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     />
                   </Field>
                   <Field label="Тип растения">
                     <select
                       value={plantType}
                       onChange={(event) => setPlantType(event.target.value as PlantType)}
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     >
                       {PLANT_TYPE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -988,7 +987,7 @@ export function WizardAddPlant() {
                     <select
                       value={containerType}
                       onChange={(event) => setContainerType(event.target.value as ContainerType)}
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     >
                       {CONTAINER_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -1004,7 +1003,7 @@ export function WizardAddPlant() {
                         step={0.1}
                         value={potVolumeLiters}
                         onChange={(event) => setPotVolumeLiters(event.target.value)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       />
                     </Field>
                   ) : null}
@@ -1018,7 +1017,7 @@ export function WizardAddPlant() {
                       <select
                         value={sunExposure}
                         onChange={(event) => setSunExposure(event.target.value as SunExposure)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       >
                         {SUN_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
@@ -1029,7 +1028,7 @@ export function WizardAddPlant() {
                       <select
                         value={soilType}
                         onChange={(event) => setSoilType(event.target.value as SoilType)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       >
                         {SOIL_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
@@ -1038,7 +1037,7 @@ export function WizardAddPlant() {
                     </Field>
                   </div>
 
-                  <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/50">
+                  <div className="theme-surface-2 rounded-ios-button border p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-medium text-ios-text">Погодный контекст</p>
@@ -1068,16 +1067,16 @@ export function WizardAddPlant() {
                         />
                         {weatherContextPreview.available ? (
                           <div className="grid grid-cols-2 gap-2 text-xs text-ios-subtext">
-                            <div className="rounded-ios-button border border-ios-border/50 bg-white/50 p-2 dark:bg-zinc-900/40">
+                            <div className="theme-surface-subtle rounded-ios-button border p-2">
                               Сейчас: <b>{weatherContextPreview.temperatureNowC ?? '—'}°C</b>
                             </div>
-                            <div className="rounded-ios-button border border-ios-border/50 bg-white/50 p-2 dark:bg-zinc-900/40">
+                            <div className="theme-surface-subtle rounded-ios-button border p-2">
                               Влажность: <b>{weatherContextPreview.humidityNowPercent ?? '—'}%</b>
                             </div>
-                            <div className="rounded-ios-button border border-ios-border/50 bg-white/50 p-2 dark:bg-zinc-900/40">
+                            <div className="theme-surface-subtle rounded-ios-button border p-2">
                               Осадки 24ч: <b>{weatherContextPreview.precipitationLast24hMm ?? '—'} мм</b>
                             </div>
-                            <div className="rounded-ios-button border border-ios-border/50 bg-white/50 p-2 dark:bg-zinc-900/40">
+                            <div className="theme-surface-subtle rounded-ios-button border p-2">
                               Осадки прогноз: <b>{weatherContextPreview.precipitationForecastMm ?? '—'} мм</b>
                             </div>
                           </div>
@@ -1094,7 +1093,7 @@ export function WizardAddPlant() {
                     <select
                       value={growthStage}
                       onChange={(event) => setGrowthStage(event.target.value as GrowthStage)}
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     >
                       {GROWTH_STAGE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -1109,7 +1108,7 @@ export function WizardAddPlant() {
                         min={10}
                         value={heightCm}
                         onChange={(event) => setHeightCm(event.target.value)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       />
                     </Field>
                     <Field label="Диаметр (см)">
@@ -1118,7 +1117,7 @@ export function WizardAddPlant() {
                         min={10}
                         value={diameterCm}
                         onChange={(event) => setDiameterCm(event.target.value)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       />
                     </Field>
                   </div>
@@ -1129,7 +1128,7 @@ export function WizardAddPlant() {
                 </>
               ) : null}
 
-              <div className="rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/50">
+              <div className="theme-surface-2 rounded-ios-button border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-ios-text">Home Assistant контекст (опционально)</p>
@@ -1151,7 +1150,7 @@ export function WizardAddPlant() {
                     <select
                       value={haRoomId}
                       onChange={(event) => setHaRoomId(event.target.value)}
-                      className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     >
                       <option value="">Не выбрано (авто)</option>
                       {(haOptionsQuery.data?.rooms ?? []).map((room) => (
@@ -1363,7 +1362,7 @@ export function WizardAddPlant() {
               ) : null}
 
               {manualOverrideEnabled ? (
-                <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-3 dark:bg-zinc-900/50">
+                <div className="theme-surface-2 rounded-ios-button border p-3">
                   <p className="text-sm font-medium text-ios-text">Ручная корректировка</p>
                   <p className="mt-1 text-xs text-ios-subtext">Этот режим не скрывает источник AI/Fallback и применяется поверх расчёта.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1374,7 +1373,7 @@ export function WizardAddPlant() {
                         max={60}
                         value={manualIntervalInput}
                         onChange={(event) => setManualIntervalInput(event.target.value)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       />
                     </Field>
                     <Field label="Объём (мл)">
@@ -1385,7 +1384,7 @@ export function WizardAddPlant() {
                         step={50}
                         value={manualWaterInput}
                         onChange={(event) => setManualWaterInput(event.target.value)}
-                        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                       />
                     </Field>
                   </div>
@@ -1450,7 +1449,7 @@ export function WizardAddPlant() {
                     max={60}
                     value={finalIntervalDays}
                     onChange={(event) => setFinalIntervalDays(clamp(Number(event.target.value) || 1, 1, 60))}
-                    className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                   />
                 </Field>
                 <Field label="Объём воды (мл)">
@@ -1461,12 +1460,12 @@ export function WizardAddPlant() {
                     step={50}
                     value={finalWaterMl}
                     onChange={(event) => setFinalWaterMl(clamp(Number(event.target.value) || 50, 50, 10_000))}
-                    className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                   />
                 </Field>
               </div>
 
-              <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-3 dark:bg-zinc-900/50">
+              <div className="theme-surface-2 rounded-ios-button border p-3">
                 <p className="text-sm font-medium">{aiRecommendation?.summary ?? 'Используется базовый расчёт.'}</p>
                 {aiRecommendation?.reasoning?.length ? (
                   <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
@@ -1476,7 +1475,7 @@ export function WizardAddPlant() {
                   </ul>
                 ) : null}
                 {aiRecommendation?.warnings?.length ? (
-                  <ul className="mt-2 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                  <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
                     {aiRecommendation.warnings.map((item, index) => (
                       <li key={`${item}-${index}`}>• {item}</li>
                     ))}
@@ -1484,7 +1483,7 @@ export function WizardAddPlant() {
                 ) : null}
               </div>
 
-              <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-3 dark:bg-zinc-900/50">
+              <div className="theme-surface-2 rounded-ios-button border p-3">
                 <p className="mb-2 text-xs text-ios-subtext">Предпросмотр календаря (6 поливов)</p>
                 <motion.div
                   layout
@@ -1562,7 +1561,7 @@ function ToggleRow({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="inline-flex h-11 w-full items-center justify-between rounded-ios-button border border-ios-border/60 bg-white/65 px-3 text-sm dark:bg-zinc-900/50">
+    <label className="theme-surface-subtle inline-flex h-11 w-full items-center justify-between rounded-ios-button border px-3 text-sm">
       <span>{label}</span>
       <input
         type="checkbox"
@@ -1580,12 +1579,12 @@ function StatusCard({ tone, title, description }: { tone: 'neutral' | 'danger'; 
       className={cn(
         'rounded-ios-button border p-3 text-sm',
         tone === 'danger'
-          ? 'border-red-300/60 bg-red-50/70 text-red-700 dark:border-red-700/50 dark:bg-red-950/30 dark:text-red-300'
-          : 'border-ios-border/60 bg-white/65 text-ios-text dark:bg-zinc-900/50'
+          ? 'theme-banner-danger'
+          : 'theme-surface-2 text-ios-text'
       )}
     >
       <p className="font-medium">{title}</p>
-      <p className={cn('mt-1 text-xs', tone === 'danger' ? 'text-red-600 dark:text-red-200' : 'text-ios-subtext')}>{description}</p>
+      <p className={cn('mt-1 text-xs', tone === 'danger' ? 'text-[hsl(var(--destructive))]' : 'text-ios-subtext')}>{description}</p>
     </div>
   );
 }
@@ -1618,7 +1617,7 @@ function SensorSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-ios-button border border-ios-border/70 bg-white/75 px-3 text-base outline-none dark:bg-zinc-900/60"
+        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
       >
         <option value="">Авто</option>
         {sensors.map((sensor) => (
@@ -1667,8 +1666,8 @@ function RecommendationCard({
       className={cn(
         'rounded-ios-button border p-3',
         isFallback
-          ? 'border-amber-300/60 bg-amber-50/70 dark:border-amber-700/45 dark:bg-amber-950/25'
-          : 'border-emerald-300/60 bg-emerald-50/70 dark:border-emerald-700/45 dark:bg-emerald-950/25'
+          ? 'theme-banner-warning'
+          : 'theme-banner-success'
       )}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -1686,40 +1685,40 @@ function RecommendationCard({
       </div>
       <p className="text-sm">{recommendation.summary}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-ios-button border border-current/15 bg-white/60 p-2 dark:bg-black/10">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           Интервал: <b>{recommendation.recommendedIntervalDays} дн.</b>
         </div>
-        <div className="rounded-ios-button border border-current/15 bg-white/60 p-2 dark:bg-black/10">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           Объём: <b>{recommendation.recommendedWaterMl} мл</b>
         </div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-        <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+        <span className="theme-surface-subtle rounded-full border px-2 py-0.5">
           Уверенность: {confidence != null ? `${Math.round(confidence * 100)}%` : 'н/д'}
         </span>
-        <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+        <span className="theme-surface-subtle rounded-full border px-2 py-0.5">
           Погода: {weatherUsed ? 'учтена' : 'не основной фактор'}
         </span>
       </div>
       {sensorContext?.available ? (
-        <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
+        <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
           HA: {sensorContext.roomName || 'комната не выбрана'}
           {sensorContext.confidence ? ` · уверенность ${sensorContext.confidence}` : ''}
         </div>
       ) : null}
       {environmentType !== 'INDOOR' ? (
-        <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
+        <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
           Погодный контекст:{' '}
           {weatherContext?.available
             ? `${weatherContext.city || weatherContext.region || 'регион'} · ${weatherContext.temperatureNowC ?? '—'}°C · осадки ${weatherContext.precipitationForecastMm ?? '—'} мм`
             : 'недоступен, fallback возможен'}
         </div>
       ) : (
-        <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
+        <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
           Базовый домашний контекст: {indoorContext.potVolumeLiters.toFixed(1)} л · {normalizeRecommendationText(indoorContext.plantType)} · интервал {indoorContext.baseIntervalDays} дн.
         </div>
       )}
-      <div className="mt-2 rounded-ios-button border border-current/15 bg-white/60 p-2 text-xs dark:bg-black/10">
+      <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
         Почему такой режим: {environmentType === 'INDOOR'
           ? 'учтены параметры горшка, тип растения, размещение и сезон.'
           : 'учтены осадки, температура, влажность и тип почвы.'}
@@ -1735,7 +1734,7 @@ function RecommendationCard({
         </ul>
       ) : null}
       {recommendation.warnings?.length ? (
-        <ul className="mt-2 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+        <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
           {recommendation.warnings.map((item, index) => (
             <li key={`${item}-${index}`}>• {item}</li>
           ))}
@@ -1747,7 +1746,7 @@ function RecommendationCard({
 
 function InfoChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-2 dark:bg-zinc-900/50">
+    <div className="theme-surface-2 rounded-ios-button border p-2">
       <p className="text-[11px] text-ios-subtext">{label}</p>
       <p className="mt-0.5 text-sm font-medium break-words">{value}</p>
     </div>

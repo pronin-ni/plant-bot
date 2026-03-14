@@ -11,6 +11,7 @@ import { GuestModeButton } from '@/components/GuestModeButton';
 import { PrivacyNote } from '@/components/PrivacyNote';
 import { QuickTip } from '@/components/QuickTip';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
+import { ApiError } from '@/lib/api';
 import { cacheSet } from '@/lib/indexeddb';
 import { pwaLoginTelegram, pwaLoginTelegramWidget, pwaRequestEmailMagicLink, pwaVerifyEmailMagicLink } from '@/lib/api';
 import { isTestAuditMode } from '@/lib/runtime';
@@ -231,6 +232,40 @@ function createDemoCalendar(plants: PlantDto[]): CalendarEventDto[] {
   }));
 }
 
+function mapTelegramAuthError(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const normalized = message.trim().toLowerCase();
+  const status = error instanceof ApiError ? error.status : null;
+
+  if (
+    status === 502 ||
+    status === 503 ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('networkerror') ||
+    normalized.includes('network request failed')
+  ) {
+    return 'Telegram временно недоступен. Попробуйте снова чуть позже.';
+  }
+
+  if (
+    normalized.includes('не настроен bot.token') ||
+    normalized.includes('не задан username') ||
+    normalized.includes('не настроен telegram вход')
+  ) {
+    return 'Не настроен Telegram вход. Попробуйте позже или используйте другой способ входа.';
+  }
+
+  if (
+    normalized.includes('некорректный telegram payload') ||
+    normalized.includes('подпись telegram') ||
+    normalized.includes('данные входа telegram устарели')
+  ) {
+    return 'Не удалось завершить вход через Telegram. Начните вход заново.';
+  }
+
+  return 'Не удалось завершить вход через Telegram. Попробуйте ещё раз.';
+}
+
 export function LoginScreen() {
   const prefersReducedMotion = useReducedMotion();
   const [activeProvider, setActiveProvider] = useState<AuthProviderId | null>(null);
@@ -297,14 +332,15 @@ export function LoginScreen() {
       }, 'Ваши растения ждут вас');
       setActiveProvider(null);
     },
-    onError: (error) => {
+    onError: (error, providerId) => {
       hapticNotify('error');
       const message = error instanceof Error ? error.message : 'Ошибка входа. Проверьте провайдер и настройки backend.';
       if (message === 'TELEGRAM_WIDGET_REQUIRED') {
         setShowTelegramWidget(true);
         setLoginError(null);
       } else {
-        setLoginError(message);
+        setLoginError(providerId === 'telegram' ? mapTelegramAuthError(error) : message);
+        setShowTelegramWidget(false);
       }
       setActiveProvider(null);
     }
@@ -327,8 +363,7 @@ export function LoginScreen() {
       setLoginError(null);
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : 'Ошибка входа через Telegram Widget';
-      setLoginError(message);
+      setLoginError(mapTelegramAuthError(error));
       hapticNotify('error');
     }
   });
@@ -511,14 +546,14 @@ export function LoginScreen() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        className="relative ios-blur-card border border-emerald-500/20 bg-white/55 p-5 dark:bg-zinc-950/45"
+        className="theme-surface-1 relative rounded-[28px] border p-5"
       >
         <div className="mb-2 flex justify-end">
           <motion.button
             type="button"
             whileTap={{ scale: 0.95 }}
             onClick={toggleLoginTheme}
-            className="inline-flex items-center gap-2 rounded-full border border-ios-border/70 bg-white/75 px-3 py-1.5 text-xs font-medium text-ios-subtext shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-900/70"
+            className="theme-surface-subtle inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium text-ios-subtext shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl"
           >
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
@@ -554,7 +589,7 @@ export function LoginScreen() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className="mt-3 rounded-2xl border border-ios-border/60 bg-white/60 px-3 py-2 text-xs text-ios-subtext dark:bg-zinc-900/55"
+              className="theme-surface-subtle mt-3 rounded-2xl border px-3 py-2 text-xs text-ios-subtext"
             >
               {migrationState === 'running' ? 'Переносим аккаунт из Telegram Mini App...' : null}
               {migrationState === 'error' ? 'Не удалось автоматически перенести сессию. Выполните вход вручную.' : null}
@@ -574,8 +609,8 @@ export function LoginScreen() {
               className={[
                 'mt-3 rounded-2xl px-3 py-2 text-xs',
                 magicLinkVerifyState === 'error'
-                  ? 'border border-red-400/35 bg-red-500/10 text-red-300'
-                  : 'border border-emerald-400/35 bg-emerald-500/12 text-emerald-200'
+                  ? 'theme-banner-danger border'
+                  : 'theme-banner-success border'
               ].join(' ')}
             >
               {magicLinkVerifyState === 'running' ? 'Подтверждаем вход по волшебной ссылке...' : null}
@@ -590,20 +625,22 @@ export function LoginScreen() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 28, delay: 0.08 }}
-        className="ios-blur-card border border-ios-border/60 bg-white/55 p-4 dark:border-emerald-500/20 dark:bg-zinc-950/45"
+        className="theme-surface-1 rounded-[28px] border p-4"
       >
-        <AuthProvidersList
-          loadingProvider={activeProvider}
-          disabledAll={isOffline || isMagicLinkVerifying}
-          onLogin={(providerId) => {
-            if (isOffline) {
-              setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
-              hapticNotify('warning');
-              return;
-            }
-            loginMutation.mutate(providerId);
-          }}
-        />
+        {!showTelegramWidget ? (
+          <AuthProvidersList
+            loadingProvider={activeProvider}
+            disabledAll={isOffline || isMagicLinkVerifying}
+            onLogin={(providerId) => {
+              if (isOffline) {
+                setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
+                hapticNotify('warning');
+                return;
+              }
+              loginMutation.mutate(providerId);
+            }}
+          />
+        ) : null}
 
         <AnimatePresence initial={false}>
           {isOffline ? (
@@ -613,7 +650,7 @@ export function LoginScreen() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className="mt-3 rounded-2xl border border-amber-400/35 bg-amber-400/12 px-3 py-2 text-xs text-amber-100"
+              className="theme-banner-warning mt-3 rounded-2xl border px-3 py-2 text-xs"
             >
               Оффлайн: вход через провайдеры временно недоступен.
             </motion.div>
@@ -621,17 +658,38 @@ export function LoginScreen() {
         </AnimatePresence>
 
         {showTelegramWidget ? (
-          <div className="mt-3 rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:border-emerald-500/20 dark:bg-zinc-900/55">
-            <p className="text-xs text-ios-subtext">Подтвердите вход через Telegram:</p>
+          <div className="theme-surface-2 mt-1 rounded-[24px] border p-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-ios-text">Вход через Telegram</h3>
+              <p className="text-xs leading-5 text-ios-subtext">
+                Вы открыли приложение вне Telegram Mini App. Подтвердите вход через защищённый Telegram Widget —
+                после подтверждения мы сразу создадим сессию и вернём вас в приложение.
+              </p>
+            </div>
             <TelegramWidgetLogin
               botUsername={telegramBotUsername}
               onAuth={(payload) => telegramWidgetMutation.mutate(payload)}
-              onError={(message) => setLoginError(message)}
+              onError={(message) => setLoginError(mapTelegramAuthError(new Error(message)))}
             />
+            {loginError ? <p className="theme-banner-danger mt-3 rounded-xl border px-3 py-2 text-xs">{loginError}</p> : null}
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTelegramWidget(false);
+                  setLoginError(null);
+                }}
+                className="theme-surface-subtle min-h-11 rounded-full border px-4 text-sm font-medium text-ios-text transition hover:border-ios-accent/45"
+              >
+                Назад к способам входа
+              </button>
+            </div>
           </div>
         ) : null}
 
-        {loginError ? <p className="mt-3 text-xs text-red-500">{loginError}</p> : null}
+        {loginError && !showTelegramWidget ? (
+          <p className="theme-banner-danger mt-3 rounded-xl border px-3 py-2 text-xs">{loginError}</p>
+        ) : null}
 
         <MagicLinkForm
           email={magicEmail}
@@ -673,7 +731,7 @@ export function LoginScreen() {
         {successOverlay ? (
           <motion.div
             key="login-success-overlay"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-emerald-600/18 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(10_15_20/0.24)] backdrop-blur-md"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -729,12 +787,12 @@ export function LoginScreen() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 10 }}
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-              className="mx-6 w-full max-w-[360px] rounded-3xl border border-emerald-200/60 bg-white/88 p-5 text-center shadow-[0_24px_70px_rgba(16,185,129,0.28)] dark:border-emerald-500/40 dark:bg-zinc-900/88"
+              className="theme-surface-1 mx-6 w-full max-w-[360px] rounded-3xl border p-5 text-center shadow-[0_24px_70px_rgba(16,185,129,0.18)]"
             >
-              <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/90 text-white shadow-lg shadow-emerald-500/35">
+              <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-lg shadow-[hsl(var(--primary)/0.35)]">
                 <Leaf className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-semibold text-emerald-700 dark:text-emerald-300">{successOverlay.title}</h3>
+              <h3 className="text-lg font-semibold text-[hsl(var(--primary))]">{successOverlay.title}</h3>
               <p className="mt-1 text-sm text-ios-subtext">{successOverlay.subtitle}</p>
             </motion.div>
           </motion.div>

@@ -30,7 +30,7 @@ interface DropPiece {
   delay: number;
 }
 
-const CONFETTI_COLORS = ['#34C759', '#8BC34A', '#F59E0B', '#60A5FA', '#F472B6'];
+const CONFETTI_COLORS = ['hsl(var(--primary))', 'hsl(var(--accent))', '#F59E0B', '#60A5FA', '#F472B6'];
 
 function buildConfettiPieces(): ConfettiPiece[] {
   return Array.from({ length: 10 }, (_, index) => ({
@@ -124,7 +124,7 @@ export function QuickWaterButton({
                   />
                 ))}
                 <motion.span
-                  className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/30"
+                  className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[hsl(var(--primary)/0.24)]"
                   initial={{ scale: 0.3, opacity: 0 }}
                   animate={{ scale: [0.3, 1.1, 0.8], opacity: [0, 0.7, 0] }}
                   transition={{ duration: 0.55, ease: 'easeOut' }}
@@ -150,7 +150,7 @@ export function QuickWaterButton({
             ))}
 
             <motion.span
-              className="absolute left-1/2 top-[-18px] -translate-x-1/2 whitespace-nowrap text-[11px] font-semibold text-emerald-600 dark:text-emerald-300"
+              className="absolute left-1/2 top-[-18px] -translate-x-1/2 whitespace-nowrap text-[11px] font-semibold text-[hsl(var(--primary))]"
               initial={{ opacity: 0, y: 8, scale: 0.95 }}
               animate={{ opacity: 1, y: -8, scale: 1 }}
               exit={{ opacity: 0, y: -14 }}
@@ -165,10 +165,10 @@ export function QuickWaterButton({
       <Button
         variant="secondary"
         size="sm"
-        className={`h-11 w-full rounded-2xl shadow-[0_8px_24px_rgba(52,199,89,0.16)] android:rounded-[16px] ${
+        className={`h-11 w-full rounded-2xl shadow-[0_8px_24px_hsl(var(--primary)/0.18)] android:rounded-[16px] ${
           disabled
-            ? 'bg-slate-100 text-slate-400 shadow-none hover:bg-slate-100'
-            : 'bg-ios-accent/14 text-ios-accent hover:bg-ios-accent/22'
+            ? 'border-[hsl(var(--border)/0.72)] bg-[hsl(var(--secondary)/0.9)] text-[hsl(var(--foreground)/0.72)] shadow-none hover:bg-[hsl(var(--secondary)/0.9)]'
+            : 'border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--primary)/0.24)]'
         }`}
         disabled={disabled || isLoading || isRunning}
         onClick={handleClick}

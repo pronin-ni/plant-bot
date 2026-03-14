@@ -38,9 +38,9 @@ export function getPlantStatusTone(daysLeft: number, source?: PlantDto['recommen
     return {
       label: 'Под контролем',
       tone: 'neutral',
-      containerClassName: 'bg-stone-100/85 text-stone-700 ring-1 ring-stone-200/70 dark:bg-stone-900/70 dark:text-stone-200 dark:ring-stone-700/60',
-      dotClassName: 'bg-stone-500',
-      borderClassName: 'border-stone-200/90 dark:border-stone-800/80'
+      containerClassName: 'bg-[hsl(var(--secondary)/0.94)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--border)/0.75)]',
+      dotClassName: 'bg-[hsl(var(--muted-foreground))]',
+      borderClassName: 'border-[hsl(var(--border)/0.78)]'
     };
   }
 
@@ -48,9 +48,9 @@ export function getPlantStatusTone(daysLeft: number, source?: PlantDto['recommen
     return {
       label: 'Срочно',
       tone: 'urgent',
-      containerClassName: 'bg-rose-50/90 text-rose-700 ring-1 ring-rose-200/70 dark:bg-rose-950/35 dark:text-rose-300 dark:ring-rose-800/55',
-      dotClassName: 'bg-rose-500',
-      borderClassName: 'border-rose-200/90 dark:border-rose-800/75'
+      containerClassName: 'bg-[hsl(var(--destructive)/0.14)] text-[hsl(var(--destructive))] ring-1 ring-[hsl(var(--destructive)/0.3)]',
+      dotClassName: 'bg-[hsl(var(--destructive))]',
+      borderClassName: 'border-[hsl(var(--destructive)/0.28)]'
     };
   }
 
@@ -58,18 +58,18 @@ export function getPlantStatusTone(daysLeft: number, source?: PlantDto['recommen
     return {
       label: 'Скоро полив',
       tone: 'soon',
-      containerClassName: 'bg-amber-50/90 text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/35 dark:text-amber-300 dark:ring-amber-800/55',
+      containerClassName: 'bg-amber-500/14 text-[hsl(var(--foreground))] ring-1 ring-amber-400/35',
       dotClassName: 'bg-amber-500',
-      borderClassName: 'border-amber-200/90 dark:border-amber-800/75'
+      borderClassName: 'border-amber-400/30'
     };
   }
 
   return {
     label: 'В порядке',
     tone: 'good',
-    containerClassName: 'bg-emerald-50/90 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-800/55',
-    dotClassName: 'bg-emerald-500',
-    borderClassName: 'border-emerald-200/90 dark:border-emerald-800/75'
+    containerClassName: 'bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--primary)/0.28)]',
+    dotClassName: 'bg-[hsl(var(--primary))]',
+    borderClassName: 'border-[hsl(var(--primary)/0.26)]'
   };
 }
 
@@ -80,7 +80,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'AI-рекомендация',
         shortLabel: 'AI',
         tone: 'ai',
-        className: 'bg-sky-50/90 text-sky-700 ring-1 ring-sky-200/70 dark:bg-sky-950/35 dark:text-sky-300 dark:ring-sky-800/55',
+        className: 'bg-[hsl(var(--accent)/0.2)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--accent)/0.3)]',
         icon: Sparkles
       };
     case 'WEATHER_ADJUSTED':
@@ -88,7 +88,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'С учётом погоды',
         shortLabel: 'Погода',
         tone: 'weather',
-        className: 'bg-cyan-50/90 text-cyan-700 ring-1 ring-cyan-200/70 dark:bg-cyan-950/35 dark:text-cyan-300 dark:ring-cyan-800/55',
+        className: 'bg-sky-500/14 text-[hsl(var(--foreground))] ring-1 ring-sky-400/30',
         icon: CloudRain
       };
     case 'HYBRID':
@@ -96,7 +96,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'AI + погода',
         shortLabel: 'AI + Погода',
         tone: 'weather',
-        className: 'bg-teal-50/90 text-teal-700 ring-1 ring-teal-200/70 dark:bg-teal-950/35 dark:text-teal-300 dark:ring-teal-800/55',
+        className: 'bg-teal-500/14 text-[hsl(var(--foreground))] ring-1 ring-teal-400/30',
         icon: Sparkles
       };
     case 'FALLBACK':
@@ -104,7 +104,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'Резервный режим',
         shortLabel: 'Резерв',
         tone: 'fallback',
-        className: 'bg-stone-100/85 text-stone-700 ring-1 ring-stone-200/70 dark:bg-stone-900/70 dark:text-stone-200 dark:ring-stone-700/60',
+        className: 'bg-[hsl(var(--secondary)/0.94)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--border)/0.75)]',
         icon: UserCog
       };
     case 'MANUAL':
@@ -112,7 +112,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'Вручную',
         shortLabel: 'Вручную',
         tone: 'manual',
-        className: 'bg-slate-100/85 text-slate-700 ring-1 ring-slate-200/70 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-700/60',
+        className: 'bg-[hsl(var(--secondary)/0.94)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--border)/0.75)]',
         icon: UserCog
       };
     case 'BASE_PROFILE':
@@ -122,7 +122,7 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
         label: 'По профилю растения',
         shortLabel: 'Профиль',
         tone: 'profile',
-        className: 'bg-emerald-50/90 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/35 dark:text-emerald-300 dark:ring-emerald-800/55',
+        className: 'bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--primary)/0.28)]',
         icon: Sparkles
       };
   }
@@ -157,12 +157,12 @@ export function getPlantReasonTone(source?: PlantDto['recommendationSource']): s
   switch (source) {
     case 'WEATHER_ADJUSTED':
     case 'HYBRID':
-      return 'bg-cyan-50/85 text-cyan-950 ring-1 ring-cyan-200/60 dark:bg-cyan-950/25 dark:text-cyan-100 dark:ring-cyan-800/45';
+      return 'bg-sky-500/10 text-[hsl(var(--foreground))] ring-1 ring-sky-400/25';
     case 'MANUAL':
-      return 'bg-slate-100/90 text-slate-800 ring-1 ring-slate-200/60 dark:bg-slate-900/70 dark:text-slate-100 dark:ring-slate-700/45';
+      return 'bg-[hsl(var(--secondary)/0.94)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--border)/0.72)]';
     case 'FALLBACK':
-      return 'bg-stone-100/90 text-stone-800 ring-1 ring-stone-200/60 dark:bg-stone-900/70 dark:text-stone-100 dark:ring-stone-700/45';
+      return 'bg-[hsl(var(--secondary)/0.94)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--border)/0.72)]';
     default:
-      return 'bg-emerald-50/85 text-emerald-950 ring-1 ring-emerald-200/60 dark:bg-emerald-950/25 dark:text-emerald-100 dark:ring-emerald-800/45';
+      return 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--foreground))] ring-1 ring-[hsl(var(--primary)/0.22)]';
   }
 }

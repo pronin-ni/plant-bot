@@ -354,12 +354,11 @@ export function AIChatPage() {
   };
 
   return (
-    <section className="space-y-3 pb-[calc(8.75rem+env(safe-area-inset-bottom))]">
-      <header className="flex items-center justify-between gap-3 px-1">
-        <h2 className="text-lg font-semibold text-ios-text">AI помощник 🌿</h2>
+    <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pb-[calc(5.8rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-end gap-3 px-1">
         <button
           type="button"
-          className="touch-target android-ripple inline-flex min-h-11 items-center rounded-full border border-ios-border/60 bg-white/70 px-3 text-xs text-ios-subtext dark:bg-zinc-900/60"
+          className="theme-surface-subtle touch-target android-ripple inline-flex min-h-11 shrink-0 items-center rounded-full border px-3 text-xs text-ios-subtext"
           onClick={() => {
             void clearHistory();
           }}
@@ -370,28 +369,35 @@ export function AIChatPage() {
       </header>
 
       {!messages.length ? (
-        <QuickQuestionsCarousel
-          items={QUICK_QUESTIONS}
-          onPick={(item) => {
-            setQuestion(item);
-            hapticImpact('light');
-          }}
-        />
+        <div className="shrink-0">
+          <QuickQuestionsCarousel
+            items={QUICK_QUESTIONS}
+            onPick={(item) => {
+              setQuestion(item);
+              hapticImpact('light');
+            }}
+          />
+        </div>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-xl">
-        <ChatHistory messages={messages} isTyping={isTyping} />
+      <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
+        <ChatHistory
+          messages={messages}
+          isTyping={isTyping}
+          className="h-full"
+          viewportClassName="h-full"
+        />
       </div>
 
       {chatError ? (
-        <div className="rounded-xl border border-amber-300/70 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 shadow-sm dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-200">
+        <div className="theme-banner-warning shrink-0 rounded-xl border px-3 py-2 text-sm shadow-sm">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p className="min-w-0 break-words">{chatError.message}</p>
           </div>
           <button
             type="button"
-            className="touch-target mt-2 inline-flex min-h-11 items-center rounded-lg border border-amber-400/70 bg-white/70 px-3 text-xs font-medium text-amber-900 dark:border-amber-600/70 dark:bg-zinc-900/70 dark:text-amber-200"
+            className="theme-surface-subtle touch-target mt-2 inline-flex min-h-11 items-center rounded-lg border px-3 text-xs font-medium"
             onClick={() => {
               void retryLast();
             }}
@@ -403,7 +409,7 @@ export function AIChatPage() {
         </div>
       ) : null}
 
-      <div className="sticky bottom-[calc(5.1rem+env(safe-area-inset-bottom))] z-20">
+      <div className="theme-surface-1 sticky bottom-[calc(5.1rem+env(safe-area-inset-bottom))] z-20 shrink-0 rounded-[20px] border p-2 shadow-[0_14px_34px_rgb(15_23_42/0.12)]">
         <ChatInput
           value={question}
           disabled={false}
