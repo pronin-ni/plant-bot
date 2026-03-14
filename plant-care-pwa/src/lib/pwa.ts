@@ -9,6 +9,16 @@ let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 let installAvailable = false;
 const installListeners = new Set<(available: boolean) => void>();
 const SERVICE_WORKER_READY_TIMEOUT_MS = 4000;
+const PUSH_RECEIPT_CACHE = 'plant-pwa-push-receipts';
+const PUSH_RECEIPT_PATH = '__push-receipt__';
+
+export interface PushReceipt {
+  tag: string;
+  title: string;
+  body: string;
+  url: string;
+  receivedAt: number;
+}
 
 function notifyInstallListeners() {
   installListeners.forEach((listener) => listener(installAvailable));
@@ -152,4 +162,54 @@ export async function removePushSubscription(): Promise<string | null> {
   const endpoint = existing.endpoint;
   await existing.unsubscribe();
   return endpoint;
+}
+
+function getPushReceiptUrl(): string {
+  return new URL(PUSH_RECEIPT_PATH, new URL(import.meta.env.BASE_URL, window.location.origin)).toString();
+}
+
+export async function getLocalPushSubscription(): Promise<PushSubscription | null> {
+  if (!('serviceWorker' in navigator)) {
+    return null;
+  }
+  const registration = await waitForServiceWorkerRegistration();
+  return registration.pushManager.getSubscription();
+}
+
+export async function readLastPushReceipt(): Promise<PushReceipt | null> {
+  if (!('caches' in window)) {
+    return null;
+  }
+  const cache = await caches.open(PUSH_RECEIPT_CACHE);
+  const response = await cache.match(getPushReceiptUrl());
+  if (!response) {
+    return null;
+  }
+  try {
+    return (await response.json()) as PushReceipt;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearLastPushReceipt(): Promise<void> {
+  if (!('caches' in window)) {
+    return;
+  }
+  const cache = await caches.open(PUSH_RECEIPT_CACHE);
+  await cache.delete(getPushReceiptUrl());
+}
+
+export function subscribeToPushReceipts(listener: (receipt: PushReceipt) => void): () => void {
+  if (!('serviceWorker' in navigator)) {
+    return () => {};
+  }
+  const handleMessage = (event: MessageEvent) => {
+    const payload = event.data as { type?: string; receipt?: PushReceipt } | undefined;
+    if (payload?.type === 'PUSH_RECEIPT' && payload.receipt) {
+      listener(payload.receipt);
+    }
+  };
+  navigator.serviceWorker.addEventListener('message', handleMessage);
+  return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
 }

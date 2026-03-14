@@ -636,7 +636,10 @@ public class MiniAppController {
         .append("PRODID:-//PlantBot//Watering Calendar//RU\r\n")
         .append("CALSCALE:GREGORIAN\r\n")
         .append("METHOD:PUBLISH\r\n")
-        .append("X-WR-CALNAME:Мои растения — Полив\r\n");
+        .append("X-WR-CALNAME:Мои растения — Полив\r\n")
+        .append("X-WR-CALDESC:Подписка на календарь поливов Plant Bot. События обновляются автоматически при изменении расписания.\r\n")
+        .append("X-PUBLISHED-TTL:PT5M\r\n")
+        .append("REFRESH-INTERVAL;VALUE=DURATION:PT5M\r\n");
     String stamp = utcNowStamp();
     for (CalendarEventResponse event : events) {
       String uid = "plantbot-" + user.getTelegramId() + "-" + event.plantId() + "-" + event.date();
@@ -839,10 +842,15 @@ public class MiniAppController {
       WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
       int step = Math.max(1, (int) Math.floor(rec.intervalDays()));
       LocalDate due = plant.getLastWateredDate().plusDays(step);
-      LocalDate next = due;
+      LocalDate next;
 
-      if (!due.isAfter(start) && !start.isAfter(end)) {
-        events.add(new CalendarEventResponse(start, plant.getId(), plant.getName()));
+      if (due.isBefore(start)) {
+        if (!start.isAfter(end)) {
+          events.add(new CalendarEventResponse(start, plant.getId(), plant.getName()));
+        }
+        next = start.plusDays(step);
+      } else {
+        next = due;
       }
 
       while (!next.isAfter(end)) {

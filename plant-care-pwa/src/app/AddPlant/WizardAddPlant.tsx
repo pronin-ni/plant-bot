@@ -576,13 +576,13 @@ export function WizardAddPlant() {
       if (!keyData.enabled || !keyData.publicKey) {
         return;
       }
-      const status = await getPwaPushStatus();
-      if (status.subscribed) {
-        localStorage.setItem(promptKey, '1');
-        return;
-      }
       const subscription = await ensurePushSubscription(keyData.publicKey);
       if (!subscription) {
+        return;
+      }
+      const status = await getPwaPushStatus(subscription.endpoint);
+      if (status.currentDeviceSubscribed) {
+        localStorage.setItem(promptKey, '1');
         return;
       }
       await subscribePwaPush(subscription.toJSON());

@@ -503,12 +503,30 @@ export interface PwaPushPublicKeyDto {
 export interface PwaPushStatusDto {
   enabled: boolean;
   subscribed: boolean;
+  userSubscribed: boolean;
+  currentDeviceSubscribed: boolean;
   subscriptionsCount: number;
 }
 
 export interface PwaPushSubscribeDto {
   ok: boolean;
   subscriptionsCount: number;
+}
+
+export interface PwaPushTestEndpointDto {
+  endpoint: string;
+  accepted: boolean;
+  status: number;
+  error?: string | null;
+}
+
+export interface PwaPushTestDto {
+  acceptedByProvider: boolean;
+  subscriptions: number;
+  accepted: number;
+  message: string;
+  tag: string;
+  endpoints: PwaPushTestEndpointDto[];
 }
 
 export interface WeatherProviderDto {

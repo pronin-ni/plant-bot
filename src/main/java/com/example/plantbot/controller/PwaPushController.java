@@ -4,6 +4,8 @@ import com.example.plantbot.controller.dto.pwa.PwaPushPublicKeyResponse;
 import com.example.plantbot.controller.dto.pwa.PwaPushStatusResponse;
 import com.example.plantbot.controller.dto.pwa.PwaPushSubscribeResponse;
 import com.example.plantbot.controller.dto.pwa.PwaPushSubscriptionRequest;
+import com.example.plantbot.controller.dto.pwa.PwaPushTestRequest;
+import com.example.plantbot.controller.dto.pwa.PwaPushTestResponse;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
@@ -33,10 +35,21 @@ public class PwaPushController {
   }
 
   @GetMapping("/status")
-  public PwaPushStatusResponse status(Authentication authentication) {
+  public PwaPushStatusResponse status(
+      Authentication authentication,
+      @RequestParam(name = "endpoint", required = false) String endpoint
+  ) {
     User user = requireAuthenticatedUser(authentication);
     int count = webPushNotificationService.countSubscriptions(user);
-    return new PwaPushStatusResponse(webPushNotificationService.isEnabled(), count > 0, count);
+    boolean userSubscribed = count > 0;
+    boolean currentDeviceSubscribed = webPushNotificationService.hasSubscription(user, endpoint);
+    return new PwaPushStatusResponse(
+        webPushNotificationService.isEnabled(),
+        userSubscribed,
+        userSubscribed,
+        currentDeviceSubscribed,
+        count
+    );
   }
 
   @PostMapping("/subscribe")
@@ -57,6 +70,36 @@ public class PwaPushController {
     User user = requireAuthenticatedUser(authentication);
     int count = webPushNotificationService.unsubscribe(user, endpoint);
     return new PwaPushSubscribeResponse(true, count);
+  }
+
+  @PostMapping("/test")
+  public PwaPushTestResponse sendSelfTest(
+      Authentication authentication,
+      @RequestBody(required = false) PwaPushTestRequest request
+  ) {
+    User user = requireAuthenticatedUser(authentication);
+    WebPushNotificationService.SendResult result = webPushNotificationService.sendPwaSelfTest(
+        user,
+        request != null ? request.endpoint() : null,
+        request != null ? request.title() : null,
+        request != null ? request.body() : null,
+        request != null ? request.tag() : null
+    );
+    return new PwaPushTestResponse(
+        result.delivered() > 0,
+        result.subscriptions(),
+        result.delivered(),
+        result.message(),
+        result.tag(),
+        result.endpoints().stream()
+            .map(item -> new PwaPushTestResponse.PwaPushTestEndpointResponse(
+                item.endpoint(),
+                item.delivered(),
+                item.status(),
+                item.error()
+            ))
+            .toList()
+    );
   }
 
   private User requireAuthenticatedUser(Authentication authentication) {

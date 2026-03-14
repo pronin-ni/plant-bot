@@ -12,6 +12,7 @@ import type {
   PwaPushPublicKeyDto,
   PwaPushStatusDto,
   PwaPushSubscribeDto,
+  PwaPushTestDto,
   WateringRecommendationPreviewDto,
   WateringSensorContextDto,
   WeatherCurrentDto,
@@ -443,6 +444,8 @@ export function getDemoPushStatus(): PwaPushStatusDto {
   return {
     enabled: false,
     subscribed: false,
+    userSubscribed: false,
+    currentDeviceSubscribed: false,
     subscriptionsCount: 0
   };
 }
@@ -451,5 +454,16 @@ export function getDemoPushSubscribe(): PwaPushSubscribeDto {
   return {
     ok: false,
     subscriptionsCount: 0
+  };
+}
+
+export function getDemoPushTest(): PwaPushTestDto {
+  return {
+    acceptedByProvider: false,
+    subscriptions: 0,
+    accepted: 0,
+    message: 'Web Push недоступен в demo mode.',
+    tag: 'demo-push-test',
+    endpoints: []
   };
 }

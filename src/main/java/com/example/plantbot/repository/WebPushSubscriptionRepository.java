@@ -13,6 +13,10 @@ public interface WebPushSubscriptionRepository extends JpaRepository<WebPushSubs
 
   Optional<WebPushSubscription> findByEndpoint(String endpoint);
 
+  Optional<WebPushSubscription> findByUserAndEndpoint(User user, String endpoint);
+
+  boolean existsByUserAndEndpoint(User user, String endpoint);
+
   long deleteByUserAndEndpoint(User user, String endpoint);
 
   long deleteByUser(User user);

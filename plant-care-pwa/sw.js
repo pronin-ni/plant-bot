@@ -7,6 +7,30 @@ import { ExpirationPlugin } from 'workbox-expiration';
 self.skipWaiting();
 cleanupOutdatedCaches();
 
+const PUSH_RECEIPT_CACHE = 'plant-pwa-push-receipts';
+const PUSH_RECEIPT_PATH = '__push-receipt__';
+
+function getScopedUrl(path = '') {
+  return new URL(path, self.registration.scope).toString();
+}
+
+async function persistPushReceipt(receipt) {
+  const cache = await caches.open(PUSH_RECEIPT_CACHE);
+  const request = new Request(getScopedUrl(PUSH_RECEIPT_PATH));
+  const response = new Response(JSON.stringify(receipt), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store'
+    }
+  });
+  await cache.put(request, response);
+}
+
+async function notifyClients(receipt) {
+  const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  await Promise.all(clientList.map((client) => client.postMessage({ type: 'PUSH_RECEIPT', receipt })));
+}
+
 precacheAndRoute(self.__WB_MANIFEST);
 
 registerRoute(
@@ -72,21 +96,37 @@ self.addEventListener('push', (event) => {
     payload = {};
   }
   const title = payload.title || 'Напоминание о поливе';
+  const body = payload.body || 'Откройте приложение, чтобы проверить растения.';
+  const url = payload.url || getScopedUrl('./');
+  const tag = payload.tag || 'plant-pwa-reminder';
+  const receipt = {
+    tag,
+    title,
+    body,
+    url,
+    receivedAt: Date.now()
+  };
   const options = {
-    body: payload.body || 'Откройте приложение, чтобы проверить растения.',
-    icon: '/icons/icon-192.svg',
-    badge: '/icons/icon-192.svg',
-    tag: payload.tag || 'plant-pwa-reminder',
+    body,
+    icon: getScopedUrl('icons/icon-192.svg'),
+    badge: getScopedUrl('icons/icon-192.svg'),
+    tag,
     data: {
-      url: payload.url || '/mini-app'
+      url
     }
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      persistPushReceipt(receipt),
+      notifyClients(receipt)
+    ])
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/mini-app';
+  const targetUrl = event.notification.data?.url || getScopedUrl('./');
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

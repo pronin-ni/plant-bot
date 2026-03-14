@@ -17,6 +17,7 @@ import {
   getDemoPushPublicKey,
   getDemoPushStatus,
   getDemoPushSubscribe,
+  getDemoPushTest,
   readDemoAssistantHistory,
   readDemoPlants,
   searchDemoPlants,
@@ -76,6 +77,7 @@ import type {
   PwaPushPublicKeyDto,
   PwaPushStatusDto,
   PwaPushSubscribeDto,
+  PwaPushTestDto,
   PlantPresetSuggestionDto,
   PlantAiRecommendDto,
   ApplyWateringRecommendationDto,
@@ -449,6 +451,10 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
     return getDemoPushSubscribe() as T;
   }
 
+  if (method === 'POST' && pathname === '/api/pwa/push/test') {
+    return getDemoPushTest() as T;
+  }
+
   return null;
 }
 
@@ -657,8 +663,9 @@ export async function getPwaPushPublicKey(): Promise<PwaPushPublicKeyDto> {
   return pwaAuthFetch<PwaPushPublicKeyDto>('/api/pwa/push/public-key', { method: 'GET' });
 }
 
-export async function getPwaPushStatus(): Promise<PwaPushStatusDto> {
-  return pwaAuthFetch<PwaPushStatusDto>('/api/pwa/push/status', { method: 'GET' });
+export async function getPwaPushStatus(endpoint?: string | null): Promise<PwaPushStatusDto> {
+  const query = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : '';
+  return pwaAuthFetch<PwaPushStatusDto>(`/api/pwa/push/status${query}`, { method: 'GET' });
 }
 
 export async function subscribePwaPush(subscription: PushSubscriptionJSON): Promise<PwaPushSubscribeDto> {
@@ -678,6 +685,18 @@ export async function subscribePwaPush(subscription: PushSubscriptionJSON): Prom
 export async function unsubscribePwaPush(endpoint: string): Promise<PwaPushSubscribeDto> {
   return pwaAuthFetch<PwaPushSubscribeDto>(`/api/pwa/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`, {
     method: 'DELETE'
+  });
+}
+
+export async function sendPwaPushTest(payload: {
+  endpoint?: string | null;
+  title?: string;
+  body?: string;
+  tag?: string;
+}): Promise<PwaPushTestDto> {
+  return pwaAuthFetch<PwaPushTestDto>('/api/pwa/push/test', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 

@@ -163,6 +163,7 @@ app:
       max-requests: ${APP_ADMIN_RATE_LIMIT_MAX_REQUESTS:120}
       window-seconds: ${APP_ADMIN_RATE_LIMIT_WINDOW_SECONDS:60}
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+  pwa-public-url: ${APP_PWA_PUBLIC_URL:${APP_PUBLIC_BASE_URL:http://localhost:8080}/pwa/}
   learning:
     last-n: 5
     alpha: 0.5

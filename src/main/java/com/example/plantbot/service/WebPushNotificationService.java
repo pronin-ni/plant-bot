@@ -31,6 +31,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -54,6 +55,9 @@ public class WebPushNotificationService {
 
   @Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
+
+  @Value("${app.pwa-public-url:}")
+  private String pwaPublicUrl;
 
   @Transactional(readOnly = true)
   public boolean isEnabled() {
@@ -100,6 +104,14 @@ public class WebPushNotificationService {
     return subscriptionRepository.findByUser(user).size();
   }
 
+  @Transactional(readOnly = true)
+  public boolean hasSubscription(User user, String endpoint) {
+    if (user == null || endpoint == null || endpoint.isBlank()) {
+      return false;
+    }
+    return subscriptionRepository.existsByUserAndEndpoint(user, endpoint.trim());
+  }
+
   @Transactional
   public boolean sendWateringReminder(Plant plant, WateringRecommendation rec) {
     if (!isEnabled() || plant == null || plant.getUser() == null) {
@@ -117,7 +129,7 @@ public class WebPushNotificationService {
     payload.put("title", "Пора поливать растение");
     payload.put("body", plant.getName() + " • " + waterMl + " мл • до " + dueDate.format(DateTimeFormatter.ofPattern("dd.MM")));
     payload.put("tag", "plant-watering-" + plant.getId());
-    payload.put("url", publicBaseUrl + "/mini-app");
+    payload.put("url", resolvePwaPublicUrl());
     payload.put("plantId", plant.getId());
 
     String payloadJson = toJson(payload);
@@ -127,14 +139,14 @@ public class WebPushNotificationService {
   @Transactional
   public SendResult sendTestNotification(User user, String title, String body) {
     if (user == null) {
-      return new SendResult(0, 0, "Пользователь не найден", List.of());
+      return new SendResult(0, 0, "Пользователь не найден", "admin-test-missing-user", List.of());
     }
     if (!isEnabled()) {
-      return new SendResult(0, 0, "Web Push отключен на сервере", List.of());
+      return new SendResult(0, 0, "Web Push отключен на сервере", "admin-test-disabled", List.of());
     }
     List<WebPushSubscription> subscriptions = subscriptionRepository.findByUser(user);
     if (subscriptions.isEmpty()) {
-      return new SendResult(0, 0, "У пользователя нет активных push-подписок", List.of());
+      return new SendResult(0, 0, "У пользователя нет активных push-подписок", "admin-test-no-subscriptions", List.of());
     }
 
     String safeTitle = title == null || title.isBlank() ? "Тестовое уведомление" : title.trim();
@@ -146,14 +158,56 @@ public class WebPushNotificationService {
     payload.put("title", safeTitle);
     payload.put("body", safeBody);
     payload.put("tag", "admin-test-" + user.getId());
-    payload.put("url", publicBaseUrl + "/pwa/");
+    payload.put("url", resolvePwaPublicUrl());
 
     List<EndpointDeliveryResult> endpointResults = sendPayload(subscriptions, toJson(payload));
     int delivered = countDelivered(endpointResults);
     String message = delivered > 0
         ? "Тестовое push-сообщение отправлено"
         : "Не удалось доставить push-сообщение";
-    return new SendResult(subscriptions.size(), delivered, message, endpointResults);
+    return new SendResult(subscriptions.size(), delivered, message, payload.get("tag").toString(), endpointResults);
+  }
+
+  @Transactional
+  public SendResult sendPwaSelfTest(User user, String endpoint, String title, String body, String tag) {
+    if (user == null) {
+      return new SendResult(0, 0, "Пользователь не найден", safeTag(tag), List.of());
+    }
+    if (!isEnabled()) {
+      return new SendResult(0, 0, "Web Push отключен на сервере", safeTag(tag), List.of());
+    }
+
+    List<WebPushSubscription> subscriptions;
+    if (endpoint != null && !endpoint.isBlank()) {
+      subscriptions = subscriptionRepository.findByUserAndEndpoint(user, endpoint.trim())
+          .map(List::of)
+          .orElse(List.of());
+    } else {
+      subscriptions = subscriptionRepository.findByUser(user);
+    }
+
+    if (subscriptions.isEmpty()) {
+      return new SendResult(0, 0, "Для этого устройства нет активной push-подписки на сервере", safeTag(tag), List.of());
+    }
+
+    String safeTitle = title == null || title.isBlank() ? "Plant Bot: тест уведомлений" : title.trim();
+    String safeBody = body == null || body.isBlank()
+        ? "Проверяем доставку push на это устройство."
+        : body.trim();
+    String safeTag = safeTag(tag);
+
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("title", safeTitle);
+    payload.put("body", safeBody);
+    payload.put("tag", safeTag);
+    payload.put("url", resolvePwaPublicUrl());
+
+    List<EndpointDeliveryResult> endpointResults = sendPayload(subscriptions, toJson(payload));
+    int accepted = countDelivered(endpointResults);
+    String message = accepted > 0
+        ? "Push принят push-провайдером. Ждем receipt на устройстве."
+        : "Push не был принят push-провайдером";
+    return new SendResult(subscriptions.size(), accepted, message, safeTag, endpointResults);
   }
 
   private List<EndpointDeliveryResult> sendPayload(List<WebPushSubscription> subscriptions, String payloadJson) {
@@ -269,6 +323,24 @@ public class WebPushNotificationService {
     return normalized.substring(0, 400);
   }
 
+  private String resolvePwaPublicUrl() {
+    String resolved = (pwaPublicUrl == null || pwaPublicUrl.isBlank())
+        ? publicBaseUrl + "/pwa/"
+        : pwaPublicUrl.trim();
+    if (!resolved.endsWith("/")) {
+      resolved = resolved + "/";
+    }
+    return resolved;
+  }
+
+  private String safeTag(String tag) {
+    String normalized = tag == null ? "" : tag.trim();
+    if (!normalized.isBlank()) {
+      return normalized;
+    }
+    return "pwa-self-test-" + UUID.randomUUID();
+  }
+
   private String toJson(Map<String, Object> payload) {
     try {
       return objectMapper.writeValueAsString(payload);
@@ -277,7 +349,13 @@ public class WebPushNotificationService {
     }
   }
 
-  public record SendResult(int subscriptions, int delivered, String message, List<EndpointDeliveryResult> endpoints) {
+  public record SendResult(
+      int subscriptions,
+      int delivered,
+      String message,
+      String tag,
+      List<EndpointDeliveryResult> endpoints
+  ) {
   }
 
   public record EndpointDeliveryResult(String endpoint, boolean delivered, int status, String error) {
