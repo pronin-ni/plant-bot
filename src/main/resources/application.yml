@@ -71,7 +71,7 @@ weather:
   max-stale-age-minutes: ${WEATHER_MAX_STALE_AGE_MINUTES:180}
   metno:
     base-url: ${WEATHER_METNO_BASE_URL:https://api.met.no/weatherapi/locationforecast/2.0/compact}
-    user-agent: ${WEATHER_METNO_USER_AGENT:PlantBot/1.0 (contact: plant-bot@example.com)}
+    user-agent: "${WEATHER_METNO_USER_AGENT:PlantBot/1.0 (contact: plant-bot@example.com)}"
   weatherapi:
     api-key: ${WEATHER_WEATHERAPI_API_KEY:}
     current-url: ${WEATHER_WEATHERAPI_CURRENT_URL:https://api.weatherapi.com/v1/current.json}
