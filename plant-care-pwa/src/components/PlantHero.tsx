@@ -18,6 +18,9 @@ interface PlantHeroProps {
 }
 
 function categoryMeta(plant: PlantDto): { label: string; icon: typeof Home } {
+  if (plant.category === 'SEED_START' || plant.wateringProfile === 'SEED_START') {
+    return { label: 'Проращивание семян', icon: Sprout };
+  }
   if (plant.category === 'OUTDOOR_DECORATIVE') {
     return { label: 'Декоративное уличное', icon: TreePine };
   }
@@ -134,7 +137,11 @@ export function PlantHero({
           </p>
           <h2 className="mt-2 text-[2rem] font-semibold leading-tight tracking-[-0.03em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">{plant.name}</h2>
           <p className="mt-1 max-w-[26rem] text-sm leading-5 text-white/85 drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-            {plant.placement === 'OUTDOOR' ? 'Уличный уход' : 'Домашний уход'} · текущий режим полива и ухода
+            {plant.wateringProfile === 'SEED_START'
+              ? 'Режим проращивания · контроль влажности и стадии роста'
+              : plant.placement === 'OUTDOOR'
+                ? 'Уличный уход · текущий режим полива и ухода'
+                : 'Домашний уход · текущий режим полива и ухода'}
           </p>
         </div>
       </div>

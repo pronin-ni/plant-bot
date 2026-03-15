@@ -20,6 +20,8 @@ export interface PlantSourceTone {
 
 export function getPlantCategoryLabel(plant: PlantDto): string {
   switch (plant.category) {
+    case 'SEED_START':
+      return 'Семена';
     case 'OUTDOOR_DECORATIVE':
       return 'Декор';
     case 'OUTDOOR_GARDEN':
@@ -29,7 +31,27 @@ export function getPlantCategoryLabel(plant: PlantDto): string {
   }
 }
 
+export function seedStageLabel(stage?: PlantDto['seedStage'] | null): string {
+  switch (stage) {
+    case 'SOWN':
+      return 'Посеяно';
+    case 'GERMINATING':
+      return 'Прорастает';
+    case 'SPROUTED':
+      return 'Появились всходы';
+    case 'SEEDLING':
+      return 'Сеянец';
+    case 'READY_TO_TRANSPLANT':
+      return 'Готово к пересадке';
+    default:
+      return 'Проращивание';
+  }
+}
+
 export function getPlantEnvironmentLabel(plant: PlantDto): string {
+  if (plant.wateringProfile === 'SEED_START') {
+    return 'проращивание';
+  }
   return plant.placement === 'OUTDOOR' ? 'на улице' : 'в доме';
 }
 
@@ -129,6 +151,9 @@ export function getPlantSourceTone(source?: PlantDto['recommendationSource']): P
 }
 
 export function getPlantRecommendationHint(plant: PlantDto): string {
+  if (plant.wateringProfile === 'SEED_START') {
+    return plant.seedSummary?.trim() || 'Сейчас важнее контроль влажности и стадии всходов, а не обычный цикл полива.';
+  }
   const summary = plant.recommendationSummary?.trim();
   if (summary) {
     return summary;

@@ -8,10 +8,15 @@ import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.SeedContainerType;
+import com.example.plantbot.domain.SeedStage;
+import com.example.plantbot.domain.SeedSubstrateType;
+import com.example.plantbot.domain.SeedWateringMode;
 import com.example.plantbot.domain.SunExposure;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public record PlantResponse(Long id,
                             String name,
@@ -23,6 +28,24 @@ public record PlantResponse(Long id,
                             Double containerVolumeLiters,
                             String cropType,
                             PlantGrowthStage growthStage,
+                            SeedStage seedStage,
+                            PlantEnvironmentType targetEnvironmentType,
+                            SeedContainerType seedContainerType,
+                            SeedSubstrateType seedSubstrateType,
+                            LocalDate sowingDate,
+                            Boolean underCover,
+                            Boolean growLight,
+                            Double germinationTemperatureC,
+                            Integer expectedGerminationDaysMin,
+                            Integer expectedGerminationDaysMax,
+                            Integer recommendedCheckIntervalHours,
+                            SeedWateringMode recommendedWateringMode,
+                            String seedCareMode,
+                            String seedSummary,
+                            List<String> seedReasoning,
+                            List<String> seedWarnings,
+                            String seedCareSource,
+                            List<String> seedActions,
                             Boolean greenhouse,
                             Boolean dripIrrigation,
                             Double potVolumeLiters,

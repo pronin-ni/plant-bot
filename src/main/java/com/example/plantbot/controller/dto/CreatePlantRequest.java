@@ -7,7 +7,13 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.SeedContainerType;
+import com.example.plantbot.domain.SeedStage;
+import com.example.plantbot.domain.SeedSubstrateType;
+import com.example.plantbot.domain.SeedWateringMode;
 import com.example.plantbot.domain.SunExposure;
+
+import java.time.LocalDate;
 
 public record CreatePlantRequest(String name,
                                  Double potVolumeLiters,
@@ -24,6 +30,23 @@ public record CreatePlantRequest(String name,
                                  Double containerVolumeLiters,
                                  String cropType,
                                  PlantGrowthStage growthStage,
+                                 SeedStage seedStage,
+                                 PlantEnvironmentType targetEnvironmentType,
+                                 SeedContainerType seedContainerType,
+                                 SeedSubstrateType seedSubstrateType,
+                                 LocalDate sowingDate,
+                                 Boolean underCover,
+                                 Boolean growLight,
+                                 Double germinationTemperatureC,
+                                 Integer expectedGerminationDaysMin,
+                                 Integer expectedGerminationDaysMax,
+                                 Integer recommendedCheckIntervalHours,
+                                 SeedWateringMode recommendedWateringMode,
+                                 String seedCareMode,
+                                 String seedSummary,
+                                 String seedReasoningJson,
+                                 String seedWarningsJson,
+                                 String seedCareSource,
                                  Boolean greenhouse,
                                  Boolean dripIrrigation,
                                  Double outdoorAreaM2,

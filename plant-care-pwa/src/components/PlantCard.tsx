@@ -9,7 +9,8 @@ import {
   getPlantRecommendationHint,
   getPlantReasonTone,
   getPlantSourceTone,
-  getPlantStatusTone
+  getPlantStatusTone,
+  seedStageLabel
 } from '@/components/plants/plantRecommendationUi';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import type { PlantDto } from '@/types/api';
@@ -25,6 +26,7 @@ interface PlantCardProps {
 }
 
 function CategoryIcon({ plant, className }: { plant: PlantDto; className?: string }) {
+  if (plant.category === 'SEED_START' || plant.wateringProfile === 'SEED_START') return <SunMedium className={className} />;
   if (plant.category === 'OUTDOOR_DECORATIVE') return <TreePine className={className} />;
   if (plant.category === 'OUTDOOR_GARDEN') return <SunMedium className={className} />;
   return <Home className={className} />;
@@ -53,6 +55,10 @@ function hasWateredToday(plant: PlantDto): boolean {
   return startOfLocalDay(parseDateOnly(plant.lastWateredDate)).getTime() === startOfLocalDay(new Date()).getTime();
 }
 
+function isSeedPlant(plant: PlantDto): boolean {
+  return plant.category === 'SEED_START' || plant.wateringProfile === 'SEED_START';
+}
+
 export function PlantCard({
   plant,
   progress,
@@ -69,6 +75,11 @@ export function PlantCard({
   const cycleProgress = Math.max(8, Math.min(100, Math.round(progress)));
   const hintTone = getPlantReasonTone(plant.recommendationSource);
   const wateredToday = hasWateredToday(plant);
+  const seedPlant = isSeedPlant(plant);
+  const seedWindow = plant.expectedGerminationDaysMin != null && plant.expectedGerminationDaysMax != null
+    ? `${plant.expectedGerminationDaysMin}-${plant.expectedGerminationDaysMax} дн.`
+    : 'окно не задано';
+  const seedCheckLabel = plant.recommendedCheckIntervalHours ? `Проверять каждые ${plant.recommendedCheckIntervalHours} ч` : 'Проверка по ситуации';
 
   return (
     <motion.article
@@ -120,9 +131,11 @@ export function PlantCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${source.className}`}>
               <SourceIcon className="h-3.5 w-3.5" />
-              {source.shortLabel}
+              {seedPlant ? seedStageLabel(plant.seedStage) : source.shortLabel}
             </span>
-            <span className="text-xs text-ios-subtext">Следующий полив: {nextWateringLabel(daysLeft, nextWateringText)}</span>
+            <span className="text-xs text-ios-subtext">
+              {seedPlant ? seedCheckLabel : `Следующий полив: ${nextWateringLabel(daysLeft, nextWateringText)}`}
+            </span>
           </div>
         </div>
       </div>
@@ -136,13 +149,15 @@ export function PlantCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-[0.12em] text-ios-subtext">Почему сейчас</p>
-            <p className="mt-1 line-clamp-2 text-sm leading-5">{hint}</p>
+            <p className="mt-1 line-clamp-2 text-sm leading-5">
+              {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
+            </p>
           </div>
         </div>
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[11px] text-ios-subtext">
-            <span>Цикл полива</span>
-            <span>{Math.max(0, Math.min(100, cycleProgress))}%</span>
+            <span>{seedPlant ? 'Окно всходов' : 'Цикл полива'}</span>
+            <span>{seedPlant ? seedWindow : `${Math.max(0, Math.min(100, cycleProgress))}%`}</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">
             <div
@@ -159,13 +174,23 @@ export function PlantCard({
           e.stopPropagation();
         }}
       >
-        <QuickWaterButton
-          isLoading={isWatering}
-          isOverdue={daysLeft <= 0}
-          disabled={wateredToday}
-          disabledLabel="Уже полито сегодня"
-          onWater={onWater}
-        />
+        {seedPlant ? (
+          <button
+            type="button"
+            className="theme-surface-subtle h-11 w-full rounded-2xl border px-3 text-sm font-medium text-ios-text"
+            onClick={onOpen}
+          >
+            Открыть режим проращивания
+          </button>
+        ) : (
+          <QuickWaterButton
+            isLoading={isWatering}
+            isOverdue={daysLeft <= 0}
+            disabled={wateredToday}
+            disabledLabel="Уже полито сегодня"
+            onWater={onWater}
+          />
+        )}
       </div>
     </motion.article>
   );

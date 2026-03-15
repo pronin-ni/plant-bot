@@ -11,13 +11,31 @@ export interface PlantDto {
   id: number;
   name: string;
   placement: 'INDOOR' | 'OUTDOOR';
-  category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
-  wateringProfile?: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
+  wateringProfile?: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START';
   region?: string | null;
   containerType?: 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND' | null;
   containerVolumeLiters?: number | null;
   cropType?: string | null;
   growthStage?: 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST' | null;
+  seedStage?: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT' | null;
+  targetEnvironmentType?: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START' | null;
+  seedContainerType?: 'CELL_TRAY' | 'SEED_TRAY' | 'PEAT_POT' | 'SMALL_POT' | 'PAPER_TOWEL' | 'WATER_PROPAGATION' | null;
+  seedSubstrateType?: 'SEED_START_MIX' | 'COCO_COIR' | 'PEAT_MIX' | 'MINERAL_WOOL' | 'PAPER_TOWEL' | 'WATER' | null;
+  sowingDate?: string | null;
+  underCover?: boolean | null;
+  growLight?: boolean | null;
+  germinationTemperatureC?: number | null;
+  expectedGerminationDaysMin?: number | null;
+  expectedGerminationDaysMax?: number | null;
+  recommendedCheckIntervalHours?: number | null;
+  recommendedWateringMode?: 'MIST' | 'BOTTOM_WATER' | 'KEEP_COVERED' | 'VENT_AND_MIST' | 'LIGHT_SURFACE_WATER' | 'CHECK_ONLY' | null;
+  seedCareMode?: string | null;
+  seedSummary?: string | null;
+  seedReasoning?: string[];
+  seedWarnings?: string[];
+  seedCareSource?: string | null;
+  seedActions?: string[];
   greenhouse?: boolean | null;
   dripIrrigation?: boolean | null;
   potVolumeLiters?: number;
@@ -131,8 +149,51 @@ export interface ApplyWateringRecommendationDto {
 
 export interface PlantPresetSuggestionDto {
   name: string;
-  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
   popular: boolean;
+}
+
+export interface SeedRecommendationPreviewDto {
+  source: 'AI' | 'FALLBACK';
+  seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
+  targetEnvironmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START';
+  careMode: string;
+  recommendedCheckIntervalHours: number;
+  recommendedWateringMode: 'MIST' | 'BOTTOM_WATER' | 'KEEP_COVERED' | 'VENT_AND_MIST' | 'LIGHT_SURFACE_WATER' | 'CHECK_ONLY';
+  expectedGerminationDaysMin: number;
+  expectedGerminationDaysMax: number;
+  summary: string;
+  reasoning: string[];
+  warnings: string[];
+}
+
+export interface SeedStageUpdateDto {
+  ok: boolean;
+  plantId: number;
+  seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
+}
+
+export interface SeedCareActionResponseDto {
+  ok: boolean;
+  plantId: number;
+  actions: string[];
+}
+
+export interface SeedMigrationPreviewDto {
+  allowed: boolean;
+  plantId: number;
+  seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
+  targetEnvironmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START' | null;
+  targetLabel: string;
+  plantName: string;
+  message: string;
+}
+
+export interface SeedMigrationApplyDto {
+  ok: boolean;
+  plantId: number;
+  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
+  environmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START';
 }
 
 export interface CalendarEventDto {

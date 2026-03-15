@@ -50,6 +50,9 @@ function formatTimeRu(value: Date): string {
 }
 
 function getIntervalDays(plant: PlantDto): number {
+  if (plant.wateringProfile === 'SEED_START') {
+    return Math.max(1, Math.ceil((plant.recommendedCheckIntervalHours ?? 12) / 24));
+  }
   return Math.max(1, plant.baseIntervalDays ?? 7);
 }
 
@@ -58,6 +61,12 @@ function getLastWateredDate(plant: PlantDto): Date {
 }
 
 function getNextWateringDate(plant: PlantDto): Date {
+  if (plant.wateringProfile === 'SEED_START' && plant.sowingDate) {
+    const sowing = startOfDay(parseDateOnly(plant.sowingDate));
+    const next = new Date(sowing);
+    next.setDate(next.getDate() + Math.max(1, plant.expectedGerminationDaysMax ?? 7));
+    return startOfDay(next);
+  }
   if (plant.nextWateringDate) {
     return startOfDay(parseDateOnly(plant.nextWateringDate));
   }
@@ -84,6 +93,12 @@ function getProgress(plant: PlantDto): number {
 }
 
 function getNextWateringText(plant: PlantDto): string {
+  if (plant.wateringProfile === 'SEED_START') {
+    if (plant.recommendedCheckIntervalHours) {
+      return `Проверка каждые ${plant.recommendedCheckIntervalHours} ч.`;
+    }
+    return 'Контроль проращивания';
+  }
   const daysLeft = getDaysLeft(plant);
   if (daysLeft < 0) {
     return `Просрочено на ${Math.abs(daysLeft)} дн.`;
@@ -116,6 +131,8 @@ function sortPlants(plants: PlantDto[], mode: SortMode): PlantDto[] {
           return 2;
         case 'OUTDOOR_GARDEN':
           return 3;
+        case 'SEED_START':
+          return 4;
         default:
           return 9;
       }
@@ -317,11 +334,11 @@ export function PlantsList() {
   }, [plantsQuery.data, categoryFilter, onlyOverdue, searchQuery, sortMode]);
 
   const overdueCount = useMemo(
-    () => (plantsQuery.data ?? []).filter((plant) => getDaysLeft(plant) < 0).length,
+    () => (plantsQuery.data ?? []).filter((plant) => plant.wateringProfile !== 'SEED_START' && getDaysLeft(plant) < 0).length,
     [plantsQuery.data]
   );
   const needWaterCount = useMemo(
-    () => (plantsQuery.data ?? []).filter((plant) => getDaysLeft(plant) <= 0).length,
+    () => (plantsQuery.data ?? []).filter((plant) => plant.wateringProfile !== 'SEED_START' && getDaysLeft(plant) <= 0).length,
     [plantsQuery.data]
   );
 

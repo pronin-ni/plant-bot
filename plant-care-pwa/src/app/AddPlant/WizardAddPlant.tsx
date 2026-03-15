@@ -22,6 +22,7 @@ import {
   getWateringHaOptions,
   getPwaPushPublicKey,
   getPwaPushStatus,
+  previewSeedRecommendation,
   previewWateringRecommendation,
   previewWateringHaContext,
   searchPlantPresets,
@@ -44,18 +45,23 @@ import type {
   OpenRouterIdentifyResult,
   PlantDto,
   PlantPresetSuggestionDto,
+  SeedRecommendationPreviewDto,
   WateringRecommendationPreviewDto,
   WateringSensorContextDto
 } from '@/types/api';
 import type { PlantCategory } from '@/types/plant';
 
 type WizardStep = 'environment' | 'identify' | 'conditions' | 'ai' | 'review';
-type EnvironmentType = 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+type EnvironmentType = 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN' | 'SEED_START';
 type PlantType = 'DEFAULT' | 'TROPICAL' | 'FERN' | 'SUCCULENT' | 'CONIFER';
 type ContainerType = 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND';
 type GrowthStage = 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST';
 type SoilType = 'LOAMY' | 'SANDY' | 'CLAY';
 type SunExposure = 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE';
+type SeedStage = 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
+type SeedContainerType = 'CELL_TRAY' | 'SEED_TRAY' | 'PEAT_POT' | 'SMALL_POT' | 'PAPER_TOWEL' | 'WATER_PROPAGATION';
+type SeedSubstrateType = 'SEED_START_MIX' | 'COCO_COIR' | 'PEAT_MIX' | 'MINERAL_WOOL' | 'PAPER_TOWEL' | 'WATER';
+type SeedWateringMode = 'MIST' | 'BOTTOM_WATER' | 'KEEP_COVERED' | 'VENT_AND_MIST' | 'LIGHT_SURFACE_WATER' | 'CHECK_ONLY';
 type AiState = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
 type BackendRecommendationSource = 'AI' | 'WEATHER_ADJUSTED' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL' | 'BASE_PROFILE';
 type AppliedRecommendationSource =
@@ -75,6 +81,20 @@ interface WizardRecommendation {
   reasoning: string[];
   warnings: string[];
   profile: EnvironmentType;
+}
+
+interface SeedWizardRecommendation {
+  source: 'ai' | 'fallback';
+  seedStage: SeedStage;
+  targetEnvironmentType: Exclude<EnvironmentType, 'SEED_START'>;
+  careMode: string;
+  recommendedCheckIntervalHours: number;
+  recommendedWateringMode: SeedWateringMode;
+  expectedGerminationDaysMin: number;
+  expectedGerminationDaysMax: number;
+  summary: string;
+  reasoning: string[];
+  warnings: string[];
 }
 
 interface WeatherContextPreviewDto {
@@ -117,6 +137,12 @@ const ENVIRONMENT_META: Record<EnvironmentType, { title: string; subtitle: strin
     subtitle: 'Овощи, ягоды, плодовые',
     icon: Warehouse,
     category: 'OUTDOOR_GARDEN'
+  },
+  SEED_START: {
+    title: 'Проращивание семян',
+    subtitle: 'Посев, всходы, сеянец',
+    icon: Sprout,
+    category: 'SEED_START'
   }
 };
 
@@ -155,11 +181,64 @@ const SUN_OPTIONS: Array<{ value: SunExposure; label: string }> = [
   { value: 'SHADE', label: 'Тень' }
 ];
 
+const SEED_STAGE_OPTIONS: Array<{ value: SeedStage; label: string }> = [
+  { value: 'SOWN', label: 'Посеяно' },
+  { value: 'GERMINATING', label: 'Прорастает' },
+  { value: 'SPROUTED', label: 'Появились всходы' },
+  { value: 'SEEDLING', label: 'Сеянец' },
+  { value: 'READY_TO_TRANSPLANT', label: 'Готово к пересадке' }
+];
+
+const SEED_CONTAINER_OPTIONS: Array<{ value: SeedContainerType; label: string }> = [
+  { value: 'CELL_TRAY', label: 'Кассета' },
+  { value: 'SEED_TRAY', label: 'Лоток' },
+  { value: 'PEAT_POT', label: 'Торфяной стаканчик' },
+  { value: 'SMALL_POT', label: 'Небольшой горшок' },
+  { value: 'PAPER_TOWEL', label: 'Салфетка / бумага' },
+  { value: 'WATER_PROPAGATION', label: 'Вода' }
+];
+
+const SEED_SUBSTRATE_OPTIONS: Array<{ value: SeedSubstrateType; label: string }> = [
+  { value: 'SEED_START_MIX', label: 'Смесь для рассады' },
+  { value: 'COCO_COIR', label: 'Кокосовый субстрат' },
+  { value: 'PEAT_MIX', label: 'Торфяная смесь' },
+  { value: 'MINERAL_WOOL', label: 'Минеральная вата' },
+  { value: 'PAPER_TOWEL', label: 'Бумага / салфетка' },
+  { value: 'WATER', label: 'Вода' }
+];
+
+
+function seedWateringModeLabel(mode: SeedWateringMode | null | undefined): string {
+  switch (mode) {
+    case 'MIST':
+      return 'Лёгкое опрыскивание';
+    case 'BOTTOM_WATER':
+      return 'Нижний полив';
+    case 'KEEP_COVERED':
+      return 'Держать под крышкой';
+    case 'VENT_AND_MIST':
+      return 'Проветривать и опрыскивать';
+    case 'LIGHT_SURFACE_WATER':
+      return 'Лёгкое увлажнение сверху';
+    case 'CHECK_ONLY':
+      return 'Только проверка';
+    default:
+      return 'Не задано';
+  }
+}
+
+function seedSourceLabel(source: SeedWizardRecommendation['source']): string {
+  return source === 'ai' ? 'AI' : 'Резервный режим';
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
 function estimateDefaultWaterMl(environmentType: EnvironmentType, potVolumeLiters: number, heightCm: number) {
+  if (environmentType === 'SEED_START') {
+    return 80;
+  }
   if (environmentType === 'OUTDOOR_GARDEN') {
     return clamp(Math.round(Math.max(25, heightCm) * 10), 350, 4000);
   }
@@ -192,7 +271,9 @@ function buildFallbackRecommendation(environmentType: EnvironmentType, interval:
     ? 'Рекомендации рассчитаны по базовому indoor-профилю.'
     : environmentType === 'OUTDOOR_ORNAMENTAL'
       ? 'Рекомендации рассчитаны по базовому профилю декоративных уличных растений.'
-      : 'Рекомендации рассчитаны по базовому профилю садовых культур.';
+      : environmentType === 'OUTDOOR_GARDEN'
+        ? 'Рекомендации рассчитаны по базовому профилю садовых культур.'
+        : 'Рекомендации рассчитаны по базовому режиму проращивания.';
 
   return {
     source: 'fallback',
@@ -204,7 +285,7 @@ function buildFallbackRecommendation(environmentType: EnvironmentType, interval:
       `Базовый интервал: ${interval} дн.`,
       `Объём полива: ${waterMl} мл`
     ],
-    warnings: ['AI недоступен, использован fallback.'],
+    warnings: ['AI недоступен, поэтому включён резервный режим.'],
     profile: environmentType
   };
 }
@@ -278,7 +359,7 @@ function sourceBadgeLabel(source: AppliedRecommendationSource): string {
     case 'hybrid':
       return 'AI + погода';
     case 'fallback':
-      return 'Базовый fallback';
+      return 'Резервный режим';
     case 'base-profile':
       return 'Профиль растения';
     case 'manual':
@@ -301,6 +382,8 @@ function normalizeHaContextMessage(message?: string | null, available?: boolean)
 
 function environmentLabel(value: EnvironmentType): string {
   switch (value) {
+    case 'SEED_START':
+      return 'Проращивание семян';
     case 'OUTDOOR_ORNAMENTAL':
       return 'Уличное декоративное';
     case 'OUTDOOR_GARDEN':
@@ -313,6 +396,8 @@ function environmentLabel(value: EnvironmentType): string {
 
 function categoryLabel(value: PlantCategory): string {
   switch (value) {
+    case 'SEED_START':
+      return 'Семена';
     case 'OUTDOOR_DECORATIVE':
       return 'Декор';
     case 'OUTDOOR_GARDEN':
@@ -351,6 +436,14 @@ export function WizardAddPlant() {
   const [greenhouse, setGreenhouse] = useState(false);
   const [soilType, setSoilType] = useState<SoilType>('LOAMY');
   const [sunExposure, setSunExposure] = useState<SunExposure>('PARTIAL_SHADE');
+  const [seedStage, setSeedStage] = useState<SeedStage>('SOWN');
+  const [targetEnvironmentType, setTargetEnvironmentType] = useState<Exclude<EnvironmentType, 'SEED_START'>>('INDOOR');
+  const [seedContainerType, setSeedContainerType] = useState<SeedContainerType>('CELL_TRAY');
+  const [seedSubstrateType, setSeedSubstrateType] = useState<SeedSubstrateType>('SEED_START_MIX');
+  const [sowingDate, setSowingDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [underCover, setUnderCover] = useState(true);
+  const [growLight, setGrowLight] = useState(false);
+  const [germinationTemperatureC, setGerminationTemperatureC] = useState('23');
   const [region, setRegion] = useState(authCity ?? '');
   const [mulched, setMulched] = useState(false);
   const [dripIrrigation, setDripIrrigation] = useState(false);
@@ -365,7 +458,9 @@ export function WizardAddPlant() {
 
   const [aiState, setAiState] = useState<AiState>('idle');
   const [aiRecommendation, setAiRecommendation] = useState<WizardRecommendation | null>(null);
+  const [seedRecommendation, setSeedRecommendation] = useState<SeedWizardRecommendation | null>(null);
   const [latestRecommendationPreview, setLatestRecommendationPreview] = useState<WateringRecommendationPreviewDto | null>(null);
+  const [latestSeedRecommendationPreview, setLatestSeedRecommendationPreview] = useState<SeedRecommendationPreviewDto | null>(null);
   const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(null);
   const [appliedRecommendationSource, setAppliedRecommendationSource] = useState<AppliedRecommendationSource>('none');
   const [manualOverrideEnabled, setManualOverrideEnabled] = useState(false);
@@ -385,6 +480,7 @@ export function WizardAddPlant() {
   const potLitersNumber = Math.max(0.2, Number(potVolumeLiters) || 2);
   const heightNumber = Math.max(10, Number(heightCm) || 45);
   const diameterNumber = Math.max(10, Number(diameterCm) || 35);
+  const germinationTemperatureNumber = clamp(Number(germinationTemperatureC) || 23, 10, 35);
 
   useEffect(() => {
     if (aiState === 'idle') {
@@ -472,7 +568,7 @@ export function WizardAddPlant() {
   const aiRecommendMutation = useMutation({
     mutationFn: () => previewWateringRecommendation({
       plantName: name.trim(),
-      environmentType,
+      environmentType: environmentType === 'SEED_START' ? 'INDOOR' : environmentType,
       baseIntervalDays: intervalDaysNumber,
       potVolumeLiters: environmentType === 'INDOOR' ? potLitersNumber : undefined,
       containerType: environmentType === 'INDOOR' ? undefined : containerType,
@@ -495,6 +591,8 @@ export function WizardAddPlant() {
       setAiErrorMessage(null);
       setAppliedRecommendationSource('none');
       setLatestRecommendationPreview(null);
+      setLatestSeedRecommendationPreview(null);
+      setSeedRecommendation(null);
     },
     onSuccess: (result) => {
       const appliedSource = mapPreviewSourceToApplied(result.source);
@@ -531,10 +629,65 @@ export function WizardAddPlant() {
     }
   });
 
+  const seedRecommendMutation = useMutation({
+    mutationFn: () => previewSeedRecommendation({
+      plantName: name.trim(),
+      seedStage,
+      targetEnvironmentType,
+      seedContainerType,
+      seedSubstrateType,
+      sowingDate,
+      germinationTemperatureC: germinationTemperatureNumber,
+      underCover,
+      growLight,
+      region: region.trim() || undefined
+    }),
+    onMutate: () => {
+      setAiState('loading');
+      setAiErrorMessage(null);
+      setAppliedRecommendationSource('none');
+      setSeedRecommendation(null);
+      setLatestSeedRecommendationPreview(null);
+      setAiRecommendation(null);
+      setLatestRecommendationPreview(null);
+    },
+    onSuccess: (result) => {
+      const normalized: SeedWizardRecommendation = {
+        source: result.source === 'AI' ? 'ai' : 'fallback',
+        seedStage: result.seedStage,
+        targetEnvironmentType: result.targetEnvironmentType as Exclude<EnvironmentType, 'SEED_START'>,
+        careMode: result.careMode,
+        recommendedCheckIntervalHours: result.recommendedCheckIntervalHours,
+        recommendedWateringMode: result.recommendedWateringMode,
+        expectedGerminationDaysMin: result.expectedGerminationDaysMin,
+        expectedGerminationDaysMax: result.expectedGerminationDaysMax,
+        summary: result.summary,
+        reasoning: result.reasoning ?? [],
+        warnings: result.warnings ?? []
+      };
+      setSeedRecommendation(normalized);
+      setLatestSeedRecommendationPreview(result);
+      setAiState(normalized.source === 'fallback' ? 'fallback' : 'success');
+      if (normalized.source === 'fallback') {
+        hapticWarning();
+      } else {
+        hapticSuccess();
+      }
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Ошибка AI-расчёта для семян';
+      setAiErrorMessage(message);
+      setAiState('error');
+      setSeedRecommendation(null);
+      setLatestSeedRecommendationPreview(null);
+      hapticError();
+    }
+  });
+
   const haContextPreviewMutation = useMutation({
     mutationFn: () => previewWateringHaContext({
       plantName: name.trim(),
-      environmentType,
+      environmentType: environmentType === 'SEED_START' ? 'INDOOR' : environmentType,
       haRoomId: haRoomId || undefined,
       haRoomName: haRoomName || undefined,
       temperatureSensorEntityId: temperatureSensorEntityId || undefined,
@@ -613,6 +766,38 @@ export function WizardAddPlant() {
 
   const createMutation = useMutation({
     mutationFn: () => {
+      if (environmentType === 'SEED_START') {
+        return createPlant({
+          name: name.trim(),
+          category,
+          environmentType,
+          wateringProfile: environmentType,
+          placement: 'INDOOR',
+          type: 'DEFAULT',
+          region: region.trim() || null,
+          potVolumeLiters: 1,
+          baseIntervalDays: 1,
+          preferredWaterMl: 80,
+          seedStage,
+          targetEnvironmentType,
+          seedContainerType,
+          seedSubstrateType,
+          sowingDate,
+          underCover,
+          growLight,
+          germinationTemperatureC: germinationTemperatureNumber,
+          expectedGerminationDaysMin: latestSeedRecommendationPreview?.expectedGerminationDaysMin ?? seedRecommendation?.expectedGerminationDaysMin ?? null,
+          expectedGerminationDaysMax: latestSeedRecommendationPreview?.expectedGerminationDaysMax ?? seedRecommendation?.expectedGerminationDaysMax ?? null,
+          recommendedCheckIntervalHours: latestSeedRecommendationPreview?.recommendedCheckIntervalHours ?? seedRecommendation?.recommendedCheckIntervalHours ?? null,
+          recommendedWateringMode: latestSeedRecommendationPreview?.recommendedWateringMode ?? seedRecommendation?.recommendedWateringMode ?? null,
+          seedCareMode: seedRecommendation?.careMode ?? null,
+          seedSummary: seedRecommendation?.summary ?? null,
+          seedReasoningJson: JSON.stringify(seedRecommendation?.reasoning ?? []),
+          seedWarningsJson: JSON.stringify(seedRecommendation?.warnings ?? []),
+          seedCareSource: latestSeedRecommendationPreview?.source ?? (seedRecommendation?.source === 'ai' ? 'AI' : seedRecommendation?.source === 'fallback' ? 'FALLBACK' : null)
+        });
+      }
+
       const placement = environmentType === 'INDOOR' ? 'INDOOR' : 'OUTDOOR';
       const outdoorAreaM2 = environmentType === 'OUTDOOR_GARDEN'
         ? Math.PI * Math.pow((diameterNumber / 100) / 2, 2)
@@ -649,7 +834,7 @@ export function WizardAddPlant() {
     onSuccess: async (createdPlant) => {
       const hadPlantsBeforeCreate = ((queryClient.getQueryData(['plants']) as PlantDto[] | undefined) ?? []).length > 0;
       const backendSource = mapAppliedSourceToBackend(appliedRecommendationSource);
-      if (backendSource) {
+      if (backendSource && environmentType !== 'SEED_START') {
         try {
           await apiFetch(`/api/watering/recommendation/${createdPlant.id}/apply`, {
             method: 'POST',
@@ -736,6 +921,9 @@ export function WizardAddPlant() {
       return name.trim().length > 1;
     }
     if (currentStep === 'conditions') {
+      if (environmentType === 'SEED_START') {
+        return !!name.trim() && !!sowingDate && !!targetEnvironmentType;
+      }
       if (environmentType === 'INDOOR') {
         return potLitersNumber > 0 && intervalDaysNumber > 0;
       }
@@ -753,6 +941,8 @@ export function WizardAddPlant() {
     currentStep,
     name,
     environmentType,
+    sowingDate,
+    targetEnvironmentType,
     potLitersNumber,
     intervalDaysNumber,
     containerType,
@@ -973,6 +1163,87 @@ export function WizardAddPlant() {
                 />
               </Field>
 
+              {environmentType === 'SEED_START' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Стадия">
+                      <select
+                        value={seedStage}
+                        onChange={(event) => setSeedStage(event.target.value as SeedStage)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      >
+                        {SEED_STAGE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Цель после проращивания">
+                      <select
+                        value={targetEnvironmentType}
+                        onChange={(event) => setTargetEnvironmentType(event.target.value as Exclude<EnvironmentType, 'SEED_START'>)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      >
+                        <option value="INDOOR">Домашнее растение</option>
+                        <option value="OUTDOOR_ORNAMENTAL">Уличное декоративное</option>
+                        <option value="OUTDOOR_GARDEN">Уличное садовое</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Тип ёмкости">
+                      <select
+                        value={seedContainerType}
+                        onChange={(event) => setSeedContainerType(event.target.value as SeedContainerType)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      >
+                        {SEED_CONTAINER_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Субстрат">
+                      <select
+                        value={seedSubstrateType}
+                        onChange={(event) => setSeedSubstrateType(event.target.value as SeedSubstrateType)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      >
+                        {SEED_SUBSTRATE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Дата посева">
+                      <input
+                        type="date"
+                        value={sowingDate}
+                        onChange={(event) => setSowingDate(event.target.value)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      />
+                    </Field>
+                    <Field label="Температура проращивания (°C)">
+                      <input
+                        type="number"
+                        min={10}
+                        max={35}
+                        step={0.5}
+                        value={germinationTemperatureC}
+                        onChange={(event) => setGerminationTemperatureC(event.target.value)}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <ToggleRow label="Под укрытием / крышкой" checked={underCover} onChange={setUnderCover} />
+                    <ToggleRow label="Есть досветка" checked={growLight} onChange={setGrowLight} />
+                  </div>
+                </>
+              ) : null}
+
               {environmentType === 'INDOOR' ? (
                 <>
                   <Field label="Объём горшка (л)">
@@ -1028,7 +1299,7 @@ export function WizardAddPlant() {
                 </>
               ) : null}
 
-              {environmentType !== 'INDOOR' ? (
+              {environmentType === 'OUTDOOR_ORNAMENTAL' || environmentType === 'OUTDOOR_GARDEN' ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Освещённость">
@@ -1081,7 +1352,7 @@ export function WizardAddPlant() {
                             : 'Погодный контекст недоступен'}
                           description={weatherContextPreview.available
                             ? `Уверенность: ${weatherContextPreview.confidence || 'н/д'}`
-                            : 'Будет использован fallback без погодных корректировок.'}
+                            : 'Будет использован резервный режим без погодных корректировок.'}
                         />
                         {weatherContextPreview.available ? (
                           <div className="grid grid-cols-2 gap-2 text-xs text-ios-subtext">
@@ -1232,29 +1503,37 @@ export function WizardAddPlant() {
             <div className="ios-blur-card space-y-4 p-4 sm:p-5">
               <Button
                 className="h-12 w-full"
-                disabled={aiRecommendMutation.isPending || !name.trim()}
-                onClick={() => aiRecommendMutation.mutate()}
+                disabled={(environmentType === 'SEED_START' ? seedRecommendMutation.isPending : aiRecommendMutation.isPending) || !name.trim()}
+                onClick={() => {
+                  if (environmentType === 'SEED_START') {
+                    seedRecommendMutation.mutate();
+                    return;
+                  }
+                  aiRecommendMutation.mutate();
+                }}
               >
-                {aiRecommendMutation.isPending ? (
+                {(environmentType === 'SEED_START' ? seedRecommendMutation.isPending : aiRecommendMutation.isPending) ? (
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Рассчитываем рекомендации AI...
+                    {environmentType === 'SEED_START' ? 'Рассчитываем рекомендации для семян...' : 'Рассчитываем рекомендации AI...'}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2">
                     <Sparkles className="h-4 w-4" />
-                    Рассчитать рекомендации AI
+                    {environmentType === 'SEED_START' ? 'Рассчитать рекомендации для семян' : 'Рассчитать рекомендации AI'}
                   </span>
                 )}
               </Button>
 
               {aiState === 'idle' ? (
-                <StatusCard
-                  tone="neutral"
-                  title="Нажмите кнопку, чтобы получить AI расчёт."
-                  description="AI учтёт профиль растения, условия выращивания и погодный контекст."
-                />
-              ) : null}
+                  <StatusCard
+                    tone="neutral"
+                    title="Нажмите кнопку, чтобы получить AI расчёт."
+                    description={environmentType === 'SEED_START'
+                      ? 'AI учтёт стадию проращивания, условия старта и целевую категорию.'
+                      : 'AI учтёт профиль растения, условия выращивания и погодный контекст.'}
+                  />
+                ) : null}
 
               {aiState === 'loading' ? (
                 <motion.div
@@ -1264,12 +1543,14 @@ export function WizardAddPlant() {
                   <StatusCard
                     tone="neutral"
                     title="Выполняем расчёт..."
-                    description="Получаем структурированные рекомендации по интервалу и объёму полива."
+                    description={environmentType === 'SEED_START'
+                      ? 'Получаем режим контроля влажности, окно всходов и интервалы проверки.'
+                      : 'Получаем структурированные рекомендации по интервалу и объёму полива.'}
                   />
                 </motion.div>
               ) : null}
 
-              {aiState === 'success' && aiRecommendation ? (
+              {environmentType !== 'SEED_START' && aiState === 'success' && aiRecommendation ? (
                 <RecommendationCard
                   recommendation={aiRecommendation}
                   sensorContext={haContextPreview}
@@ -1285,7 +1566,7 @@ export function WizardAddPlant() {
                 />
               ) : null}
 
-              {aiState === 'fallback' && aiRecommendation ? (
+              {environmentType !== 'SEED_START' && aiState === 'fallback' && aiRecommendation ? (
                 <RecommendationCard
                   recommendation={aiRecommendation}
                   sensorContext={haContextPreview}
@@ -1299,6 +1580,10 @@ export function WizardAddPlant() {
                     baseIntervalDays: intervalDaysNumber
                   }}
                 />
+              ) : null}
+
+              {environmentType === 'SEED_START' && seedRecommendation && (aiState === 'success' || aiState === 'fallback') ? (
+                <SeedRecommendationCard recommendation={seedRecommendation} />
               ) : null}
 
               {aiState === 'error' ? (
@@ -1312,6 +1597,44 @@ export function WizardAddPlant() {
                     variant="secondary"
                     className="h-11 w-full"
                     onClick={() => {
+                      if (environmentType === 'SEED_START') {
+                        const fallback: SeedWizardRecommendation = {
+                          source: 'fallback',
+                          seedStage,
+                          targetEnvironmentType,
+                          careMode: 'Следите за влажностью ежедневно и поддерживайте стабильные условия проращивания.',
+                          recommendedCheckIntervalHours: 12,
+                          recommendedWateringMode: underCover ? 'KEEP_COVERED' : 'LIGHT_SURFACE_WATER',
+                          expectedGerminationDaysMin: 4,
+                          expectedGerminationDaysMax: 12,
+                          summary: 'AI недоступен, поэтому применён базовый режим с мягким контролем влажности.',
+                          reasoning: [
+                            `Стадия: ${SEED_STAGE_OPTIONS.find((item) => item.value === seedStage)?.label ?? seedStage}`,
+                            `Цель: ${environmentLabel(targetEnvironmentType)}`,
+                            underCover ? 'Используется укрытие для сохранения влажности.' : 'Без укрытия потребуется более частая визуальная проверка.'
+                          ],
+                          warnings: ['Проверьте температуру и не допускайте пересыхания верхнего слоя.']
+                        };
+                        setSeedRecommendation(fallback);
+                        setLatestSeedRecommendationPreview({
+                          source: 'FALLBACK',
+                          seedStage,
+                          targetEnvironmentType,
+                          careMode: fallback.careMode,
+                          recommendedCheckIntervalHours: fallback.recommendedCheckIntervalHours,
+                          recommendedWateringMode: fallback.recommendedWateringMode,
+                          expectedGerminationDaysMin: fallback.expectedGerminationDaysMin,
+                          expectedGerminationDaysMax: fallback.expectedGerminationDaysMax,
+                          summary: fallback.summary,
+                          reasoning: fallback.reasoning,
+                          warnings: fallback.warnings
+                        });
+                        setAiState('fallback');
+                        setAppliedRecommendationSource('none');
+                        hapticWarning();
+                        return;
+                      }
+
                       const fallback = buildFallbackRecommendation(
                         environmentType,
                         intervalDaysNumber,
@@ -1335,7 +1658,7 @@ export function WizardAddPlant() {
                       });
                     }}
                   >
-                    Продолжить с fallback
+                    Продолжить с резервным режимом
                   </Button>
                 </div>
               ) : null}
@@ -1345,22 +1668,35 @@ export function WizardAddPlant() {
                   <Button
                     variant="secondary"
                     className="h-11 w-full"
-                    disabled={aiRecommendMutation.isPending || !name.trim()}
-                    onClick={() => aiRecommendMutation.mutate()}
+                    disabled={(environmentType === 'SEED_START' ? seedRecommendMutation.isPending : aiRecommendMutation.isPending) || !name.trim()}
+                    onClick={() => {
+                      if (environmentType === 'SEED_START') {
+                        seedRecommendMutation.mutate();
+                        return;
+                      }
+                      aiRecommendMutation.mutate();
+                    }}
                   >
                     Повторить
                   </Button>
                   <Button
                     variant="secondary"
                     className="h-11 w-full"
-                    onClick={() => setManualOverrideEnabled((prev) => !prev)}
+                    onClick={() => {
+                      if (environmentType === 'SEED_START') {
+                        return;
+                      }
+                      setManualOverrideEnabled((prev) => !prev);
+                    }}
                   >
-                    {manualOverrideEnabled ? 'Скрыть ручной режим' : 'Ручная настройка'}
+                    {environmentType === 'SEED_START'
+                      ? 'Ручной режим недоступен для семян'
+                      : manualOverrideEnabled ? 'Скрыть ручной режим' : 'Ручная настройка'}
                   </Button>
                 </div>
               ) : null}
 
-              {aiRecommendation ? (
+              {environmentType !== 'SEED_START' && aiRecommendation ? (
                 <Button
                   className="h-11 w-full"
                   onClick={() => {
@@ -1380,10 +1716,23 @@ export function WizardAddPlant() {
                 </Button>
               ) : null}
 
-              {manualOverrideEnabled ? (
+              {environmentType === 'SEED_START' && seedRecommendation ? (
+                <Button
+                  className="h-11 w-full"
+                  onClick={() => {
+                    setAppliedRecommendationSource(seedRecommendation.source === 'ai' ? 'ai' : 'fallback');
+                    setManualOverrideEnabled(false);
+                    hapticSuccess();
+                  }}
+                >
+                  Применить рекомендации
+                </Button>
+              ) : null}
+
+              {manualOverrideEnabled && environmentType !== 'SEED_START' ? (
                 <div className="theme-surface-2 rounded-ios-button border p-3">
                   <p className="text-sm font-medium text-ios-text">Ручная корректировка</p>
-                  <p className="mt-1 text-xs text-ios-subtext">Этот режим не скрывает источник AI/Fallback и применяется поверх расчёта.</p>
+                  <p className="mt-1 text-xs text-ios-subtext">Этот режим не скрывает источник AI или резервного режима и применяется поверх расчёта.</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Field label="Интервал (дн.)">
                       <input
@@ -1452,70 +1801,106 @@ export function WizardAddPlant() {
                 />
                 <InfoChip
                   label="Погода"
-                  value={environmentType === 'INDOOR'
+                  value={environmentType === 'INDOOR' || environmentType === 'SEED_START'
                     ? 'Не используется как основной фактор'
                     : weatherContextPreview?.available
                       ? `Учитывается: ${weatherContextPreview.city || region || 'регион'}`
-                      : 'Контекст недоступен, возможен fallback'}
+                      : 'Контекст недоступен, возможен резервный режим'}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Интервал (дней)">
-                  <input
-                    type="number"
-                    min={1}
-                    max={60}
-                    value={finalIntervalDays}
-                    onChange={(event) => setFinalIntervalDays(clamp(Number(event.target.value) || 1, 1, 60))}
-                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
-                  />
-                </Field>
-                <Field label="Объём воды (мл)">
-                  <input
-                    type="number"
-                    min={50}
-                    max={10000}
-                    step={50}
-                    value={finalWaterMl}
-                    onChange={(event) => setFinalWaterMl(clamp(Number(event.target.value) || 50, 50, 10_000))}
-                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
-                  />
-                </Field>
-              </div>
+              {environmentType === 'SEED_START' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <InfoChip label="Стадия проращивания" value={SEED_STAGE_OPTIONS.find((item) => item.value === seedStage)?.label ?? seedStage} />
+                    <InfoChip label="Цель" value={environmentLabel(targetEnvironmentType)} />
+                    <InfoChip label="Проверка" value={seedRecommendation ? `каждые ${seedRecommendation.recommendedCheckIntervalHours} ч` : 'ещё не применено'} />
+                    <InfoChip label="Окно всходов" value={seedRecommendation ? `${seedRecommendation.expectedGerminationDaysMin}-${seedRecommendation.expectedGerminationDaysMax} дн.` : 'ещё не рассчитано'} />
+                  </div>
+                  <div className="theme-surface-2 rounded-ios-button border p-3">
+                    <p className="text-sm font-medium">{seedRecommendation?.summary ?? 'Используется базовый режим проращивания.'}</p>
+                    {seedRecommendation ? (
+                      <div className="mt-2 grid grid-cols-1 gap-2 text-xs">
+                        <InfoChip label="Режим ухода" value={seedRecommendation.careMode} />
+                        <InfoChip label="Режим увлажнения" value={seedWateringModeLabel(seedRecommendation.recommendedWateringMode)} />
+                      </div>
+                    ) : null}
+                    {seedRecommendation?.reasoning?.length ? (
+                      <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
+                        {seedRecommendation.reasoning.map((item, index) => (
+                          <li key={`${item}-${index}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {seedRecommendation?.warnings?.length ? (
+                      <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
+                        {seedRecommendation.warnings.map((item, index) => (
+                          <li key={`${item}-${index}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Интервал (дней)">
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={finalIntervalDays}
+                        onChange={(event) => setFinalIntervalDays(clamp(Number(event.target.value) || 1, 1, 60))}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      />
+                    </Field>
+                    <Field label="Объём воды (мл)">
+                      <input
+                        type="number"
+                        min={50}
+                        max={10000}
+                        step={50}
+                        value={finalWaterMl}
+                        onChange={(event) => setFinalWaterMl(clamp(Number(event.target.value) || 50, 50, 10_000))}
+                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                      />
+                    </Field>
+                  </div>
 
-              <div className="theme-surface-2 rounded-ios-button border p-3">
-                <p className="text-sm font-medium">{aiRecommendation?.summary ?? 'Используется базовый расчёт.'}</p>
-                {aiRecommendation?.reasoning?.length ? (
-                  <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
-                    {aiRecommendation.reasoning.map((item, index) => (
-                      <li key={`${item}-${index}`}>• {normalizeRecommendationText(item)}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {aiRecommendation?.warnings?.length ? (
-                  <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
-                    {aiRecommendation.warnings.map((item, index) => (
-                      <li key={`${item}-${index}`}>• {item}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+                  <div className="theme-surface-2 rounded-ios-button border p-3">
+                    <p className="text-sm font-medium">{aiRecommendation?.summary ?? 'Используется базовый расчёт.'}</p>
+                    {aiRecommendation?.reasoning?.length ? (
+                      <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
+                        {aiRecommendation.reasoning.map((item, index) => (
+                          <li key={`${item}-${index}`}>• {normalizeRecommendationText(item)}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {aiRecommendation?.warnings?.length ? (
+                      <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
+                        {aiRecommendation.warnings.map((item, index) => (
+                          <li key={`${item}-${index}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
 
-              <div className="theme-surface-2 rounded-ios-button border p-3">
-                <p className="mb-2 text-xs text-ios-subtext">Предпросмотр календаря (6 поливов)</p>
-                <motion.div
-                  layout
-                  className="flex flex-wrap gap-2"
-                  transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: 'easeOut' }}
-                >
-                  {reviewDates.map((date) => (
-                    <span key={date} className="rounded-full border border-ios-border/60 px-2.5 py-1 text-xs">
-                      {date}
-                    </span>
-                  ))}
-                </motion.div>
-              </div>
+                  <div className="theme-surface-2 rounded-ios-button border p-3">
+                    <p className="mb-2 text-xs text-ios-subtext">Предпросмотр календаря (6 поливов)</p>
+                    <motion.div
+                      layout
+                      className="flex flex-wrap gap-2"
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: 'easeOut' }}
+                    >
+                      {reviewDates.map((date) => (
+                        <span key={date} className="rounded-full border border-ios-border/60 px-2.5 py-1 text-xs">
+                          {date}
+                        </span>
+                      ))}
+                    </motion.div>
+                  </div>
+                </>
+              )}
 
               <motion.div whileTap={{ scale: 0.985 }}>
                 <Button
@@ -1676,7 +2061,7 @@ function RecommendationCard({
             recommendation.source === 'weather-adjusted' ? 'С учётом погоды' :
               recommendation.source === 'hybrid' ? 'AI + погода' :
                 recommendation.source === 'manual' ? 'Вручную' :
-                  recommendation.source === 'base-profile' ? 'Профиль растения' : 'Базовый fallback';
+                  recommendation.source === 'base-profile' ? 'Профиль растения' : 'Резервный режим';
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -1691,7 +2076,7 @@ function RecommendationCard({
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">
-          {isFallback ? 'Fallback рекомендации' : 'Рекомендации'}
+          {isFallback ? 'Резервные рекомендации' : 'Рекомендации'}
         </p>
         <div className="flex items-center gap-1.5">
           <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
@@ -1730,7 +2115,7 @@ function RecommendationCard({
           Погодный контекст:{' '}
           {weatherContext?.available
             ? `${weatherContext.city || weatherContext.region || 'регион'} · ${weatherContext.temperatureNowC ?? '—'}°C · осадки ${weatherContext.precipitationForecastMm ?? '—'} мм`
-            : 'недоступен, fallback возможен'}
+            : 'недоступен, возможен резервный режим'}
         </div>
       ) : (
         <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
@@ -1753,6 +2138,60 @@ function RecommendationCard({
         </ul>
       ) : null}
       {recommendation.warnings?.length ? (
+        <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
+          {recommendation.warnings.map((item, index) => (
+            <li key={`${item}-${index}`}>• {item}</li>
+          ))}
+        </ul>
+      ) : null}
+    </motion.div>
+  );
+}
+
+function SeedRecommendationCard({ recommendation }: { recommendation: SeedWizardRecommendation }) {
+  const sourceLabel = seedSourceLabel(recommendation.source);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className={cn(
+        'rounded-ios-button border p-3',
+        recommendation.source === 'fallback' ? 'theme-banner-warning' : 'theme-banner-success'
+      )}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Рекомендации для проращивания</p>
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">{sourceLabel}</span>
+          <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
+            {environmentLabel(recommendation.targetEnvironmentType)}
+          </span>
+        </div>
+      </div>
+      <p className="text-sm">{recommendation.summary}</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
+          Проверять: <b>каждые {recommendation.recommendedCheckIntervalHours} ч</b>
+        </div>
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
+          Всходы: <b>{recommendation.expectedGerminationDaysMin}-{recommendation.expectedGerminationDaysMax} дн.</b>
+        </div>
+      </div>
+      <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
+        Режим увлажнения: <b>{seedWateringModeLabel(recommendation.recommendedWateringMode)}</b>
+      </div>
+      <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
+        Режим ухода: {recommendation.careMode}
+      </div>
+      {recommendation.reasoning.length ? (
+        <ul className="mt-2 space-y-1 text-xs">
+          {recommendation.reasoning.map((item, index) => (
+            <li key={`${item}-${index}`}>• {item}</li>
+          ))}
+        </ul>
+      ) : null}
+      {recommendation.warnings.length ? (
         <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
           {recommendation.warnings.map((item, index) => (
             <li key={`${item}-${index}`}>• {item}</li>

@@ -19,6 +19,11 @@ const CATEGORY_META: Record<PlantCategory, { title: string; subtitle: string; ic
     title: 'Садовые',
     subtitle: 'Овощи, ягоды, плодовые',
     icon: Sprout
+  },
+  SEED_START: {
+    title: 'Проращивание семян',
+    subtitle: 'Посев, всходы, сеянцы',
+    icon: Sprout
   }
 };
 

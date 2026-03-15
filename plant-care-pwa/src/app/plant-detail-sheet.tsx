@@ -11,7 +11,18 @@ import { LeafDiagnosis } from '@/components/LeafDiagnosis';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
-import { apiFetch, deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
+import {
+  apiFetch,
+  deletePlant,
+  getPlantById,
+  getPlantCareAdvice,
+  migrateSeedPlant,
+  previewSeedMigration,
+  recordSeedCareAction,
+  updateSeedStage,
+  uploadPlantPhoto,
+  waterPlant
+} from '@/lib/api';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
 import {
   error as hapticError,
@@ -217,6 +228,18 @@ export function PlantDetailSheet() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteShake, setDeleteShake] = useState(false);
   const [wateringPulse, setWateringPulse] = useState(0);
+  const [migrationName, setMigrationName] = useState('');
+  const [migrationInterval, setMigrationInterval] = useState('4');
+  const [migrationWater, setMigrationWater] = useState('220');
+  const [migrationPotVolume, setMigrationPotVolume] = useState('2');
+  const [migrationContainerType, setMigrationContainerType] = useState<'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND'>('POT');
+  const [migrationGrowthStage, setMigrationGrowthStage] = useState<'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST'>('SEEDLING');
+  const [migrationGreenhouse, setMigrationGreenhouse] = useState(false);
+  const [migrationMulched, setMigrationMulched] = useState(false);
+  const [migrationDrip, setMigrationDrip] = useState(false);
+  const [migrationSoilType, setMigrationSoilType] = useState<'SANDY' | 'LOAMY' | 'CLAY'>('LOAMY');
+  const [migrationSunExposure, setMigrationSunExposure] = useState<'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE'>('PARTIAL_SHADE');
+  const [migrationAreaM2, setMigrationAreaM2] = useState('0.25');
 
   const plantQuery = useQuery({
     queryKey: ['plant', selectedPlantId],
@@ -227,7 +250,7 @@ export function PlantDetailSheet() {
   const careAdviceQuery = useQuery({
     queryKey: ['plant-care-advice', selectedPlantId],
     queryFn: () => getPlantCareAdvice(selectedPlantId as number),
-    enabled: selectedPlantId !== null,
+    enabled: selectedPlantId !== null && plantQuery.data?.wateringProfile !== 'SEED_START',
     staleTime: 60_000,
     retry: 1
   });
@@ -237,7 +260,15 @@ export function PlantDetailSheet() {
     queryFn: () => apiFetch<WateringRecommendationPreviewDto>(`/api/watering/recommendation/${selectedPlantId}/refresh`, {
       method: 'POST'
     }),
-    enabled: selectedPlantId !== null,
+    enabled: selectedPlantId !== null && plantQuery.data?.wateringProfile !== 'SEED_START',
+    staleTime: 60_000,
+    retry: 1
+  });
+
+  const migrationPreviewQuery = useQuery({
+    queryKey: ['seed-migration-preview', selectedPlantId],
+    queryFn: () => previewSeedMigration(selectedPlantId as number),
+    enabled: selectedPlantId !== null && plantQuery.data?.wateringProfile === 'SEED_START',
     staleTime: 60_000,
     retry: 1
   });
@@ -286,6 +317,42 @@ export function PlantDetailSheet() {
     }
   });
 
+  const seedStageMutation = useMutation({
+    mutationFn: ({ plantId, seedStage }: { plantId: number; seedStage: NonNullable<PlantDto['seedStage']> }) =>
+      updateSeedStage(plantId, seedStage),
+    onSuccess: async () => {
+      hapticSuccess();
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['seed-migration-preview', selectedPlantId] });
+    },
+    onError: () => hapticError()
+  });
+
+  const seedActionMutation = useMutation({
+    mutationFn: ({ plantId, action }: { plantId: number; action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT' }) =>
+      recordSeedCareAction(plantId, action),
+    onSuccess: async () => {
+      hapticSuccess();
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+    },
+    onError: () => hapticError()
+  });
+
+  const seedMigrationMutation = useMutation({
+    mutationFn: ({ plantId, payload }: { plantId: number; payload: Record<string, unknown> }) =>
+      migrateSeedPlant(plantId, payload),
+    onSuccess: async () => {
+      hapticSuccess();
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['seed-migration-preview', selectedPlantId] });
+    },
+    onError: () => hapticError()
+  });
+
   const photoMutation = useMutation({
     mutationFn: ({ id, dataUrl }: { id: number; dataUrl: string }) => uploadPlantPhoto(id, dataUrl),
     onSuccess: () => {
@@ -310,6 +377,7 @@ export function PlantDetailSheet() {
   });
 
   const plant = useMemo(() => plantQuery.data ?? null, [plantQuery.data]);
+  const isSeedPlant = plant?.wateringProfile === 'SEED_START' || plant?.category === 'SEED_START';
   const isOverdue = useMemo(() => (plant ? getIsOverdue(plant) : false), [plant]);
 
   const adviceSource = careAdviceQuery.data?.source ?? null;
@@ -330,6 +398,25 @@ export function PlantDetailSheet() {
     }
   }, [selectedPlantId]);
 
+  useEffect(() => {
+    const current = plantQuery.data;
+    if (!current) {
+      return;
+    }
+    setMigrationName(current.name);
+    setMigrationInterval(String(Math.max(1, current.baseIntervalDays ?? current.recommendedIntervalDays ?? 4)));
+    setMigrationWater(String(Math.max(50, current.preferredWaterMl ?? current.recommendedWaterMl ?? 220)));
+    setMigrationPotVolume(String(Math.max(0.3, current.potVolumeLiters ?? current.containerVolumeLiters ?? 2)));
+    setMigrationContainerType((current.containerType as 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND') ?? 'POT');
+    setMigrationGrowthStage((current.growthStage as 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST') ?? 'SEEDLING');
+    setMigrationGreenhouse(Boolean(current.greenhouse));
+    setMigrationMulched(Boolean(current.mulched));
+    setMigrationDrip(Boolean(current.dripIrrigation));
+    setMigrationSoilType((current.outdoorSoilType as 'SANDY' | 'LOAMY' | 'CLAY') ?? 'LOAMY');
+    setMigrationSunExposure((current.sunExposure as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE') ?? 'PARTIAL_SHADE');
+    setMigrationAreaM2(String(Math.max(0.05, current.outdoorAreaM2 ?? 0.25)));
+  }, [plantQuery.data]);
+
   const triggerWateringPulse = () => {
     setWateringPulse((prev) => prev + 1);
   };
@@ -348,78 +435,191 @@ export function PlantDetailSheet() {
             photoUploading={photoMutation.isPending}
             wateringPulse={wateringPulse}
             mainWatering={
-              <WaterStatusBlock
-                plant={plant}
-                progress={getProgress(plant)}
-                isOverdue={isOverdue}
-                isLoading={waterMutation.isPending}
-                nextWateringDate={getNextDate(plant)}
-                recommendation={recommendationQuery.data ?? null}
-                onWater={async () => {
-                  if (!selectedPlantId) return;
-                  await waterMutation.mutateAsync(selectedPlantId);
-                  triggerWateringPulse();
-                }}
-              />
+              isSeedPlant ? (
+                <SeedStatusBlock plant={plant} />
+              ) : (
+                <WaterStatusBlock
+                  plant={plant}
+                  progress={getProgress(plant)}
+                  isOverdue={isOverdue}
+                  isLoading={waterMutation.isPending}
+                  nextWateringDate={getNextDate(plant)}
+                  recommendation={recommendationQuery.data ?? null}
+                  onWater={async () => {
+                    if (!selectedPlantId) return;
+                    await waterMutation.mutateAsync(selectedPlantId);
+                    triggerWateringPulse();
+                  }}
+                />
+              )
             }
             explainability={
-              <WateringRecommendationCard
-                plant={plant}
-                state={recommendationState}
-                recommendation={recommendationQuery.data ?? null}
-                loading={recommendationQuery.isFetching}
-                onRefresh={() => {
-                  if (!selectedPlantId || recommendationQuery.isFetching) {
-                    return;
-                  }
-                  impactLight();
-                  void recommendationQuery.refetch();
-                }}
-                onManualApply={(intervalDays, waterMl) => {
-                  if (!selectedPlantId || applyManualRecommendationMutation.isPending) {
-                    return;
-                  }
-                  applyManualRecommendationMutation.mutate({
-                    plantId: selectedPlantId,
-                    intervalDays,
-                    waterMl
-                  });
-                }}
-                manualApplying={applyManualRecommendationMutation.isPending}
-              />
-            }
-            secondary={
-              <div className="space-y-4">
-                <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
-
-                <AIAdviceCard
-                  loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
-                  refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
-                  error={careAdviceQuery.isError && !careAdviceQuery.data}
-                  refreshError={refreshAdviceMutation.isError}
-                  hasAiAdvice={hasAiAdvice}
-                  advice={adviceText}
-                  source={adviceSource}
+              isSeedPlant ? (
+                <SeedRecommendationSection plant={plant} />
+              ) : (
+                <WateringRecommendationCard
+                  plant={plant}
+                  state={recommendationState}
+                  recommendation={recommendationQuery.data ?? null}
+                  loading={recommendationQuery.isFetching}
                   onRefresh={() => {
-                    if (!selectedPlantId || refreshAdviceMutation.isPending) {
+                    if (!selectedPlantId || recommendationQuery.isFetching) {
                       return;
                     }
                     impactLight();
-                    refreshAdviceMutation.mutate(selectedPlantId);
+                    void recommendationQuery.refetch();
                   }}
-                />
-
-                <RecommendationHistorySection plant={plant} recommendation={recommendationQuery.data ?? null} />
-
-                <LeafDiagnosis plant={plant} />
-
-                <DangerZoneSection
-                  onDeleteClick={() => {
-                    impactMedium();
-                    setDeleteConfirmOpen(true);
+                  onManualApply={(intervalDays, waterMl) => {
+                    if (!selectedPlantId || applyManualRecommendationMutation.isPending) {
+                      return;
+                    }
+                    applyManualRecommendationMutation.mutate({
+                      plantId: selectedPlantId,
+                      intervalDays,
+                      waterMl
+                    });
                   }}
+                  manualApplying={applyManualRecommendationMutation.isPending}
                 />
-              </div>
+              )
+            }
+            secondary={
+              isSeedPlant ? (
+                <div className="space-y-4">
+                  <SeedLifecycleSection
+                    plant={plant}
+                    migrationPreview={migrationPreviewQuery.data ?? null}
+                    stageLoading={seedStageMutation.isPending}
+                    actionLoading={seedActionMutation.isPending}
+                    onStageChange={(nextStage) => {
+                      if (!selectedPlantId) return;
+                      seedStageMutation.mutate({ plantId: selectedPlantId, seedStage: nextStage });
+                    }}
+                    onAction={(action) => {
+                      if (!selectedPlantId) return;
+                      seedActionMutation.mutate({ plantId: selectedPlantId, action });
+                    }}
+                  />
+
+                  <SeedMigrationSection
+                    plant={plant}
+                    preview={migrationPreviewQuery.data ?? null}
+                    loading={seedMigrationMutation.isPending}
+                    form={{
+                      migrationName,
+                      migrationInterval,
+                      migrationWater,
+                      migrationPotVolume,
+                      migrationContainerType,
+                      migrationGrowthStage,
+                      migrationGreenhouse,
+                      migrationMulched,
+                      migrationDrip,
+                      migrationSoilType,
+                      migrationSunExposure,
+                      migrationAreaM2
+                    }}
+                    onChange={{
+                      setMigrationName,
+                      setMigrationInterval,
+                      setMigrationWater,
+                      setMigrationPotVolume,
+                      setMigrationContainerType,
+                      setMigrationGrowthStage,
+                      setMigrationGreenhouse,
+                      setMigrationMulched,
+                      setMigrationDrip,
+                      setMigrationSoilType,
+                      setMigrationSunExposure,
+                      setMigrationAreaM2
+                    }}
+                    onApply={() => {
+                      if (!selectedPlantId) {
+                        return;
+                      }
+                      const target = plant.targetEnvironmentType;
+                      if (!target || target === 'SEED_START') {
+                        hapticError();
+                        return;
+                      }
+                      seedMigrationMutation.mutate({
+                        plantId: selectedPlantId,
+                        payload: {
+                          targetEnvironmentType: target,
+                          name: migrationName.trim() || plant.name,
+                          baseIntervalDays: Math.max(1, Number(migrationInterval) || 4),
+                          preferredWaterMl: Math.max(50, Number(migrationWater) || 220),
+                          potVolumeLiters: target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL'
+                            ? Math.max(0.3, Number(migrationPotVolume) || 2)
+                            : 1,
+                          placement: target === 'INDOOR' ? 'INDOOR' : 'OUTDOOR',
+                          containerType: target === 'INDOOR'
+                            ? 'POT'
+                            : target === 'OUTDOOR_ORNAMENTAL'
+                              ? migrationContainerType
+                              : 'OPEN_GROUND',
+                          containerVolumeLiters: target === 'OUTDOOR_ORNAMENTAL' && migrationContainerType !== 'OPEN_GROUND'
+                            ? Math.max(0.3, Number(migrationPotVolume) || 2)
+                            : null,
+                          cropType: target === 'OUTDOOR_GARDEN' ? (migrationName.trim() || plant.name) : null,
+                          growthStage: target === 'OUTDOOR_GARDEN' ? migrationGrowthStage : null,
+                          greenhouse: target === 'OUTDOOR_GARDEN' ? migrationGreenhouse : null,
+                          dripIrrigation: target === 'OUTDOOR_GARDEN' ? migrationDrip : null,
+                          outdoorAreaM2: target === 'OUTDOOR_GARDEN' ? Math.max(0.05, Number(migrationAreaM2) || 0.25) : null,
+                          outdoorSoilType: target !== 'INDOOR' ? migrationSoilType : null,
+                          sunExposure: target !== 'INDOOR' ? migrationSunExposure : null,
+                          mulched: target === 'OUTDOOR_GARDEN' ? migrationMulched : target === 'OUTDOOR_ORNAMENTAL' ? false : null,
+                          perennial: target === 'OUTDOOR_ORNAMENTAL',
+                          winterDormancyEnabled: target === 'OUTDOOR_ORNAMENTAL',
+                          region: plant.region ?? null,
+                          type: 'DEFAULT'
+                        }
+                      });
+                    }}
+                  />
+
+                  <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+
+                  <DangerZoneSection
+                    onDeleteClick={() => {
+                      impactMedium();
+                      setDeleteConfirmOpen(true);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+
+                  <AIAdviceCard
+                    loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
+                    refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
+                    error={careAdviceQuery.isError && !careAdviceQuery.data}
+                    refreshError={refreshAdviceMutation.isError}
+                    hasAiAdvice={hasAiAdvice}
+                    advice={adviceText}
+                    source={adviceSource}
+                    onRefresh={() => {
+                      if (!selectedPlantId || refreshAdviceMutation.isPending) {
+                        return;
+                      }
+                      impactLight();
+                      refreshAdviceMutation.mutate(selectedPlantId);
+                    }}
+                  />
+
+                  <RecommendationHistorySection plant={plant} recommendation={recommendationQuery.data ?? null} />
+
+                  <LeafDiagnosis plant={plant} />
+
+                  <DangerZoneSection
+                    onDeleteClick={() => {
+                      impactMedium();
+                      setDeleteConfirmOpen(true);
+                    }}
+                  />
+                </div>
+              )
             }
             onPickPhoto={async (file) => {
               if (!selectedPlantId) {
@@ -637,6 +837,480 @@ function WaterStatusBlock({
         Источник рекомендации показан честно: ручной режим и резервный сценарий не маскируются под AI.
       </p>
     </section>
+  );
+}
+
+function seedStageLabel(stage?: PlantDto['seedStage'] | null): string {
+  switch (stage) {
+    case 'SOWN':
+      return 'Посеяно';
+    case 'GERMINATING':
+      return 'Прорастает';
+    case 'SPROUTED':
+      return 'Появились всходы';
+    case 'SEEDLING':
+      return 'Сеянец';
+    case 'READY_TO_TRANSPLANT':
+      return 'Готово к пересадке';
+    default:
+      return 'Проращивание семян';
+  }
+}
+
+function targetEnvironmentLabel(target?: PlantDto['targetEnvironmentType'] | null): string {
+  switch (target) {
+    case 'INDOOR':
+      return 'Домашнее растение';
+    case 'OUTDOOR_ORNAMENTAL':
+      return 'Уличное декоративное';
+    case 'OUTDOOR_GARDEN':
+      return 'Уличное садовое';
+    case 'SEED_START':
+      return 'Проращивание семян';
+    default:
+      return 'Не выбрано';
+  }
+}
+
+function seedWateringModeLabel(mode?: PlantDto['recommendedWateringMode'] | null): string {
+  switch (mode) {
+    case 'MIST':
+      return 'Лёгкое опрыскивание';
+    case 'BOTTOM_WATER':
+      return 'Нижний полив';
+    case 'KEEP_COVERED':
+      return 'Поддерживать под крышкой';
+    case 'VENT_AND_MIST':
+      return 'Проветривать и опрыскивать';
+    case 'LIGHT_SURFACE_WATER':
+      return 'Лёгкое увлажнение сверху';
+    case 'CHECK_ONLY':
+      return 'Только контроль';
+    default:
+      return 'Не задано';
+  }
+}
+
+function seedSourceLabel(source?: string | null): string {
+  switch (source) {
+    case 'AI':
+      return 'AI';
+    case 'FALLBACK':
+      return 'Резервный режим';
+    case 'MANUAL':
+      return 'Вручную';
+    case 'SEED':
+      return 'Базовый режим';
+    default:
+      return source?.trim() || 'Базовый режим';
+  }
+}
+
+function seedDaysSinceSowing(plant: PlantDto): number | null {
+  if (!plant.sowingDate) {
+    return null;
+  }
+  const sowing = startOfLocalDay(parseDateOnly(plant.sowingDate));
+  const today = startOfLocalDay(new Date());
+  return Math.max(0, Math.floor((today.getTime() - sowing.getTime()) / 86_400_000));
+}
+
+function SeedStatusBlock({ plant }: { plant: PlantDto }) {
+  const daysSinceSowing = seedDaysSinceSowing(plant);
+  const windowLabel = plant.expectedGerminationDaysMin != null && plant.expectedGerminationDaysMax != null
+    ? `${plant.expectedGerminationDaysMin}-${plant.expectedGerminationDaysMax} дн.`
+    : 'ещё не рассчитано';
+
+  return (
+    <section className="theme-surface-1 space-y-4 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Режим проращивания</p>
+          <p className="mt-1 text-lg font-semibold text-ios-text">{seedStageLabel(plant.seedStage)}</p>
+          <p className="text-sm text-ios-subtext">Цель: {targetEnvironmentLabel(plant.targetEnvironmentType)}</p>
+        </div>
+        <span className="theme-badge-info rounded-full px-3 py-1 text-xs font-semibold">
+          {seedSourceLabel(plant.seedCareSource)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">После посева</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{daysSinceSowing != null ? `${daysSinceSowing} дн.` : '—'}</p>
+        </div>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">Проверка</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">
+            {plant.recommendedCheckIntervalHours ? `каждые ${plant.recommendedCheckIntervalHours} ч` : 'по ситуации'}
+          </p>
+        </div>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">Всходы</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{windowLabel}</p>
+        </div>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">Увлажнение</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{seedWateringModeLabel(plant.recommendedWateringMode)}</p>
+        </div>
+      </div>
+
+      <div className="theme-surface-subtle rounded-2xl border p-3">
+        <p className="text-sm leading-5 text-ios-text">
+          {plant.seedSummary?.trim() || 'Для семян важнее стабильная влажность, контроль стадии и постепенный переход к обычному растению.'}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SeedRecommendationSection({ plant }: { plant: PlantDto }) {
+  const reasoning = plant.seedReasoning ?? [];
+  const warnings = plant.seedWarnings ?? [];
+
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-ios-text">Режим наблюдения и увлажнения</p>
+          <p className="text-xs text-ios-subtext">Рекомендации для семян не сводятся к «мл каждые N дней».</p>
+        </div>
+        <span className="theme-badge-success rounded-full px-2.5 py-1 text-[11px]">
+          {seedWateringModeLabel(plant.recommendedWateringMode)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">Режим ухода</p>
+          <p className="mt-1 text-sm font-medium text-ios-text">{plant.seedCareMode ?? 'Следить за влажностью и стадией роста'}</p>
+        </div>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs text-ios-subtext">Условия</p>
+          <p className="mt-1 text-sm font-medium text-ios-text">
+            {plant.underCover ? 'Под укрытием' : 'Без укрытия'} · {plant.growLight ? 'есть досветка' : 'без досветки'}
+          </p>
+        </div>
+      </div>
+
+      {reasoning.length ? (
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Почему такой режим</p>
+          <ul className="mt-2 space-y-1 text-sm text-ios-text">
+            {reasoning.map((item, idx) => (
+              <li key={`${item}-${idx}`}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {warnings.length ? (
+        <div className="theme-surface-warning rounded-2xl border p-3">
+          <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
+          <ul className="mt-2 space-y-1 text-sm text-ios-text">
+            {warnings.map((item, idx) => (
+              <li key={`${item}-${idx}`}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SeedLifecycleSection({
+  plant,
+  migrationPreview,
+  stageLoading,
+  actionLoading,
+  onStageChange,
+  onAction
+}: {
+  plant: PlantDto;
+  migrationPreview: { allowed: boolean; message: string } | null;
+  stageLoading: boolean;
+  actionLoading: boolean;
+  onStageChange: (stage: NonNullable<PlantDto['seedStage']>) => void;
+  onAction: (action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT') => void;
+}) {
+  const stageOptions: Array<{ value: NonNullable<PlantDto['seedStage']>; label: string }> = [
+    { value: 'SOWN', label: 'Посеяно' },
+    { value: 'GERMINATING', label: 'Прорастает' },
+    { value: 'SPROUTED', label: 'Всходы' },
+    { value: 'SEEDLING', label: 'Сеянец' },
+    { value: 'READY_TO_TRANSPLANT', label: 'К пересадке' }
+  ];
+  const actions: Array<{ key: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT'; label: string }> = [
+    { key: 'MOISTEN', label: 'Увлажнить' },
+    { key: 'VENT', label: 'Проветрить' },
+    { key: 'REMOVE_COVER', label: 'Снять крышку' },
+    { key: 'MOVE_TO_LIGHT', label: 'Под свет' },
+    { key: 'PRICK_OUT', label: 'Пикировать' }
+  ];
+
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+      <div>
+        <p className="text-sm font-semibold text-ios-text">Стадия и действия</p>
+        <p className="mt-1 text-xs text-ios-subtext">{migrationPreview?.message ?? 'Отмечайте реальные действия, чтобы не терять контекст роста.'}</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {stageOptions.map((option) => (
+          <Button
+            key={option.value}
+            type="button"
+            variant={plant.seedStage === option.value ? 'default' : 'secondary'}
+            className="h-10 rounded-full px-3 text-xs"
+            disabled={stageLoading}
+            onClick={() => onStageChange(option.value)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {actions.map((action) => (
+          <Button
+            key={action.key}
+            type="button"
+            variant="secondary"
+            className="h-10 rounded-2xl text-xs"
+            disabled={actionLoading}
+            onClick={() => onAction(action.key)}
+          >
+            {action.label}
+          </Button>
+        ))}
+      </div>
+
+      {(plant.seedActions ?? []).length ? (
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Последние действия</p>
+          <ul className="mt-2 space-y-1 text-sm text-ios-text">
+            {(plant.seedActions ?? []).slice(0, 5).map((item, idx) => (
+              <li key={`${item}-${idx}`}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SeedMigrationSection({
+  plant,
+  preview,
+  loading,
+  form,
+  onChange,
+  onApply
+}: {
+  plant: PlantDto;
+  preview: {
+    allowed: boolean;
+    targetLabel: string;
+    message: string;
+  } | null;
+  loading: boolean;
+  form: {
+    migrationName: string;
+    migrationInterval: string;
+    migrationWater: string;
+    migrationPotVolume: string;
+    migrationContainerType: 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND';
+    migrationGrowthStage: 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST';
+    migrationGreenhouse: boolean;
+    migrationMulched: boolean;
+    migrationDrip: boolean;
+    migrationSoilType: 'SANDY' | 'LOAMY' | 'CLAY';
+    migrationSunExposure: 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE';
+    migrationAreaM2: string;
+  };
+  onChange: {
+    setMigrationName: (value: string) => void;
+    setMigrationInterval: (value: string) => void;
+    setMigrationWater: (value: string) => void;
+    setMigrationPotVolume: (value: string) => void;
+    setMigrationContainerType: (value: 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND') => void;
+    setMigrationGrowthStage: (value: 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST') => void;
+    setMigrationGreenhouse: (value: boolean) => void;
+    setMigrationMulched: (value: boolean) => void;
+    setMigrationDrip: (value: boolean) => void;
+    setMigrationSoilType: (value: 'SANDY' | 'LOAMY' | 'CLAY') => void;
+    setMigrationSunExposure: (value: 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE') => void;
+    setMigrationAreaM2: (value: string) => void;
+  };
+  onApply: () => void;
+}) {
+  const target = plant.targetEnvironmentType;
+  const canApply = Boolean(preview?.allowed && target && target !== 'SEED_START');
+
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+      <div>
+        <p className="text-sm font-semibold text-ios-text">Перевести в растение</p>
+        <p className="mt-1 text-xs text-ios-subtext">
+          {preview?.message ?? 'Когда всходы окрепнут, посев можно перевести в обычный режим растения.'}
+        </p>
+      </div>
+
+      <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-text">
+        Целевая категория: <b>{preview?.targetLabel ?? targetEnvironmentLabel(target)}</b>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          value={form.migrationName}
+          onChange={(e) => onChange.setMigrationName(e.target.value)}
+          className="theme-field h-10 rounded-xl border px-3 text-sm"
+          placeholder="Название"
+        />
+        <input
+          type="number"
+          min={1}
+          max={60}
+          value={form.migrationInterval}
+          onChange={(e) => onChange.setMigrationInterval(e.target.value)}
+          className="theme-field h-10 rounded-xl border px-3 text-sm"
+          placeholder="Интервал"
+        />
+        <input
+          type="number"
+          min={50}
+          max={10000}
+          value={form.migrationWater}
+          onChange={(e) => onChange.setMigrationWater(e.target.value)}
+          className="theme-field h-10 rounded-xl border px-3 text-sm"
+          placeholder="Вода мл"
+        />
+        {(target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL') ? (
+          <input
+            type="number"
+            min={0.3}
+            step={0.1}
+            value={form.migrationPotVolume}
+            onChange={(e) => onChange.setMigrationPotVolume(e.target.value)}
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
+            placeholder="Объём л"
+          />
+        ) : (
+          <input
+            type="number"
+            min={0.05}
+            step={0.01}
+            value={form.migrationAreaM2}
+            onChange={(e) => onChange.setMigrationAreaM2(e.target.value)}
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
+            placeholder="Площадь м²"
+          />
+        )}
+      </div>
+
+      {target === 'OUTDOOR_ORNAMENTAL' ? (
+        <div className="grid grid-cols-3 gap-2">
+          <select
+            value={form.migrationContainerType}
+            onChange={(e) => onChange.setMigrationContainerType(e.target.value as 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND')}
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
+          >
+            <option value="POT">Кашпо</option>
+            <option value="CONTAINER">Контейнер</option>
+            <option value="FLOWERBED">Клумба</option>
+            <option value="OPEN_GROUND">Грунт</option>
+          </select>
+          <select
+            value={form.migrationSoilType}
+            onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
+          >
+            <option value="LOAMY">Суглинистая</option>
+            <option value="SANDY">Песчаная</option>
+            <option value="CLAY">Глинистая</option>
+          </select>
+          <select
+            value={form.migrationSunExposure}
+            onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
+          >
+            <option value="FULL_SUN">Солнце</option>
+            <option value="PARTIAL_SHADE">Полутень</option>
+            <option value="SHADE">Тень</option>
+          </select>
+        </div>
+      ) : null}
+
+      {target === 'OUTDOOR_GARDEN' ? (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            <select
+              value={form.migrationGrowthStage}
+              onChange={(e) => onChange.setMigrationGrowthStage(e.target.value as 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST')}
+              className="theme-field h-10 rounded-xl border px-3 text-sm"
+            >
+              <option value="SEEDLING">Рассада</option>
+              <option value="VEGETATIVE">Вегетация</option>
+              <option value="FLOWERING">Цветение</option>
+              <option value="FRUITING">Плодоношение</option>
+              <option value="HARVEST">Перед сбором</option>
+            </select>
+            <select
+              value={form.migrationSoilType}
+              onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
+              className="theme-field h-10 rounded-xl border px-3 text-sm"
+            >
+              <option value="LOAMY">Суглинистая</option>
+              <option value="SANDY">Песчаная</option>
+              <option value="CLAY">Глинистая</option>
+            </select>
+            <select
+              value={form.migrationSunExposure}
+              onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
+              className="theme-field h-10 rounded-xl border px-3 text-sm"
+            >
+              <option value="FULL_SUN">Солнце</option>
+              <option value="PARTIAL_SHADE">Полутень</option>
+              <option value="SHADE">Тень</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <ToggleChip label="Теплица" checked={form.migrationGreenhouse} onChange={onChange.setMigrationGreenhouse} />
+            <ToggleChip label="Мульча" checked={form.migrationMulched} onChange={onChange.setMigrationMulched} />
+            <ToggleChip label="Капля" checked={form.migrationDrip} onChange={onChange.setMigrationDrip} />
+          </div>
+        </>
+      ) : null}
+
+      <Button type="button" className="h-11 w-full rounded-2xl" disabled={!canApply || loading} onClick={onApply}>
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Переводим...
+          </span>
+        ) : 'Перевести в растение'}
+      </Button>
+    </section>
+  );
+}
+
+function ToggleChip({
+  label,
+  checked,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`h-10 rounded-xl border px-3 text-xs font-medium ${checked ? 'theme-pill-active' : 'theme-surface-subtle text-ios-text'}`}
+      onClick={() => onChange(!checked)}
+    >
+      {label}
+    </button>
   );
 }
 

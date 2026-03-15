@@ -141,12 +141,14 @@ public class WateringRecommendationEngine {
       case INDOOR -> clamp(defaultInt(request.baseIntervalDays(), 7), 2, 21);
       case OUTDOOR_ORNAMENTAL -> clamp(defaultInt(request.baseIntervalDays(), 3), 1, 21);
       case OUTDOOR_GARDEN -> clamp(defaultInt(request.baseIntervalDays(), request.greenhouse() != null && request.greenhouse() ? 3 : 2), 1, 21);
+      case SEED_START -> clamp(defaultInt(request.baseIntervalDays(), 1), 1, 7);
     };
 
     int waterMl = switch (env) {
       case INDOOR -> clamp((int) Math.round(Math.max(0.3, defaultDouble(request.potVolumeLiters(), 2.0)) * 130.0), 120, 2200);
       case OUTDOOR_ORNAMENTAL -> clamp((int) Math.round(Math.max(0.5, defaultDouble(request.containerVolume(), 4.0)) * 170.0), 180, 3200);
       case OUTDOOR_GARDEN -> request.greenhouse() != null && request.greenhouse() ? 450 : 600;
+      case SEED_START -> 80;
     };
 
     SeasonalAdjustment seasonal = applySeasonAdjustment(interval, waterMl, env);
@@ -162,6 +164,7 @@ public class WateringRecommendationEngine {
       case INDOOR -> "Базовый indoor-профиль рассчитан по объему горшка, типу размещения и сезонности.";
       case OUTDOOR_ORNAMENTAL -> "Базовый outdoor ornamental-профиль рассчитан по контейнеру и сезонности.";
       case OUTDOOR_GARDEN -> "Базовый garden-профиль рассчитан по культуре, стадии и сезонности.";
+      case SEED_START -> "Проращивание семян не использует стандартный предварительный расчёт полива. Используйте отдельный предварительный расчёт для семян.";
     };
 
     return new Recommendation(
@@ -208,7 +211,7 @@ public class WateringRecommendationEngine {
   private WeatherAdjustedValues applyOutdoorWeatherAdjustments(Recommendation base,
                                                                PlantEnvironmentType env,
                                                                NormalizedWeatherContext weatherContext) {
-    if (env == PlantEnvironmentType.INDOOR) {
+    if (env == PlantEnvironmentType.INDOOR || env == PlantEnvironmentType.SEED_START) {
       return new WeatherAdjustedValues(base, false);
     }
 
@@ -352,6 +355,9 @@ public class WateringRecommendationEngine {
                                            WateringRecommendationPreviewRequest request,
                                            NormalizedWeatherContext weatherContext,
                                            WateringSensorContextDto sensorContext) {
+    if (env == PlantEnvironmentType.SEED_START) {
+      return Optional.empty();
+    }
     String weatherSummary = enrichWeatherSummaryWithSensorContext(
         outdoorWeatherContextService.toPromptSummary(weatherContext),
         sensorContext
@@ -450,6 +456,7 @@ public class WateringRecommendationEngine {
       case INDOOR -> PlantEnvironmentType.INDOOR;
       case OUTDOOR_ORNAMENTAL -> PlantEnvironmentType.OUTDOOR_ORNAMENTAL;
       case OUTDOOR_GARDEN -> PlantEnvironmentType.OUTDOOR_GARDEN;
+      case SEED_START -> PlantEnvironmentType.SEED_START;
     };
   }
 
@@ -495,7 +502,7 @@ public class WateringRecommendationEngine {
   private double adjustConfidenceForWeather(double baseConfidence,
                                             PlantEnvironmentType env,
                                             NormalizedWeatherContext weatherContext) {
-    if (env == PlantEnvironmentType.INDOOR) {
+    if (env == PlantEnvironmentType.INDOOR || env == PlantEnvironmentType.SEED_START) {
       return baseConfidence;
     }
     double adjusted = baseConfidence;
@@ -523,6 +530,7 @@ public class WateringRecommendationEngine {
       case INDOOR -> 80;
       case OUTDOOR_ORNAMENTAL -> 120;
       case OUTDOOR_GARDEN -> 150;
+      case SEED_START -> 50;
     };
   }
 
@@ -531,6 +539,7 @@ public class WateringRecommendationEngine {
       case INDOOR -> 2500;
       case OUTDOOR_ORNAMENTAL -> 5000;
       case OUTDOOR_GARDEN -> 8000;
+      case SEED_START -> 300;
     };
   }
 
@@ -577,6 +586,7 @@ public class WateringRecommendationEngine {
     return switch (environmentType) {
       case OUTDOOR_ORNAMENTAL -> PlantCategory.OUTDOOR_DECORATIVE;
       case OUTDOOR_GARDEN -> PlantCategory.OUTDOOR_GARDEN;
+      case SEED_START -> PlantCategory.SEED_START;
       case INDOOR -> PlantCategory.HOME;
     };
   }

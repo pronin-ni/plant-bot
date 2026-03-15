@@ -6,6 +6,10 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.SeedContainerType;
+import com.example.plantbot.domain.SeedStage;
+import com.example.plantbot.domain.SeedSubstrateType;
+import com.example.plantbot.domain.SeedWateringMode;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.PlantCareAdvice;
@@ -24,6 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -344,6 +350,64 @@ public class OpenRouterPlantAdvisorService {
     return Optional.empty();
   }
 
+  public Optional<SeedCareRecommendation> suggestSeedRecommendation(User user, SeedRecommendInput input) {
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
+    if (apiKey == null || apiKey.isBlank() || input == null || input.plantName() == null || input.plantName().isBlank()) {
+      return Optional.empty();
+    }
+
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", seedRecommendSystemPrompt()),
+            Map.of("role", "user", "content", seedRecommendUserPrompt(input))
+        ));
+        if (body == null) {
+          continue;
+        }
+
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          continue;
+        }
+
+        JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
+        int checkIntervalHours = clamp(json.path("recommended_check_interval_hours").asInt(12), 4, 48);
+        int germinationMin = clamp(json.path("expected_germination_days_min").asInt(4), 1, 60);
+        int germinationMax = clamp(json.path("expected_germination_days_max").asInt(Math.max(germinationMin + 2, 8)), germinationMin, 90);
+        String careMode = normalizeAdviceNote(json.path("care_mode").asText(""));
+        if (careMode.isEmpty()) {
+          careMode = "Регулярный контроль влажности и мягкий режим проращивания.";
+        }
+
+        SeedWateringMode wateringMode = parseSeedWateringMode(json.path("recommended_watering_mode").asText(""));
+        String summary = normalizeAdviceNote(json.path("summary").asText(""));
+        if (summary.isEmpty()) {
+          summary = "Рекомендация рассчитана по условиям проращивания.";
+        }
+
+        List<String> reasoning = parseAdviceList(json.path("reasoning"), 5);
+        List<String> warnings = parseAdviceList(json.path("warnings"), 5);
+
+        return Optional.of(new SeedCareRecommendation(
+            "AI",
+            careMode,
+            checkIntervalHours,
+            wateringMode,
+            germinationMin,
+            germinationMax,
+            summary,
+            reasoning,
+            warnings
+        ));
+      } catch (Exception ex) {
+        log.warn("OpenRouter seed recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
+      }
+    }
+
+    return Optional.empty();
+  }
+
   public Optional<ChatAnswer> answerGardeningQuestion(String question) {
     return answerGardeningQuestion(null, question, null);
   }
@@ -612,6 +676,7 @@ public class OpenRouterPlantAdvisorService {
       case INDOOR -> buildIndoorWizardPrompt(input);
       case OUTDOOR_ORNAMENTAL -> buildOutdoorOrnamentalWizardPrompt(input);
       case OUTDOOR_GARDEN -> buildOutdoorGardenWizardPrompt(input);
+      case SEED_START -> buildIndoorWizardPrompt(input);
     };
   }
 
@@ -693,6 +758,67 @@ public class OpenRouterPlantAdvisorService {
     return builder.toString();
   }
 
+  private String seedRecommendSystemPrompt() {
+    return """
+        Ты консультант по проращиванию семян и раннему уходу за сеянцами.
+        Верни только JSON без markdown и текста вне JSON:
+        {
+          "care_mode": "краткое описание режима ухода",
+          "recommended_check_interval_hours": 12,
+          "recommended_watering_mode": "MIST|BOTTOM_WATER|KEEP_COVERED|VENT_AND_MIST|LIGHT_SURFACE_WATER|CHECK_ONLY",
+          "expected_germination_days_min": 4,
+          "expected_germination_days_max": 10,
+          "summary": "короткий практический вывод",
+          "reasoning": ["фактор 1", "фактор 2"],
+          "warnings": ["предупреждение 1"]
+        }
+        Правила:
+        - recommended_check_interval_hours: целое число [4..48]
+        - expected_germination_days_min: целое число [1..60]
+        - expected_germination_days_max: целое число [expected_germination_days_min..90]
+        - reasoning: 2..5 коротких пунктов на русском
+        - warnings: 0..4 коротких пунктов на русском
+        - не используй логику \"мл воды раз в N дней\" как главный результат
+        """;
+  }
+
+  private String seedRecommendUserPrompt(SeedRecommendInput input) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Сформируй рекомендации по проращиванию семян.\n");
+    builder.append("Культура: ").append(input.plantName().trim()).append('\n');
+    if (input.seedStage() != null) {
+      builder.append("Стадия: ").append(input.seedStage().name()).append('\n');
+    }
+    if (input.targetEnvironmentType() != null) {
+      builder.append("Цель после проращивания: ").append(input.targetEnvironmentType().name()).append('\n');
+    }
+    if (input.seedContainerType() != null) {
+      builder.append("Ёмкость: ").append(input.seedContainerType().name()).append('\n');
+    }
+    if (input.seedSubstrateType() != null) {
+      builder.append("Субстрат: ").append(input.seedSubstrateType().name()).append('\n');
+    }
+    if (input.sowingDate() != null) {
+      long elapsedDays = Math.max(0, ChronoUnit.DAYS.between(input.sowingDate(), LocalDate.now()));
+      builder.append("Дата посева: ").append(input.sowingDate()).append('\n');
+      builder.append("Дней с посева: ").append(elapsedDays).append('\n');
+    }
+    if (input.germinationTemperatureC() != null) {
+      builder.append("Температура: ").append(safeNum(input.germinationTemperatureC(), 1)).append("°C\n");
+    }
+    if (input.underCover() != null) {
+      builder.append("Укрытие: ").append(input.underCover() ? "да" : "нет").append('\n');
+    }
+    if (input.growLight() != null) {
+      builder.append("Досветка: ").append(input.growLight() ? "да" : "нет").append('\n');
+    }
+    if (input.region() != null && !input.region().isBlank()) {
+      builder.append("Город/регион: ").append(input.region().trim()).append('\n');
+    }
+    builder.append("Сконцентрируйся на режиме увлажнения, проверок и окне появления всходов.");
+    return builder.toString();
+  }
+
   private List<String> parseAdviceList(JsonNode node, int maxSize) {
     if (node == null || !node.isArray()) {
       return List.of();
@@ -739,6 +865,17 @@ public class OpenRouterPlantAdvisorService {
       return PlantType.valueOf(value.trim().toUpperCase());
     } catch (Exception ignored) {
       return PlantType.DEFAULT;
+    }
+  }
+
+  private SeedWateringMode parseSeedWateringMode(String value) {
+    if (value == null || value.isBlank()) {
+      return SeedWateringMode.MIST;
+    }
+    try {
+      return SeedWateringMode.valueOf(value.trim().toUpperCase());
+    } catch (Exception ignored) {
+      return SeedWateringMode.MIST;
     }
   }
 
@@ -1073,5 +1210,28 @@ public class OpenRouterPlantAdvisorService {
                                      String weatherSummary,
                                      Boolean mulched,
                                      Boolean dripIrrigation) {
+  }
+
+  public record SeedRecommendInput(String plantName,
+                                   SeedStage seedStage,
+                                   PlantEnvironmentType targetEnvironmentType,
+                                   SeedContainerType seedContainerType,
+                                   SeedSubstrateType seedSubstrateType,
+                                   LocalDate sowingDate,
+                                   Double germinationTemperatureC,
+                                   Boolean underCover,
+                                   Boolean growLight,
+                                   String region) {
+  }
+
+  public record SeedCareRecommendation(String source,
+                                       String careMode,
+                                       Integer recommendedCheckIntervalHours,
+                                       SeedWateringMode recommendedWateringMode,
+                                       Integer expectedGerminationDaysMin,
+                                       Integer expectedGerminationDaysMax,
+                                       String summary,
+                                       List<String> reasoning,
+                                       List<String> warnings) {
   }
 }

@@ -7,5 +7,6 @@ package com.example.plantbot.domain;
 public enum WateringProfileType {
   INDOOR,
   OUTDOOR_ORNAMENTAL,
-  OUTDOOR_GARDEN
+  OUTDOOR_GARDEN,
+  SEED_START
 }

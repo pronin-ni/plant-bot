@@ -25,6 +25,7 @@ import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.repository.PlantRepository;
@@ -37,6 +38,7 @@ import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.CurrentUserService;
+import com.example.plantbot.service.SeedLifecycleService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.WateringLogService;
@@ -46,6 +48,8 @@ import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -108,6 +112,8 @@ public class MiniAppController {
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
   private final WeatherService weatherService;
+  private final SeedLifecycleService seedLifecycleService;
+  private final ObjectMapper objectMapper;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
   private String publicBaseUrl;
@@ -219,6 +225,9 @@ public class MiniAppController {
     PlantEnvironmentType environmentType = request.environmentType() != null
         ? request.environmentType()
         : request.wateringProfile();
+    if (environmentType == PlantEnvironmentType.SEED_START && request.targetEnvironmentType() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetEnvironmentType обязателен для режима проращивания");
+    }
 
     Plant plant = plantService.addPlant(
         user,
@@ -242,6 +251,7 @@ public class MiniAppController {
     plant.setContainerVolumeLiters(request.containerVolumeLiters());
     plant.setCropType(request.cropType());
     plant.setGrowthStage(request.growthStage());
+    seedLifecycleService.applySeedCreateFields(plant, request);
     plant.setGreenhouse(request.greenhouse());
     plant.setDripIrrigation(request.dripIrrigation());
     plantService.save(plant);
@@ -703,6 +713,24 @@ public class MiniAppController {
         plant.getContainerVolumeLiters(),
         plant.getCropType(),
         plant.getGrowthStage(),
+        plant.getSeedStage(),
+        plant.getTargetEnvironmentType(),
+        plant.getSeedContainerType(),
+        plant.getSeedSubstrateType(),
+        plant.getSowingDate(),
+        plant.getUnderCover(),
+        plant.getGrowLight(),
+        plant.getGerminationTemperatureC(),
+        plant.getExpectedGerminationDaysMin(),
+        plant.getExpectedGerminationDaysMax(),
+        plant.getRecommendedCheckIntervalHours(),
+        plant.getRecommendedWateringMode(),
+        plant.getSeedCareMode(),
+        plant.getSeedSummary(),
+        parseJsonList(plant.getSeedReasoningJson()),
+        parseJsonList(plant.getSeedWarningsJson()),
+        plant.getSeedCareSource(),
+        seedLifecycleService.getActions(plant),
         plant.getGreenhouse(),
         plant.getDripIrrigation(),
         plant.getPotVolumeLiters(),
@@ -906,6 +934,7 @@ public class MiniAppController {
     return switch (environmentType) {
       case OUTDOOR_ORNAMENTAL -> PlantCategory.OUTDOOR_DECORATIVE;
       case OUTDOOR_GARDEN -> PlantCategory.OUTDOOR_GARDEN;
+      case SEED_START -> PlantCategory.SEED_START;
       case INDOOR -> PlantCategory.HOME;
     };
   }
@@ -917,14 +946,30 @@ public class MiniAppController {
     return switch (category) {
       case OUTDOOR_GARDEN -> PlantEnvironmentType.OUTDOOR_GARDEN;
       case OUTDOOR_DECORATIVE -> PlantEnvironmentType.OUTDOOR_ORNAMENTAL;
+      case SEED_START -> PlantEnvironmentType.SEED_START;
       case HOME -> PlantEnvironmentType.INDOOR;
     };
+  }
+
+  private List<String> parseJsonList(String value) {
+    if (value == null || value.isBlank()) {
+      return List.of();
+    }
+    try {
+      return objectMapper.readValue(value, new TypeReference<List<String>>() {
+      });
+    } catch (Exception ex) {
+      return List.of();
+    }
   }
 
   private int estimateFallbackWaterMl(PlantEnvironmentType environmentType, PlantAiRecommendRequest request) {
     if (environmentType == PlantEnvironmentType.OUTDOOR_GARDEN) {
       double h = request.heightCm() == null ? 40.0 : request.heightCm();
       return clampInt((int) Math.round(Math.max(20.0, h) * 10.0), 350, 4000);
+    }
+    if (environmentType == PlantEnvironmentType.SEED_START) {
+      return 80;
     }
     double liters = request.potVolumeLiters() == null ? 2.0 : request.potVolumeLiters();
     if (environmentType == PlantEnvironmentType.OUTDOOR_ORNAMENTAL) {
@@ -939,6 +984,7 @@ public class MiniAppController {
       case OUTDOOR_ORNAMENTAL -> "Рекомендации рассчитаны по базовой модели для декоративных уличных растений " + weatherPart + ".";
       case OUTDOOR_GARDEN -> "Рекомендации рассчитаны по базовой модели для садовых культур " + weatherPart + ".";
       case INDOOR -> "Рекомендации рассчитаны по базовой модели для домашних растений " + weatherPart + ".";
+      case SEED_START -> "Рекомендации рассчитаны по базовой модели для проращивания семян.";
     };
   }
 

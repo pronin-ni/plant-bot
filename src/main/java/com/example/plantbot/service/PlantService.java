@@ -193,6 +193,7 @@ public class PlantService {
     return switch (category) {
       case OUTDOOR_GARDEN -> PlantEnvironmentType.OUTDOOR_GARDEN;
       case OUTDOOR_DECORATIVE -> PlantEnvironmentType.OUTDOOR_ORNAMENTAL;
+      case SEED_START -> PlantEnvironmentType.SEED_START;
       case HOME -> PlantEnvironmentType.INDOOR;
     };
   }

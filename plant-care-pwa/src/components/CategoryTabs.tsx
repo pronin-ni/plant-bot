@@ -4,7 +4,7 @@ import { Flower2, Home, Leaf, Sprout } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 
-export type PlantCategoryFilter = 'ALL' | 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
+export type PlantCategoryFilter = 'ALL' | 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
 
 const TABS: Array<{
   key: PlantCategoryFilter;
@@ -14,7 +14,8 @@ const TABS: Array<{
   { key: 'ALL', label: 'Все', icon: Leaf },
   { key: 'HOME', label: 'Дом', icon: Home },
   { key: 'OUTDOOR_DECORATIVE', label: 'Декор', icon: Flower2 },
-  { key: 'OUTDOOR_GARDEN', label: 'Сад', icon: Sprout }
+  { key: 'OUTDOOR_GARDEN', label: 'Сад', icon: Sprout },
+  { key: 'SEED_START', label: 'Семена', icon: Sprout }
 ];
 
 export function CategoryTabs({

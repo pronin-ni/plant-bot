@@ -81,6 +81,11 @@ import type {
   PlantPresetSuggestionDto,
   PlantAiRecommendDto,
   ApplyWateringRecommendationDto,
+  SeedCareActionResponseDto,
+  SeedMigrationApplyDto,
+  SeedMigrationPreviewDto,
+  SeedRecommendationPreviewDto,
+  SeedStageUpdateDto,
   WateringHaOptionsDto,
   WateringRecommendationPreviewDto,
   WateringSensorContextDto,
@@ -367,6 +372,35 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
     return buildDemoRecommendation(previewPlant) as T;
   }
 
+  if (method === 'POST' && pathname === '/api/seeds/recommendation/preview') {
+    const body = init.body ? (JSON.parse(String(init.body)) as {
+      plantName?: string;
+      seedStage?: PlantDto['seedStage'];
+      targetEnvironmentType?: PlantDto['targetEnvironmentType'];
+      underCover?: boolean;
+      growLight?: boolean;
+    }) : {};
+    return {
+      source: 'FALLBACK',
+      seedStage: body.seedStage ?? 'SOWN',
+      targetEnvironmentType: body.targetEnvironmentType ?? 'INDOOR',
+      careMode: body.underCover
+        ? 'Поддерживайте стабильную влажность под укрытием и ежедневно проветривайте.'
+        : 'Проверяйте верхний слой и мягко увлажняйте без переувлажнения.',
+      recommendedCheckIntervalHours: body.growLight ? 8 : 12,
+      recommendedWateringMode: body.underCover ? 'KEEP_COVERED' : 'LIGHT_SURFACE_WATER',
+      expectedGerminationDaysMin: 4,
+      expectedGerminationDaysMax: 12,
+      summary: `Рекомендации для проращивания подготовлены для «${body.plantName?.trim() || 'посева'}».`,
+      reasoning: [
+        'Учитываем стадию проращивания и целевую категорию.',
+        body.underCover ? 'Укрытие помогает удерживать стабильную влажность.' : 'Без укрытия важно чаще контролировать поверхность.',
+        body.growLight ? 'Досветка ускоряет переход к стадии сеянца.' : 'Без досветки следите за вытягиванием.'
+      ],
+      warnings: ['В демо-режиме AI для семян работает в резервном режиме.']
+    } as T;
+  }
+
   if (method === 'POST' && pathname === '/api/watering/recommendation/weather/preview') {
     const body = init.body ? (JSON.parse(String(init.body)) as { city?: string | null; region?: string | null }) : {};
     return buildDemoWeatherContextPreview(body.city ?? body.region ?? null) as T;
@@ -419,6 +453,88 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
     await cacheSet(cacheKey('/api/plants'), updatedPlants);
     await cacheSet(cacheKey('/api/calendar'), createDemoCalendar(updatedPlants));
     return created as T;
+  }
+
+  if (method === 'POST' && /^\/api\/seeds\/\d+\/stage$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const body = init.body ? (JSON.parse(String(init.body)) as { seedStage?: PlantDto['seedStage'] }) : {};
+    const updatedPlants = plants.map((item) => item.id === plantId ? { ...item, seedStage: body.seedStage ?? item.seedStage } : item);
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    return { ok: true, plantId, seedStage: body.seedStage ?? 'SOWN' } as T;
+  }
+
+  if (method === 'POST' && /^\/api\/seeds\/\d+\/actions$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const body = init.body ? (JSON.parse(String(init.body)) as { action?: string }) : {};
+    const label = body.action ?? 'MOISTEN';
+    const actionMap: Record<string, string> = {
+      MOISTEN: 'Увлажнить',
+      VENT: 'Проветрить',
+      REMOVE_COVER: 'Снять крышку',
+      MOVE_TO_LIGHT: 'Перенести под свет',
+      PRICK_OUT: 'Пикировать'
+    };
+    const timestamp = new Date().toISOString();
+    let actions: string[] = [];
+    const updatedPlants = plants.map((item) => {
+      if (item.id !== plantId) return item;
+      actions = [`${timestamp} | ${actionMap[label] ?? label}`, ...(item.seedActions ?? [])].slice(0, 20);
+      return { ...item, seedActions: actions };
+    });
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    return { ok: true, plantId, actions } as T;
+  }
+
+  if (method === 'POST' && /^\/api\/seeds\/\d+\/migration\/preview$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const plant = plants.find((item) => item.id === plantId);
+    const stage = plant?.seedStage ?? 'SOWN';
+    const allowed = stage === 'SPROUTED' || stage === 'SEEDLING' || stage === 'READY_TO_TRANSPLANT';
+    const target = plant?.targetEnvironmentType ?? 'INDOOR';
+    const targetLabel =
+      target === 'OUTDOOR_ORNAMENTAL' ? 'Уличное декоративное' :
+      target === 'OUTDOOR_GARDEN' ? 'Уличное садовое' :
+      'Домашнее растение';
+    return {
+      allowed,
+      plantId,
+      seedStage: stage,
+      targetEnvironmentType: target,
+      targetLabel,
+      plantName: plant?.name ?? 'Посев',
+      message: allowed ? 'Можно перевести в обычное растение.' : 'Сначала доведите посев до подходящей стадии.'
+    } as T;
+  }
+
+  if (method === 'POST' && /^\/api\/seeds\/\d+\/migrate$/.test(pathname)) {
+    const plantId = Number(pathname.split('/')[3]);
+    const body = init.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    const target = (body.targetEnvironmentType as PlantDto['targetEnvironmentType']) ?? 'INDOOR';
+    const updatedPlants: PlantDto[] = plants.map((item) => {
+      if (item.id !== plantId) return item;
+      return {
+        ...item,
+        name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : item.name,
+        category: target === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_DECORATIVE' : target === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : 'HOME',
+        wateringProfile: target === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_ORNAMENTAL' : target === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : 'INDOOR',
+        placement: target === 'INDOOR' ? 'INDOOR' : 'OUTDOOR',
+        baseIntervalDays: typeof body.baseIntervalDays === 'number' ? body.baseIntervalDays : item.baseIntervalDays ?? 4,
+        preferredWaterMl: typeof body.preferredWaterMl === 'number' ? body.preferredWaterMl : item.preferredWaterMl ?? 200,
+        recommendationSource: 'MANUAL',
+        recommendationSummary: 'Растение переведено из режима проращивания.',
+        recommendationGeneratedAt: new Date().toISOString()
+      } as PlantDto;
+    });
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    return {
+      ok: true,
+      plantId,
+      category: target === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_DECORATIVE' : target === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : 'HOME',
+      environmentType: target === 'OUTDOOR_ORNAMENTAL' ? 'OUTDOOR_ORNAMENTAL' : target === 'OUTDOOR_GARDEN' ? 'OUTDOOR_GARDEN' : 'INDOOR'
+    } as T;
   }
 
   if (method === 'DELETE' && /^\/api\/plants\/\d+$/.test(pathname)) {
@@ -786,7 +902,7 @@ export async function getPlantById(id: number): Promise<PlantDto> {
   return apiFetch<PlantDto>(`/api/plants/${id}`, { method: 'GET' });
 }
 
-export async function searchPlants(q: string, category?: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN"): Promise<PlantDto[]> {
+export async function searchPlants(q: string, category?: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN" | "SEED_START"): Promise<PlantDto[]> {
   const params = new URLSearchParams({ q });
   if (category) {
     params.set('category', category);
@@ -795,7 +911,7 @@ export async function searchPlants(q: string, category?: "HOME" | "OUTDOOR_DECOR
 }
 
 export async function searchPlantPresets(
-  category: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN",
+  category: "HOME" | "OUTDOOR_DECORATIVE" | "OUTDOOR_GARDEN" | "SEED_START",
   q = '',
   limit = 12
 ): Promise<PlantPresetSuggestionDto[]> {
@@ -908,6 +1024,54 @@ export async function applyWateringRecommendation(plantId: number, payload: {
 
 export async function createPlant(payload: Record<string, unknown>): Promise<PlantDto> {
   return apiFetch<PlantDto>('/api/plants', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function previewSeedRecommendation(payload: {
+  plantName: string;
+  seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
+  targetEnvironmentType: 'INDOOR' | 'OUTDOOR_ORNAMENTAL' | 'OUTDOOR_GARDEN';
+  seedContainerType?: 'CELL_TRAY' | 'SEED_TRAY' | 'PEAT_POT' | 'SMALL_POT' | 'PAPER_TOWEL' | 'WATER_PROPAGATION';
+  seedSubstrateType?: 'SEED_START_MIX' | 'COCO_COIR' | 'PEAT_MIX' | 'MINERAL_WOOL' | 'PAPER_TOWEL' | 'WATER';
+  sowingDate?: string;
+  germinationTemperatureC?: number;
+  underCover?: boolean;
+  growLight?: boolean;
+  region?: string;
+}): Promise<SeedRecommendationPreviewDto> {
+  return apiFetch<SeedRecommendationPreviewDto>('/api/seeds/recommendation/preview', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateSeedStage(plantId: number, seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT'): Promise<SeedStageUpdateDto> {
+  return apiFetch<SeedStageUpdateDto>(`/api/seeds/${plantId}/stage`, {
+    method: 'POST',
+    body: JSON.stringify({ seedStage })
+  });
+}
+
+export async function recordSeedCareAction(
+  plantId: number,
+  action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT'
+): Promise<SeedCareActionResponseDto> {
+  return apiFetch<SeedCareActionResponseDto>(`/api/seeds/${plantId}/actions`, {
+    method: 'POST',
+    body: JSON.stringify({ action })
+  });
+}
+
+export async function previewSeedMigration(plantId: number): Promise<SeedMigrationPreviewDto> {
+  return apiFetch<SeedMigrationPreviewDto>(`/api/seeds/${plantId}/migration/preview`, {
+    method: 'POST'
+  });
+}
+
+export async function migrateSeedPlant(plantId: number, payload: Record<string, unknown>): Promise<SeedMigrationApplyDto> {
+  return apiFetch<SeedMigrationApplyDto>(`/api/seeds/${plantId}/migrate`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });

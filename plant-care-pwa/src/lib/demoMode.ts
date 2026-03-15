@@ -31,7 +31,9 @@ const DEMO_PRESETS: PlantPresetSuggestionDto[] = [
   { name: 'Лаванда', category: 'OUTDOOR_DECORATIVE', popular: true },
   { name: 'Томат черри', category: 'OUTDOOR_GARDEN', popular: true },
   { name: 'Огурец', category: 'OUTDOOR_GARDEN', popular: true },
-  { name: 'Клубника', category: 'OUTDOOR_GARDEN', popular: true }
+  { name: 'Клубника', category: 'OUTDOOR_GARDEN', popular: true },
+  { name: 'Базилик (семена)', category: 'SEED_START', popular: true },
+  { name: 'Томат (семена)', category: 'SEED_START', popular: true }
 ];
 
 function nowIso() {
@@ -183,9 +185,15 @@ export function buildDemoCareAdvice(plant: PlantDto): PlantCareAdviceDto {
 
 export function buildDemoRecommendation(plant: PlantDto): WateringRecommendationPreviewDto {
   const outdoor = plant.placement === 'OUTDOOR';
+  const source = plant.recommendationSource === 'MANUAL'
+    ? 'MANUAL'
+    : outdoor ? 'WEATHER_ADJUSTED' : (plant.recommendationSource ?? 'AI');
+  const environmentType = plant.wateringProfile === 'OUTDOOR_GARDEN'
+    ? 'OUTDOOR_GARDEN'
+    : outdoor ? 'OUTDOOR_ORNAMENTAL' : 'INDOOR';
   return {
-    source: outdoor ? 'WEATHER_ADJUSTED' : (plant.recommendationSource ?? 'AI'),
-    environmentType: outdoor ? 'OUTDOOR_ORNAMENTAL' : 'INDOOR',
+    source,
+    environmentType,
     recommendedIntervalDays: Math.max(1, plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 5),
     recommendedWaterMl: Math.max(80, plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 200),
     wateringMode: outdoor ? 'SOIL_CHECK_FIRST' : 'STANDARD',
@@ -256,7 +264,7 @@ export function buildDemoWeatherForecast(city: string): WeatherForecastDto {
   };
 }
 
-export function searchDemoPlants(q: string, category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN'): PlantDto[] {
+export function searchDemoPlants(q: string, category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START'): PlantDto[] {
   const query = q.trim().toLowerCase();
   return readDemoPlants().filter((plant) => {
     const matchesCategory = !category || plant.category === category;
@@ -265,7 +273,7 @@ export function searchDemoPlants(q: string, category?: 'HOME' | 'OUTDOOR_DECORAT
   });
 }
 
-export function searchDemoPresets(category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN', q = '', limit = 12): PlantPresetSuggestionDto[] {
+export function searchDemoPresets(category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START', q = '', limit = 12): PlantPresetSuggestionDto[] {
   const query = q.trim().toLowerCase();
   return DEMO_PRESETS.filter((item) => item.category === category && (!query || item.name.toLowerCase().includes(query))).slice(0, limit);
 }
@@ -294,6 +302,24 @@ export function createDemoPlantFromPayload(payload: Record<string, unknown>): Pl
     placement,
     category: (payload.category as PlantDto['category']) ?? (placement === 'OUTDOOR' ? 'OUTDOOR_DECORATIVE' : 'HOME'),
     wateringProfile: (payload.wateringProfile as PlantDto['wateringProfile']) ?? (placement === 'OUTDOOR' ? 'OUTDOOR_ORNAMENTAL' : 'INDOOR'),
+    seedStage: (payload.seedStage as PlantDto['seedStage']) ?? null,
+    targetEnvironmentType: (payload.targetEnvironmentType as PlantDto['targetEnvironmentType']) ?? null,
+    seedContainerType: (payload.seedContainerType as PlantDto['seedContainerType']) ?? null,
+    seedSubstrateType: (payload.seedSubstrateType as PlantDto['seedSubstrateType']) ?? null,
+    sowingDate: typeof payload.sowingDate === 'string' ? payload.sowingDate : null,
+    underCover: typeof payload.underCover === 'boolean' ? payload.underCover : null,
+    growLight: typeof payload.growLight === 'boolean' ? payload.growLight : null,
+    germinationTemperatureC: Number.isFinite(Number(payload.germinationTemperatureC)) ? Number(payload.germinationTemperatureC) : null,
+    expectedGerminationDaysMin: Number.isFinite(Number(payload.expectedGerminationDaysMin)) ? Number(payload.expectedGerminationDaysMin) : null,
+    expectedGerminationDaysMax: Number.isFinite(Number(payload.expectedGerminationDaysMax)) ? Number(payload.expectedGerminationDaysMax) : null,
+    recommendedCheckIntervalHours: Number.isFinite(Number(payload.recommendedCheckIntervalHours)) ? Number(payload.recommendedCheckIntervalHours) : null,
+    recommendedWateringMode: (payload.recommendedWateringMode as PlantDto['recommendedWateringMode']) ?? null,
+    seedCareMode: typeof payload.seedCareMode === 'string' ? payload.seedCareMode : null,
+    seedSummary: typeof payload.seedSummary === 'string' ? payload.seedSummary : null,
+    seedCareSource: typeof payload.seedCareSource === 'string' ? payload.seedCareSource : null,
+    seedReasoning: Array.isArray(payload.seedReasoning) ? (payload.seedReasoning as string[]) : [],
+    seedWarnings: Array.isArray(payload.seedWarnings) ? (payload.seedWarnings as string[]) : [],
+    seedActions: [],
     type: typeof payload.type === 'string' ? payload.type : 'DEFAULT',
     region: typeof payload.region === 'string' ? payload.region : 'Санкт-Петербург',
     containerType: (payload.containerType as PlantDto['containerType']) ?? (placement === 'OUTDOOR' ? 'CONTAINER' : 'POT'),

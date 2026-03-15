@@ -1,0 +1,33 @@
+package com.example.plantbot.controller.dto;
+
+import com.example.plantbot.domain.OutdoorSoilType;
+import com.example.plantbot.domain.PlantContainerType;
+import com.example.plantbot.domain.PlantEnvironmentType;
+import com.example.plantbot.domain.PlantGrowthStage;
+import com.example.plantbot.domain.PlantPlacement;
+import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.SunExposure;
+
+public record SeedMigrationApplyRequest(
+    PlantEnvironmentType targetEnvironmentType,
+    String name,
+    Double potVolumeLiters,
+    Integer baseIntervalDays,
+    Integer preferredWaterMl,
+    PlantType type,
+    PlantPlacement placement,
+    String region,
+    PlantContainerType containerType,
+    Double containerVolumeLiters,
+    String cropType,
+    PlantGrowthStage growthStage,
+    Boolean greenhouse,
+    Boolean dripIrrigation,
+    Double outdoorAreaM2,
+    OutdoorSoilType outdoorSoilType,
+    SunExposure sunExposure,
+    Boolean mulched,
+    Boolean perennial,
+    Boolean winterDormancyEnabled
+) {
+}

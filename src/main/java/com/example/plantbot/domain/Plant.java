@@ -66,6 +66,51 @@ public class Plant {
   @Enumerated(EnumType.STRING)
   private GrowthStage growthStageV2;
 
+  @Enumerated(EnumType.STRING)
+  private SeedStage seedStage;
+
+  @Enumerated(EnumType.STRING)
+  private PlantEnvironmentType targetEnvironmentType;
+
+  @Enumerated(EnumType.STRING)
+  private SeedContainerType seedContainerType;
+
+  @Enumerated(EnumType.STRING)
+  private SeedSubstrateType seedSubstrateType;
+
+  private LocalDate sowingDate;
+
+  private Boolean underCover;
+
+  private Boolean growLight;
+
+  private Double germinationTemperatureC;
+
+  private Integer expectedGerminationDaysMin;
+
+  private Integer expectedGerminationDaysMax;
+
+  private Integer recommendedCheckIntervalHours;
+
+  @Enumerated(EnumType.STRING)
+  private SeedWateringMode recommendedWateringMode;
+
+  private String seedCareMode;
+
+  @Column(length = 1024)
+  private String seedSummary;
+
+  @Column(length = 4000)
+  private String seedReasoningJson;
+
+  @Column(length = 4000)
+  private String seedWarningsJson;
+
+  private String seedCareSource;
+
+  @Column(length = 4000)
+  private String seedActionHistoryJson;
+
   private Boolean greenhouse;
 
   private Boolean dripIrrigation;

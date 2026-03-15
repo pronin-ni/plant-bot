@@ -53,6 +53,9 @@ public class PlantCategoryMigrationService {
   }
 
   private PlantCategory inferCategory(Plant plant) {
+    if (plant.getCategory() == PlantCategory.SEED_START) {
+      return PlantCategory.SEED_START;
+    }
     if (plant.getPlacement() != PlantPlacement.OUTDOOR) {
       return PlantCategory.HOME;
     }
