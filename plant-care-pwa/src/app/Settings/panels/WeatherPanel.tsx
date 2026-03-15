@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
+  ApiError,
   getWeatherCurrent,
   getWeatherForecast,
   updateCity,
@@ -11,13 +12,13 @@ import { useAuthStore } from '@/lib/store';
 import { hapticImpact } from '@/lib/telegram';
 import type { WeatherCurrentDto, WeatherForecastDto } from '@/types/api';
 
-import { fetchOpenMeteoCities, SETTINGS_CITY_KEY } from './panel-shared';
+import { fetchOpenMeteoCities, normalizeWeatherCity, SETTINGS_CITY_KEY } from './panel-shared';
 
 export function WeatherPanel() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  const [city, setCity] = useState<string>(() => localStorage.getItem(SETTINGS_CITY_KEY) ?? '');
+  const [city, setCity] = useState<string>(() => normalizeWeatherCity(localStorage.getItem(SETTINGS_CITY_KEY)) ?? '');
   const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
   const [current, setCurrent] = useState<WeatherCurrentDto | null>(null);
   const [forecast, setForecast] = useState<WeatherForecastDto | null>(null);
@@ -54,12 +55,13 @@ export function WeatherPanel() {
   };
 
   useEffect(() => {
-    const storedCity = localStorage.getItem(SETTINGS_CITY_KEY);
+    const storedCity = normalizeWeatherCity(localStorage.getItem(SETTINGS_CITY_KEY));
     if (storedCity) {
       setCity(storedCity);
       return;
     }
-    const authCity = useAuthStore.getState().city;
+    localStorage.removeItem(SETTINGS_CITY_KEY);
+    const authCity = normalizeWeatherCity(useAuthStore.getState().city);
     if (authCity) {
       setCity(authCity);
       localStorage.setItem(SETTINGS_CITY_KEY, authCity);
@@ -68,8 +70,8 @@ export function WeatherPanel() {
 
     void validateTelegramAuth()
       .then((res) => {
-        if (res?.city) {
-          const normalized = res.city.trim();
+        const normalized = normalizeWeatherCity(res?.city);
+        if (normalized) {
           setCity(normalized);
           localStorage.setItem(SETTINGS_CITY_KEY, normalized);
           syncAuthCity(res);
@@ -96,7 +98,7 @@ export function WeatherPanel() {
   }, [city]);
 
   const preview = async () => {
-    const normalizedCity = city.trim();
+    const normalizedCity = normalizeWeatherCity(city);
     if (!normalizedCity) {
       setStatus('Укажите город для предпросмотра.');
       return;
@@ -115,7 +117,7 @@ export function WeatherPanel() {
       hapticImpact('light');
     } catch (error) {
       console.error(error);
-      setStatus('Не удалось сохранить город или загрузить погоду.');
+      setStatus(error instanceof ApiError ? error.message : 'Не удалось сохранить город или загрузить погоду.');
     } finally {
       setLoadingPreview(false);
     }

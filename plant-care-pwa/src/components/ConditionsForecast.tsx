@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CloudFog, CloudRain, CloudSun, Droplets, Sun, ThermometerSun, TriangleAlert } from 'lucide-react';
 
 import { getPlantConditions, getWeatherCurrent } from '@/lib/api';
+import { normalizeWeatherCity } from '@/app/Settings/panels/panel-shared';
 import { useAuthStore } from '@/lib/store';
 
 interface ConditionsForecastProps {
@@ -54,7 +55,10 @@ export function ConditionsForecast({ plantId, plantName }: ConditionsForecastPro
 
   useEffect(() => {
     const stored = localStorage.getItem('settings:weather-city');
-    const next = (stored ?? authCity ?? '').trim();
+    const next = normalizeWeatherCity(stored) ?? normalizeWeatherCity(authCity);
+    if (!next && stored) {
+      localStorage.removeItem('settings:weather-city');
+    }
     setWeatherCity(next || null);
   }, [authCity]);
 

@@ -7,6 +7,7 @@ import { PlantCard } from '@/components/PlantCard';
 import { CategoryTabs, type PlantCategoryFilter } from '@/components/CategoryTabs';
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { Button } from '@/components/ui/button';
+import { normalizeWeatherCity } from '@/app/Settings/panels/panel-shared';
 import { getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
 import { parseDateOnly } from '@/lib/date';
 import {
@@ -274,7 +275,10 @@ export function PlantsList() {
 
   useEffect(() => {
     const stored = localStorage.getItem('settings:weather-city');
-    const next = (stored ?? authCity ?? '').trim();
+    const next = normalizeWeatherCity(stored) ?? normalizeWeatherCity(authCity);
+    if (!next && stored) {
+      localStorage.removeItem('settings:weather-city');
+    }
     setWeatherCity(next || null);
   }, [authCity]);
 

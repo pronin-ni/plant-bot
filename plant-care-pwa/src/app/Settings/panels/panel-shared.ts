@@ -4,6 +4,21 @@ export const NOTIFICATION_PATTERN_KEY = 'settings:notification-pattern';
 
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? 'dev';
 
+export function normalizeWeatherCity(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  const lowered = normalized.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') {
+    return null;
+  }
+  return normalized;
+}
+
 export async function fetchOpenMeteoCities(query: string, signal?: AbortSignal): Promise<string[]> {
   if (!query.trim()) {
     return [];

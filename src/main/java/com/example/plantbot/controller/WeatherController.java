@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @RestController
@@ -76,6 +77,9 @@ public class WeatherController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
+    if (!hasWeatherLocation(targetCity, user.getCityLat(), user.getCityLon())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Сначала укажите город, чтобы получать погоду");
+    }
     var result = weatherService.fetchWeather(targetCity, user.getCityLat(), user.getCityLon(), 3, null);
     Optional<WeatherData> data = Optional.ofNullable(result.current());
     if (data.isEmpty()) {
@@ -106,6 +110,9 @@ public class WeatherController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     String targetCity = city != null && !city.isBlank() ? city : user.getCity();
+    if (!hasWeatherLocation(targetCity, user.getCityLat(), user.getCityLon())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Сначала укажите город, чтобы получать прогноз погоды");
+    }
     var result = weatherService.fetchWeather(targetCity, user.getCityLat(), user.getCityLon(), days, null);
     List<WeatherForecastDay> items = result.forecast() == null ? List.of() : result.forecast();
     if (items.isEmpty()) {
@@ -152,5 +159,20 @@ public class WeatherController {
   }
 
   public record ProviderRequest(String provider) {
+  }
+
+  private boolean hasWeatherLocation(String city, Double lat, Double lon) {
+    if (lat != null && lon != null) {
+      return true;
+    }
+    if (city == null) {
+      return false;
+    }
+    String normalized = city.trim();
+    if (normalized.isBlank()) {
+      return false;
+    }
+    String lowered = normalized.toLowerCase(Locale.ROOT);
+    return !"null".equals(lowered) && !"undefined".equals(lowered);
   }
 }

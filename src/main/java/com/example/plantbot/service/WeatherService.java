@@ -53,6 +53,20 @@ public class WeatherService {
   public WeatherFetchResult fetchWeather(String city, Double lat, Double lon, int days, WeatherProvider requestedProvider) {
     int safeDays = Math.max(1, Math.min(days, 7));
     ProviderPlan plan = resolvePlan(requestedProvider);
+    if (!hasLocation(city, lat, lon)) {
+      return new WeatherFetchResult(
+          false,
+          false,
+          false,
+          false,
+          null,
+          plan.primary(),
+          null,
+          List.of(),
+          Instant.now(),
+          "skipped-no-location"
+      );
+    }
     String key = cacheKey(city, lat, lon) + ":" + plan.cacheKey();
     Instant now = Instant.now();
     CachedWeather cached = cache.get(key);
@@ -149,7 +163,7 @@ public class WeatherService {
   }
 
   public double getAccumulatedRainMm(String city, Double lat, Double lon, int hours) {
-    if (hours <= 0) {
+    if (hours <= 0 || !hasLocation(city, lat, lon)) {
       return 0.0;
     }
     String key = cacheKey(city, lat, lon);
@@ -247,8 +261,31 @@ public class WeatherService {
     if (lat != null && lon != null) {
       return String.format(Locale.ROOT, "geo:%.5f:%.5f", lat, lon);
     }
-    String normalized = city == null ? "" : city.trim().toLowerCase(Locale.ROOT).replace('ё', 'е');
+    String normalizedCity = normalizeCity(city);
+    String normalized = normalizedCity == null ? "" : normalizedCity.toLowerCase(Locale.ROOT).replace('ё', 'е');
     return "city:" + normalized;
+  }
+
+  private boolean hasLocation(String city, Double lat, Double lon) {
+    if (lat != null && lon != null) {
+      return true;
+    }
+    return normalizeCity(city) != null;
+  }
+
+  private String normalizeCity(String city) {
+    if (city == null) {
+      return null;
+    }
+    String normalized = city.trim();
+    if (normalized.isBlank()) {
+      return null;
+    }
+    String lowered = normalized.toLowerCase(Locale.ROOT);
+    if ("null".equals(lowered) || "undefined".equals(lowered)) {
+      return null;
+    }
+    return normalized;
   }
 
   private String cacheKeyOnlyLocation(String key) {

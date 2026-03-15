@@ -573,8 +573,13 @@ public class MiniAppController {
     if (request == null || request.city() == null || request.city().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city обязателен");
     }
-    user.setCity(request.city().trim());
-    user.setCityDisplayName(request.city().trim());
+    String normalizedCity = request.city().trim();
+    String lowered = normalizedCity.toLowerCase(java.util.Locale.ROOT);
+    if ("null".equals(lowered) || "undefined".equals(lowered)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите нормальное название города");
+    }
+    user.setCity(normalizedCity);
+    user.setCityDisplayName(normalizedCity);
     user = userService.save(user);
     return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
