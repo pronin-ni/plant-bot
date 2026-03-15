@@ -106,13 +106,21 @@ self.addEventListener('push', (event) => {
     url,
     receivedAt: Date.now()
   };
+  const vibrate = Array.isArray(payload.vibrate)
+    ? payload.vibrate.filter((value) => Number.isFinite(value) && value >= 0).map((value) => Number(value))
+    : undefined;
   const options = {
     body,
-    icon: getScopedUrl('icons/icon-192.svg'),
-    badge: getScopedUrl('icons/icon-192.svg'),
+    icon: payload.icon || getScopedUrl('icons/icon-192.svg'),
+    badge: payload.badge || getScopedUrl('icons/icon-192.svg'),
     tag,
+    renotify: Boolean(payload.renotify),
+    requireInteraction: Boolean(payload.requireInteraction),
+    timestamp: Number.isFinite(payload.timestamp) ? Number(payload.timestamp) : Date.now(),
+    vibrate: vibrate && vibrate.length ? vibrate : undefined,
     data: {
-      url
+      url,
+      plantId: payload.plantId || null
     }
   };
   event.waitUntil(

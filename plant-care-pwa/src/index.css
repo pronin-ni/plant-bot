@@ -4,25 +4,25 @@
 @tailwind components;
 @tailwind utilities;
 
-/* T4: дефолтные переменные темы (Light Forest) до инициализации Zustand/JS. */
+/* T2: дефолтные переменные темы (Dark Moss) до инициализации Zustand/JS. */
 :root {
-  --background: 105 29% 97%;
-  --foreground: 129 41% 16%;
-  --card: 125 39% 94%;
-  --card-foreground: 129 41% 16%;
-  --primary: 122 39% 49%;
-  --primary-foreground: 129 41% 16%;
-  --secondary: 0 0% 100%;
-  --secondary-foreground: 129 41% 16%;
-  --muted: 0 0% 100%;
-  --muted-foreground: 127 8% 45%;
-  --accent: 123 38% 64%;
-  --accent-foreground: 129 41% 16%;
-  --border: 120 21% 89%;
-  --input: 120 21% 89%;
-  --ring: 122 39% 49%;
-  --destructive: 348 68% 51%;
-  --destructive-foreground: 0 0% 100%;
+  --background: 140 16% 7%;
+  --foreground: 130 41% 93%;
+  --card: 136 14% 14%;
+  --card-foreground: 130 41% 93%;
+  --primary: 123 45% 34%;
+  --primary-foreground: 130 41% 93%;
+  --secondary: 133 14% 11%;
+  --secondary-foreground: 130 41% 93%;
+  --muted: 133 14% 11%;
+  --muted-foreground: 135 11% 69%;
+  --accent: 124 38% 57%;
+  --accent-foreground: 130 41% 93%;
+  --border: 126 14% 20%;
+  --input: 126 14% 20%;
+  --ring: 123 45% 34%;
+  --destructive: 347 100% 74%;
+  --destructive-foreground: 142 35% 8%;
 }
 
 html {
@@ -97,32 +97,50 @@ html {
   }
 
   .theme-surface-1 {
-    background: hsl(var(--card) / 0.92);
-    border-color: hsl(var(--border) / 0.72);
+    background:
+      linear-gradient(180deg, hsl(var(--foreground) / 0.028), transparent 28%),
+      hsl(var(--card) / 0.92);
+    border-color: hsl(var(--border) / 0.7);
     color: hsl(var(--card-foreground));
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    box-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+    box-shadow:
+      inset 0 1px 0 hsl(var(--foreground) / 0.05),
+      0 14px 36px hsl(var(--background) / 0.18),
+      0 2px 8px hsl(var(--background) / 0.08);
   }
 
   .theme-surface-2 {
-    background: hsl(var(--card) / 0.86);
-    border-color: hsl(var(--border) / 0.66);
+    background:
+      linear-gradient(180deg, hsl(var(--foreground) / 0.024), transparent 28%),
+      hsl(var(--card) / 0.86);
+    border-color: hsl(var(--border) / 0.64);
     color: hsl(var(--card-foreground));
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    box-shadow:
+      inset 0 1px 0 hsl(var(--foreground) / 0.045),
+      0 10px 24px hsl(var(--background) / 0.12);
   }
 
   .theme-surface-subtle {
-    background: hsl(var(--secondary) / 0.92);
-    border-color: hsl(var(--border) / 0.68);
+    background:
+      linear-gradient(180deg, hsl(var(--foreground) / 0.02), transparent 30%),
+      hsl(var(--secondary) / 0.92);
+    border-color: hsl(var(--border) / 0.64);
     color: hsl(var(--secondary-foreground));
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
   }
 
   .theme-pill-active {
-    background: hsl(var(--primary) / 0.18);
-    border-color: hsl(var(--primary) / 0.52);
+    background:
+      linear-gradient(180deg, hsl(var(--foreground) / 0.028), transparent 40%),
+      hsl(var(--primary) / 0.18);
+    border-color: hsl(var(--primary) / 0.46);
     color: hsl(var(--foreground));
+    box-shadow:
+      inset 0 1px 0 hsl(var(--foreground) / 0.06),
+      0 8px 22px hsl(var(--primary) / 0.14);
   }
 
   .theme-badge-info {
@@ -135,25 +153,32 @@ html {
     background: color-mix(in srgb, hsl(var(--primary)) 18%, transparent);
     border-color: color-mix(in srgb, hsl(var(--primary)) 36%, transparent);
     color: hsl(var(--foreground));
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
   }
 
   .theme-badge-warning {
     background: color-mix(in srgb, #f59e0b 16%, hsl(var(--card)) 84%);
     border-color: color-mix(in srgb, #f59e0b 28%, hsl(var(--border)) 72%);
     color: hsl(var(--foreground));
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
   }
 
   .theme-badge-danger {
     background: hsl(var(--destructive) / 0.12);
     border-color: hsl(var(--destructive) / 0.26);
     color: hsl(var(--destructive));
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.03);
   }
 
   .theme-field {
-    background: hsl(var(--secondary) / 0.94);
+    background:
+      linear-gradient(180deg, hsl(var(--foreground) / 0.02), transparent 34%),
+      hsl(var(--secondary) / 0.94);
     border-color: hsl(var(--border) / 0.72);
     color: hsl(var(--foreground));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+    box-shadow:
+      inset 0 1px 0 hsl(var(--foreground) / 0.06),
+      0 1px 0 hsl(var(--background) / 0.06);
   }
 
   .theme-field::placeholder {
@@ -176,6 +201,46 @@ html {
     background: hsl(var(--destructive) / 0.1);
     border-color: hsl(var(--destructive) / 0.24);
     color: hsl(var(--foreground));
+  }
+
+  .theme-surface-success {
+    background: color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)) 88%);
+    border-color: color-mix(in srgb, hsl(var(--primary)) 24%, hsl(var(--border)) 76%);
+    color: hsl(var(--foreground));
+  }
+
+  .theme-surface-warning {
+    background: color-mix(in srgb, #f59e0b 12%, hsl(var(--card)) 88%);
+    border-color: color-mix(in srgb, #f59e0b 24%, hsl(var(--border)) 76%);
+    color: hsl(var(--foreground));
+  }
+
+  .theme-surface-danger {
+    background: color-mix(in srgb, hsl(var(--destructive)) 10%, hsl(var(--card)) 90%);
+    border-color: color-mix(in srgb, hsl(var(--destructive)) 24%, hsl(var(--border)) 76%);
+    color: hsl(var(--foreground));
+  }
+
+  .theme-surface-info {
+    background: color-mix(in srgb, hsl(var(--accent)) 12%, hsl(var(--card)) 88%);
+    border-color: color-mix(in srgb, hsl(var(--accent)) 24%, hsl(var(--border)) 76%);
+    color: hsl(var(--foreground));
+  }
+
+  .theme-text-success {
+    color: color-mix(in srgb, hsl(var(--foreground)) 70%, hsl(var(--primary)) 30%);
+  }
+
+  .theme-text-warning {
+    color: color-mix(in srgb, hsl(var(--foreground)) 72%, #b45309 28%);
+  }
+
+  .theme-text-danger {
+    color: color-mix(in srgb, hsl(var(--foreground)) 66%, hsl(var(--destructive)) 34%);
+  }
+
+  .theme-text-info {
+    color: color-mix(in srgb, hsl(var(--foreground)) 72%, hsl(var(--accent)) 28%);
   }
 
   .theme-overlay-scrim {

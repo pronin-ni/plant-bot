@@ -38,7 +38,7 @@ export function ConditionsWidget({ plantId, compact = false }: { plantId: number
       </div>
 
       {conditions.illuminanceWarning ? (
-        <p className="mt-2 inline-flex items-center gap-1 text-[12px] text-amber-600 dark:text-amber-300">
+        <p className="theme-text-warning mt-2 inline-flex items-center gap-1 text-[12px]">
           <AlertTriangle className="h-3.5 w-3.5" />
           {conditions.illuminanceWarning}
         </p>
@@ -63,7 +63,7 @@ function Metric({
   value: string;
 }) {
   return (
-    <div className="rounded-ios-button border border-ios-border/60 bg-white/55 p-2 dark:bg-zinc-900/50">
+    <div className="theme-surface-subtle rounded-ios-button border p-2">
       <div className="inline-flex items-center gap-1 text-[11px] text-ios-subtext">
         <Icon className="h-3.5 w-3.5 text-ios-accent" />
         {label}

@@ -344,7 +344,7 @@ export function PlantsList() {
   if (plantsQuery.isError) {
     return (
       <div className="space-y-3 py-8 text-center">
-        <p className="text-ios-body text-red-500">Не удалось загрузить список растений.</p>
+        <p className="theme-text-danger text-ios-body">Не удалось загрузить список растений.</p>
         <Button
           variant="secondary"
           size="sm"
@@ -399,13 +399,13 @@ export function PlantsList() {
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="theme-surface-subtle rounded-2xl px-3 py-2.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]">
                 <p className="text-[12px] text-ios-subtext">Нужно полить</p>
-                <p className={`mt-1 text-2xl font-semibold ${needWaterCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-300'}`}>
+                <p className={`mt-1 text-2xl font-semibold ${needWaterCount > 0 ? 'theme-text-warning' : 'theme-text-success'}`}>
                   <AnimatedCount value={needWaterCount} />
                 </p>
               </div>
               <div className="theme-surface-subtle rounded-2xl px-3 py-2.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]">
                 <p className="text-[12px] text-ios-subtext">Просрочено</p>
-                <p className={`mt-1 text-2xl font-semibold ${overdueCount > 0 ? 'text-red-600 dark:text-red-300' : 'text-ios-text'}`}>
+                <p className={`mt-1 text-2xl font-semibold ${overdueCount > 0 ? 'theme-text-danger' : 'text-ios-text'}`}>
                   <AnimatedCount value={overdueCount} />
                 </p>
               </div>
@@ -464,7 +464,7 @@ export function PlantsList() {
               type="button"
               className={`touch-target inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-semibold transition-transform duration-150 active:scale-[0.98] ${
                 onlyOverdue
-                  ? 'border-red-400/70 bg-red-500/15 text-red-600 dark:text-red-300'
+                  ? 'theme-surface-danger theme-text-danger'
                   : 'theme-surface-subtle text-ios-subtext'
               }`}
               onClick={() => {
@@ -505,14 +505,14 @@ export function PlantsList() {
         <AnimatePresence>
           {isOffline ? (
             <motion.div
-              className="ios-blur-card flex items-center justify-between gap-3 border-amber-300/50 bg-amber-100/45 p-3 text-[12px] text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/25 dark:text-amber-200"
+              className="ios-blur-card theme-surface-warning flex items-center justify-between gap-3 p-3 text-[12px]"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
             >
               <span>Оффлайн-режим: показываем кеш.</span>
-              <span className="rounded-full bg-amber-500/18 px-2 py-0.5 font-semibold">В очереди: {pendingMutations}</span>
+              <span className="theme-badge-warning rounded-full px-2 py-0.5 font-semibold">В очереди: {pendingMutations}</span>
             </motion.div>
           ) : null}
         </AnimatePresence>

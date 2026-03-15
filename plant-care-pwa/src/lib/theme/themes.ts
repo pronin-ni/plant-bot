@@ -52,7 +52,7 @@ function getDestructiveHex(mode: ThemeMode): string {
 }
 
 // Значения по умолчанию из задачи.
-export const DEFAULT_THEME_ID: ThemeId = 'light-forest';
+export const DEFAULT_THEME_ID: ThemeId = 'dark-moss';
 
 const BASE_THEMES: Record<ThemeId, AppTheme> = {
   'light-forest': {
@@ -156,10 +156,6 @@ export function getThemeById(themeId: ThemeId): AppTheme {
 
 export function getDefaultTheme(): AppTheme {
   return getThemeById(DEFAULT_THEME_ID);
-}
-
-export function resolveSystemThemeId(prefersDark: boolean): ThemeId {
-  return prefersDark ? 'dark-moss' : 'light-forest';
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

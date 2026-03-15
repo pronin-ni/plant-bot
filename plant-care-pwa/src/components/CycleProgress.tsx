@@ -4,7 +4,7 @@ import { Check, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
-import { hapticImpact } from '@/lib/telegram';
+import { impactHeavy, success } from '@/lib/haptics';
 import type { PlantDto } from '@/types/api';
 
 interface CycleProgressProps {
@@ -34,12 +34,12 @@ function getDaysLeft(plant: PlantDto): number {
 
 function urgencyClass(daysLeft: number): string {
   if (daysLeft <= 0) {
-    return 'text-red-500 dark:text-red-400';
+    return 'theme-text-danger';
   }
   if (daysLeft <= 2) {
-    return 'text-amber-500 dark:text-amber-400';
+    return 'theme-text-warning';
   }
-  return 'text-emerald-600 dark:text-emerald-400';
+  return 'theme-text-success';
 }
 
 function formatNextLabel(plant: PlantDto): string {
@@ -101,14 +101,14 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater, on
       return;
     }
     setRunning(true);
-    hapticImpact('rigid');
-    navigator.vibrate?.(300);
+    impactHeavy();
     try {
       await onWater();
       setBurst(true);
       setConfirmed(true);
       setWave(true);
       setAliveText(true);
+      success();
       onSuccess?.();
       window.setTimeout(() => setBurst(false), 700);
       window.setTimeout(() => setWave(false), 820);
@@ -218,7 +218,7 @@ export function CycleProgress({ plant, progress, isWatering = false, onWater, on
         <AnimatePresence>
           {aliveText ? (
             <motion.span
-              className="pointer-events-none absolute left-1/2 top-[-14px] z-20 -translate-x-1/2 whitespace-nowrap text-xs font-semibold text-emerald-600 dark:text-emerald-300"
+              className="theme-text-success pointer-events-none absolute left-1/2 top-[-14px] z-20 -translate-x-1/2 whitespace-nowrap text-xs font-semibold"
               initial={{ opacity: 0, y: 8, scale: 0.94 }}
               animate={{ opacity: 1, y: -10, scale: 1 }}
               exit={{ opacity: 0, y: -18 }}

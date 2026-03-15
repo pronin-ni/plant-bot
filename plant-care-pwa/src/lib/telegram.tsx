@@ -63,44 +63,15 @@ export function applyTelegramThemeParams() {
   const root = document.documentElement;
   if (themeParams.bg_color) {
     root.style.setProperty('--tg-theme-bg-color', themeParams.bg_color);
-    root.style.setProperty('--ios-bg-color', themeParams.bg_color);
-    const bgTriplet = hexToRgbTriplet(themeParams.bg_color);
-    if (bgTriplet) {
-      root.style.setProperty('--ios-bg', bgTriplet);
-    }
   }
   if (themeParams.text_color) {
     root.style.setProperty('--tg-theme-text-color', themeParams.text_color);
-    root.style.setProperty('--ios-text-color', themeParams.text_color);
-    const textTriplet = hexToRgbTriplet(themeParams.text_color);
-    if (textTriplet) {
-      root.style.setProperty('--ios-text', textTriplet);
-    }
   }
   if (themeParams.hint_color) {
     root.style.setProperty('--tg-theme-hint-color', themeParams.hint_color);
-    root.style.setProperty('--ios-subtext-color', themeParams.hint_color);
-    const hintTriplet = hexToRgbTriplet(themeParams.hint_color);
-    if (hintTriplet) {
-      root.style.setProperty('--ios-subtext', hintTriplet);
-    }
   }
   if (themeParams.secondary_bg_color) {
     root.style.setProperty('--tg-theme-secondary-bg-color', themeParams.secondary_bg_color);
-    root.style.setProperty('--ios-card-color', themeParams.secondary_bg_color);
-    const cardTriplet = hexToRgbTriplet(themeParams.secondary_bg_color);
-    if (cardTriplet) {
-      root.style.setProperty('--ios-card', cardTriplet);
-    }
-  }
-  if (themeParams.button_color) {
-    root.style.setProperty('--ios-accent', themeParams.button_color);
-  }
-
-  if (webApp.colorScheme === 'dark') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
   }
 }
 
@@ -129,21 +100,6 @@ export function useTelegramThemeSync() {
       webApp.offEvent?.('themeChanged', handler);
     };
   }, []);
-}
-
-function hexToRgbTriplet(hex: string): string | null {
-  const normalized = hex.trim().replace('#', '');
-  if (!/^[\da-fA-F]{3}([\da-fA-F]{3})?$/.test(normalized)) {
-    return null;
-  }
-  const full = normalized.length === 3
-    ? normalized.split('').map((ch) => ch + ch).join('')
-    : normalized;
-  const intValue = Number.parseInt(full, 16);
-  const r = (intValue >> 16) & 255;
-  const g = (intValue >> 8) & 255;
-  const b = intValue & 255;
-  return `${r} ${g} ${b}`;
 }
 
 export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'light') {

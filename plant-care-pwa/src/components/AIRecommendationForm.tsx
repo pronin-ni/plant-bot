@@ -73,7 +73,7 @@ export function AIRecommendationForm({
     : null;
 
   return (
-    <div className="space-y-3 rounded-ios-button border border-ios-border/60 bg-white/60 p-3 dark:bg-zinc-900/45">
+    <div className="theme-surface-1 space-y-3 rounded-ios-button border p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-ios-accent" />
@@ -98,11 +98,11 @@ export function AIRecommendationForm({
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-2 dark:bg-zinc-900/50">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           <p className="text-ios-subtext">Свет</p>
           <p className="font-medium">{light || 'рассеянный'}</p>
         </div>
-        <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-2 dark:bg-zinc-900/50">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           <p className="text-ios-subtext">Почва</p>
           <p className="font-medium">{soil || 'универсальная'}</p>
         </div>
@@ -148,10 +148,10 @@ export function AIRecommendationForm({
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <div className="rounded-ios-button border border-ios-border/60 bg-white/65 px-3 py-2 text-xs dark:bg-zinc-900/50">
+          <div className="theme-surface-subtle rounded-ios-button border px-3 py-2 text-xs">
             Интервал: <b>{effectiveInterval} дн.</b>
           </div>
-          <div className="rounded-ios-button border border-ios-border/60 bg-white/65 px-3 py-2 text-xs dark:bg-zinc-900/50">
+          <div className="theme-surface-subtle rounded-ios-button border px-3 py-2 text-xs">
             Объём: <b>{effectiveVolume} мл</b>
           </div>
           <Button
@@ -166,7 +166,7 @@ export function AIRecommendationForm({
         </div>
       )}
 
-      <div className="rounded-ios-button border border-ios-border/60 bg-white/65 p-2 dark:bg-zinc-900/50">
+      <div className="theme-surface-subtle rounded-ios-button border p-2">
         <p className="mb-2 text-xs text-ios-subtext">Предпросмотр календаря поливов</p>
         <div className="flex items-end gap-2">
           {previewDates.map((item, index) => (

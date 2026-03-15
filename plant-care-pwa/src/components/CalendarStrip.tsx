@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { hapticImpact, hapticSelectionChanged } from '@/lib/telegram';
+import { impactLight, selection } from '@/lib/haptics';
 import { useMotionGuard } from '@/lib/motion';
 import { startOfLocalDay, toLocalDateKey } from '@/lib/date';
 
@@ -80,9 +80,9 @@ export function CalendarStrip({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
+            className="theme-surface-subtle touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)]"
             onClick={() => {
-              hapticSelectionChanged();
+              selection();
               onShiftWindow(-7);
             }}
             aria-label="Предыдущие дни"
@@ -91,9 +91,9 @@ export function CalendarStrip({
           </button>
           <button
             type="button"
-            className="touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border border-ios-border/55 bg-white/65 p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)] dark:bg-zinc-900/60"
+            className="theme-surface-subtle touch-target android-ripple inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full border p-3.5 text-ios-subtext shadow-[0_2px_8px_rgba(15,23,42,0.10)]"
             onClick={() => {
-              hapticSelectionChanged();
+              selection();
               onShiftWindow(7);
             }}
             aria-label="Следующие дни"
@@ -111,10 +111,10 @@ export function CalendarStrip({
           dragConstraints={{ left: 0, right: 0 }}
           onDragEnd={(_, info) => {
             if (info.offset.x <= -64) {
-              hapticImpact('light');
+              impactLight();
               onShiftWindow(7);
             } else if (info.offset.x >= 64) {
-              hapticImpact('light');
+              impactLight();
               onShiftWindow(-7);
             }
           }}
@@ -132,22 +132,22 @@ export function CalendarStrip({
                 key={day.dayKey}
                 type="button"
                 onClick={() => {
-                  hapticSelectionChanged();
+                  selection();
                   onSelectDate(day.dayKey);
                 }}
                 className={`relative min-w-[78px] shrink-0 overflow-hidden rounded-2xl border p-2.5 text-left transition ${
                   day.isSelected
-                    ? 'border-ios-accent/55 bg-ios-accent/12 shadow-[0_8px_22px_rgba(52,199,89,0.18)]'
+                    ? 'theme-pill-active shadow-[0_8px_22px_rgba(52,199,89,0.18)]'
                     : day.overdue
-                      ? 'border-red-300/60 bg-red-500/10'
+                      ? 'theme-surface-danger'
                       : day.isToday
-                        ? 'border-amber-300/60 bg-amber-400/10'
-                        : 'border-ios-border/55 bg-white/60 dark:bg-zinc-900/55'
+                        ? 'theme-surface-warning'
+                        : 'theme-surface-subtle'
                 }`}
               >
                 {day.overdue ? (
                   <motion.span
-                    className="pointer-events-none absolute inset-0 bg-red-500/8"
+                    className="pointer-events-none absolute inset-0 bg-[hsl(var(--destructive)/0.08)]"
                     animate={
                       reduceMotion
                         ? { opacity: 0.35 }
@@ -168,14 +168,14 @@ export function CalendarStrip({
                   {day.dayEvents.slice(0, 3).map((event) => (
                     <span
                       key={`${day.dayKey}-${event.plantId}`}
-                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/65 bg-white/85 text-[9px] font-semibold text-ios-text dark:border-zinc-700 dark:bg-zinc-800"
+                      className="theme-surface-1 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold text-ios-text"
                       title={event.plantName}
                     >
                       {event.plantName.slice(0, 1).toUpperCase()}
                     </span>
                   ))}
                   {day.dayEvents.length > 3 ? (
-                    <span className="inline-flex h-5 min-w-[18px] items-center justify-center rounded-full border border-white/65 bg-white/85 px-1 text-[9px] font-semibold text-ios-subtext dark:border-zinc-700 dark:bg-zinc-800">
+                    <span className="theme-surface-1 inline-flex h-5 min-w-[18px] items-center justify-center rounded-full border px-1 text-[9px] font-semibold text-ios-subtext">
                       +{day.dayEvents.length - 3}
                     </span>
                   ) : null}

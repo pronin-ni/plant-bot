@@ -41,7 +41,7 @@ export function PwaInstallPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-ios-border/60 bg-white/70 p-4 text-xs text-ios-subtext dark:bg-zinc-900/50">
+      <div className="theme-surface-1 rounded-xl border p-4 text-xs text-ios-subtext">
         <p>{status}</p>
         <p className="mt-1 break-all">URL: {pwaUrl || 'VITE_PWA_URL не задан'}</p>
       </div>

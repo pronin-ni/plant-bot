@@ -44,8 +44,8 @@ export function PlantCategorySelector({
             className={cn(
               'relative overflow-hidden rounded-ios-card border p-4 text-left transition-all',
               active
-                ? 'border-ios-accent/70 bg-white/80 shadow-ios dark:bg-zinc-900/70'
-                : 'border-ios-border/60 bg-white/55 hover:border-ios-accent/35 dark:bg-zinc-900/45'
+                ? 'theme-pill-active shadow-ios'
+                : 'theme-surface-2 hover:border-ios-accent/35'
             )}
           >
             {active ? (

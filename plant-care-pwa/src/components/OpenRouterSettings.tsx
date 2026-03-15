@@ -12,7 +12,7 @@ import {
   updateAdminOpenRouterModels,
   validateOpenRouterApiKey
 } from '@/lib/api/openrouter';
-import { hapticImpact } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 import type { OpenRouterModelOption } from '@/types/api';
 
@@ -167,7 +167,7 @@ export function OpenRouterSettings() {
       const nextRequestedPhoto = normalizeModelId(photoModel) || recommendedPhotoModel;
       if (!nextRequestedText || !nextRequestedPhoto) {
         setStatus('OpenRouter не вернул подходящие fallback-модели. Обновите каталог или задайте модели вручную.');
-        hapticImpact('light');
+        impactLight();
         return;
       }
 
@@ -194,11 +194,11 @@ export function OpenRouterSettings() {
       setSuccessPulse(true);
       setTimeout(() => setSuccessPulse(false), prefersReducedMotion ? 300 : 1000);
       setStatus('Сохранено глобально для всех пользователей');
-      hapticImpact('heavy');
+      impactHeavy();
     } catch (error) {
       console.error(error);
       setStatus('Ошибка сохранения моделей');
-      hapticImpact('light');
+      hapticError();
     } finally {
       setSaving(false);
     }
@@ -216,10 +216,10 @@ export function OpenRouterSettings() {
       const res = await validateOpenRouterApiKey(normalized);
       if (res.ok) {
         setStatus(res.message || 'Ключ валиден');
-        hapticImpact('medium');
+        impactMedium();
       } else {
         setStatus(res.message || 'Ключ не прошёл проверку');
-        hapticImpact('light');
+        hapticError();
       }
     } catch (error) {
       console.error(error);
@@ -240,15 +240,15 @@ export function OpenRouterSettings() {
             ? `Тест ${type} успешен (${res.model ?? 'model'}): ${res.answer.slice(0, 88)}...`
             : `Тест ${type} успешен (${res.model ?? 'model'})`
         );
-        hapticImpact('medium');
+        impactMedium();
       } else {
         setStatus(res.message || `Тест ${type} не прошёл`);
-        hapticImpact('light');
+        hapticError();
       }
     } catch (error) {
       console.error(error);
       setStatus(`Ошибка теста ${type}`);
-      hapticImpact('light');
+      hapticError();
     } finally {
       setTestingType(null);
     }
@@ -272,31 +272,31 @@ export function OpenRouterSettings() {
   return (
     <div className="space-y-3">
       {loading ? (
-        <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 text-[12px] text-ios-subtext dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-950/70 dark:to-emerald-950/20">
+        <div className="theme-surface-1 rounded-2xl border p-3 text-[12px] text-ios-subtext">
           Загружаем глобальные настройки…
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-950/70 dark:to-emerald-950/20">
+      <div className="theme-surface-1 rounded-2xl border p-3">
         <p className="text-[12px] uppercase tracking-wide text-ios-subtext">Глобальные настройки OpenRouter</p>
         <p className="mt-1 text-sm text-ios-text">
           Модель для текста используется для вопросов без фото (чаты, полив, рекомендации).
           Модель для фото — для распознавания, диагностики и чатов с изображением.
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ios-subtext">
-          <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
             Runtime text: {runtimeModels.textModel || recommendedTextModel || 'автовыбор недоступен'}
           </span>
-          <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
             Runtime photo: {runtimeModels.photoModel || recommendedPhotoModel || 'автовыбор недоступен'}
           </span>
-          <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
             Синхр.: {formatSyncTime(lastSavedAt ?? runtimeModels.updatedAt)}
           </span>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-950/70 dark:to-emerald-950/20">
+      <div className="theme-surface-1 rounded-2xl border p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-ios-text">Проверка API ключа</p>
           <span className="text-[11px] text-ios-subtext">Не сохраняется, только проверка</span>
@@ -307,7 +307,7 @@ export function OpenRouterSettings() {
             value={keyToValidate}
             onChange={(event) => setKeyToValidate(event.target.value)}
             placeholder="sk-or-v1-..."
-            className="h-11 min-w-[220px] flex-1 rounded-ios-button border border-ios-border/60 bg-white/75 px-3 text-sm outline-none backdrop-blur-ios dark:border-emerald-500/25 dark:bg-zinc-900/60"
+            className="theme-field h-11 min-w-[220px] flex-1 rounded-ios-button border px-3 text-sm outline-none backdrop-blur-ios"
           />
           <Button variant="secondary" onClick={handleValidateKey} disabled={validatingKey || !keyToValidate.trim()}>
             {validatingKey ? 'Проверяем...' : 'Проверить ключ'}
@@ -315,11 +315,11 @@ export function OpenRouterSettings() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-ios-border/60 bg-white/65 p-3 dark:border-emerald-500/20 dark:bg-gradient-to-br dark:from-zinc-950/70 dark:to-emerald-950/20">
+      <div className="theme-surface-1 rounded-2xl border p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-ios-text">Выбор моделей</p>
           {!loading ? (
-            <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
+            <span className="theme-surface-subtle rounded-full border px-2 py-1 text-[11px] text-ios-subtext">
               Text: {textOptions.length} · Photo: {photoOptions.length}
             </span>
           ) : null}
@@ -329,7 +329,7 @@ export function OpenRouterSettings() {
               checked={showPaid}
               onChange={(e) => {
                 setShowPaid(e.target.checked);
-                hapticImpact('light');
+                impactLight();
               }}
               disabled={loading}
               className="h-4 w-4 rounded border-ios-border/60 text-ios-accent"
@@ -345,10 +345,10 @@ export function OpenRouterSettings() {
               value={textModel}
               onChange={(e) => {
                 setTextModel(normalizeModelId(e.target.value));
-                hapticImpact('light');
+                impactLight();
               }}
               disabled={loading || textOptions.length === 0}
-              className="h-11 w-full rounded-ios-button border border-ios-border/60 bg-white/70 px-3 text-sm outline-none dark:bg-zinc-900/60"
+              className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none"
             >
               {textOptions.length === 0 ? <option value="">Нет доступных text-моделей</option> : null}
               {textOptions.map((model) => (
@@ -365,10 +365,10 @@ export function OpenRouterSettings() {
               value={photoModel}
               onChange={(e) => {
                 setPhotoModel(normalizeModelId(e.target.value));
-                hapticImpact('light');
+                impactLight();
               }}
               disabled={loading || photoOptions.length === 0}
-              className="h-11 w-full rounded-ios-button border border-ios-border/60 bg-white/70 px-3 text-sm outline-none dark:bg-zinc-900/60"
+              className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none"
             >
               {photoOptions.length === 0 ? <option value="">Нет доступных vision-моделей</option> : null}
               {photoOptions.map((model) => (
@@ -404,7 +404,7 @@ export function OpenRouterSettings() {
       </div>
 
       {hasUnsavedChanges ? (
-        <p className="text-[12px] text-amber-700 dark:text-amber-300">
+        <p className="theme-text-warning text-[12px]">
           Есть несохранённые изменения моделей.
         </p>
       ) : null}
@@ -417,7 +417,7 @@ export function OpenRouterSettings() {
             animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -4 }}
             transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-            className="relative inline-flex items-center gap-2 overflow-hidden rounded-2xl border border-emerald-400/45 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
+            className="theme-surface-success relative inline-flex items-center gap-2 overflow-hidden rounded-2xl border px-3 py-2 text-sm"
           >
             {prefersReducedMotion ? null : (
               <motion.span

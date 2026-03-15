@@ -13,6 +13,7 @@ import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
+import java.net.SocketException;
 import java.util.List;
 
 @Slf4j
@@ -45,7 +46,11 @@ public class TelegramConfig {
       if (failFast) {
         throw new IllegalStateException("Failed to register Telegram bot", ex);
       }
-      log.error("Telegram bot registration failed; backend will continue without live bot polling: {}", ex.getMessage(), ex);
+      if (isNetworkUnavailable(ex)) {
+        log.warn("Telegram bot registration skipped because outbound Telegram network is unreachable. Backend will continue; PWA Web Push is unaffected.");
+      } else {
+        log.error("Telegram bot registration failed; backend will continue without live bot polling: {}", ex.getMessage(), ex);
+      }
       return;
     }
     try {
@@ -83,5 +88,19 @@ public class TelegramConfig {
     plantTelegramBot.execute(ruCommands);
 
     log.info("Telegram commands registered automatically: {} commands", commands.size());
+  }
+
+  private boolean isNetworkUnavailable(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      if (current instanceof SocketException socketException) {
+        String message = socketException.getMessage();
+        if (message != null && message.toLowerCase().contains("network is unreachable")) {
+          return true;
+        }
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 }

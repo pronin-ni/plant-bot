@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
-import { hapticSelectionChanged } from '@/lib/telegram';
+import { selection } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
 import type { AppTabKey } from '@/types/navigation';
 
@@ -36,11 +36,11 @@ export function PlatformBottomNav() {
             type="button"
             onClick={() => {
               setActiveTab(tab.key);
-              hapticSelectionChanged();
+              selection();
             }}
             className={cn(
-              'touch-target relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors android:rounded-[16px] android:py-2 android:text-[11px]',
-              isActive ? 'text-ios-accent' : 'text-ios-subtext android:text-[#5F6368]'
+              'touch-target relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors max-[359px]:px-0.5 max-[359px]:py-1 android:rounded-[16px] android:py-2 android:text-[11px]',
+              isActive ? 'text-ios-accent' : 'text-ios-subtext'
             )}
             aria-label={tab.title}
           >
@@ -49,7 +49,7 @@ export function PlatformBottomNav() {
                 layoutId={isAndroid ? 'android-tab-active' : 'ios-tab-active'}
                 className={cn(
                   'absolute inset-0 rounded-ios-tab',
-                  isAndroid ? 'bg-[#4CAF50]/18' : 'bg-ios-accent/12'
+                  'bg-[hsl(var(--primary)/0.18)]'
                 )}
                 transition={isAndroid
                   ? { duration: 0.24, ease: [0.2, 0, 0, 1] }
@@ -65,9 +65,11 @@ export function PlatformBottomNav() {
                 ? { duration: 0.2, ease: [0.2, 0, 0, 1] }
                 : { type: 'spring', stiffness: 340, damping: 27, mass: 1 }}
             >
-              <Icon className={cn('h-5 w-5', isAndroid && isActive ? 'text-[#2E7D32]' : '')} />
+              <Icon className="h-5 w-5 max-[359px]:h-[18px] max-[359px]:w-[18px]" />
             </motion.span>
-            <span className="relative z-10 mt-1 leading-none whitespace-nowrap">{tab.title}</span>
+            <span className="relative z-10 mt-1 leading-none whitespace-nowrap max-[359px]:mt-0.5 max-[359px]:text-[9px]">
+              {tab.title}
+            </span>
           </button>
         );
       })}

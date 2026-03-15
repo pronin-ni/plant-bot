@@ -29,8 +29,6 @@ export function App() {
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const selectedThemeId = useThemeStore((s) => s.selectedThemeId);
-  const useSystemTheme = useThemeStore((s) => s.useSystemTheme);
-  const setSystemTheme = useThemeStore((s) => s.setSystemTheme);
   const resolvedTheme = useThemeStore((s) => s.getResolvedTheme());
   const hasAutoAuthAttemptRef = useRef(false);
   const previousThemeIdRef = useRef<string | null>(null);
@@ -44,7 +42,7 @@ export function App() {
   useEffect(() => {
     // T4: глобально применяем тему к CSS variables + data-theme.
     applyThemeToDocument(resolvedTheme);
-  }, [resolvedTheme, selectedThemeId, useSystemTheme]);
+  }, [resolvedTheme, selectedThemeId]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -75,20 +73,6 @@ export function App() {
       window.clearTimeout(timer);
     };
   }, [prefersReducedMotion, resolvedTheme]);
-
-  useEffect(() => {
-    if (!useSystemTheme || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleSystemThemeChange = () => {
-      setSystemTheme();
-    };
-    media.addEventListener('change', handleSystemThemeChange);
-    return () => {
-      media.removeEventListener('change', handleSystemThemeChange);
-    };
-  }, [setSystemTheme, useSystemTheme]);
 
   const meMutation = useMutation({
     mutationFn: pwaMe,

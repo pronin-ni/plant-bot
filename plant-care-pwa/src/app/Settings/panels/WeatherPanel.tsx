@@ -121,7 +121,7 @@ export function WeatherPanel() {
     }
   };
 
-  const activityTone = current?.degraded ? 'text-amber-700' : 'text-emerald-700';
+  const activityTone = current?.degraded ? 'theme-text-warning' : 'theme-text-success';
   const activityLabel = current?.degraded ? 'Погода доступна с ограничениями' : current ? 'Предпросмотр готов' : 'Источник будет выбран автоматически';
   const debugSource = current?.source ?? forecast?.source ?? 'ещё не определён';
   const debugFallback = current?.staleFallbackUsed
@@ -134,7 +134,7 @@ export function WeatherPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-ios-border/50 bg-white/80 p-4 shadow-[0_16px_50px_-28px_rgba(24,44,16,0.28)]">
+      <div className="theme-surface-1 rounded-3xl border p-4 shadow-[0_16px_50px_-28px_rgba(24,44,16,0.28)]">
         <div className="space-y-4">
           <div>
             <p className="text-base font-semibold text-ios-text">Погода и город</p>
@@ -149,7 +149,7 @@ export function WeatherPanel() {
               value={city}
               onChange={(event) => setCity(event.target.value)}
               placeholder="Например: Санкт-Петербург"
-              className="touch-target w-full rounded-ios-button border border-ios-border/60 bg-white/90 px-3 text-sm outline-none"
+              className="theme-field touch-target w-full rounded-ios-button border px-3 text-sm outline-none"
             />
           </label>
 
@@ -160,7 +160,7 @@ export function WeatherPanel() {
                   key={option}
                   type="button"
                   onClick={() => setCity(option)}
-                  className="touch-target rounded-full border border-ios-border/60 bg-ios-chip px-3 text-xs text-ios-subtext"
+                  className="theme-surface-subtle touch-target rounded-full border px-3 text-xs text-ios-subtext"
                 >
                   {option}
                 </button>
@@ -168,7 +168,7 @@ export function WeatherPanel() {
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-ios-border/40 bg-ios-chip px-4 py-3">
+          <div className="theme-surface-subtle rounded-2xl border px-4 py-3">
             <p className="text-[12px] font-medium text-ios-subtext">Источник погоды</p>
             <p className="mt-1 text-sm font-semibold text-ios-text">Определяется автоматически</p>
             <p className={`mt-2 text-xs ${activityTone}`}>{activityLabel}</p>
@@ -176,7 +176,7 @@ export function WeatherPanel() {
         </div>
 
         {current ? (
-          <div className="mt-4 rounded-2xl border border-ios-border/40 bg-ios-chip px-4 py-3">
+          <div className="theme-surface-subtle mt-4 rounded-2xl border px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <p className="text-[13px] font-semibold text-ios-text">{current.city}</p>
@@ -200,19 +200,19 @@ export function WeatherPanel() {
         ) : null}
 
         {isAdmin ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-ios-border/60 bg-white/70 px-4 py-3">
+          <div className="theme-surface-2 mt-4 rounded-2xl border border-dashed px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ios-subtext">Debug weather</p>
             <div className="mt-2 grid gap-2 text-xs text-ios-subtext sm:grid-cols-2">
-              <div className="rounded-2xl border border-ios-border/40 bg-ios-chip px-3 py-2">
+              <div className="theme-surface-subtle rounded-2xl border px-3 py-2">
                 <span className="font-medium text-ios-text">Текущий provider:</span> {debugSource}
               </div>
-              <div className="rounded-2xl border border-ios-border/40 bg-ios-chip px-3 py-2">
+              <div className="theme-surface-subtle rounded-2xl border px-3 py-2">
                 <span className="font-medium text-ios-text">Fallback:</span> {debugFallback}
               </div>
-              <div className="rounded-2xl border border-ios-border/40 bg-ios-chip px-3 py-2">
+              <div className="theme-surface-subtle rounded-2xl border px-3 py-2">
                 <span className="font-medium text-ios-text">Обновлено:</span> {lastUpdatedAt ? `сегодня в ${lastUpdatedAt}` : 'ещё не обновлялось'}
               </div>
-              <div className="rounded-2xl border border-ios-border/40 bg-ios-chip px-3 py-2">
+              <div className="theme-surface-subtle rounded-2xl border px-3 py-2">
                 <span className="font-medium text-ios-text">Degraded mode:</span> {current?.degraded ? 'да' : 'нет'}
               </div>
             </div>

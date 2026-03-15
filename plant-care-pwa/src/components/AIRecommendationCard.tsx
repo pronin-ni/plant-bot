@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BellRing, ChevronDown, Droplets, Leaf, RefreshCw, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight } from '@/lib/haptics';
 import type { PlantCareAdviceDto, PlantDto } from '@/types/api';
 
 interface AIRecommendationCardProps {
@@ -58,7 +58,7 @@ export function AIRecommendationCard({
             className="h-8 px-2.5"
             disabled={loading}
             onClick={() => {
-              hapticImpact('light');
+              impactLight();
               onRefresh();
             }}
           >
@@ -70,7 +70,7 @@ export function AIRecommendationCard({
             size="sm"
             className="h-8 px-2"
             onClick={() => {
-              hapticImpact('light');
+              impactLight();
               setExpanded((prev) => !prev);
             }}
           >
@@ -91,7 +91,7 @@ export function AIRecommendationCard({
         {expanded ? (
           <motion.div
             key="content"
-            className="mt-3 space-y-2 rounded-2xl border border-ios-border/55 bg-white/45 p-3 text-sm dark:bg-zinc-900/45"
+            className="theme-surface-subtle mt-3 space-y-2 rounded-2xl border p-3 text-sm"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -121,7 +121,7 @@ export function AIRecommendationCard({
 
 function MetricPill({ icon: Icon, title, value }: { icon: typeof Droplets; title: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-ios-border/50 bg-white/45 px-2 py-2 text-center dark:bg-zinc-900/45">
+    <div className="theme-surface-subtle rounded-2xl border px-2 py-2 text-center">
       <Icon className="mx-auto h-3.5 w-3.5 text-ios-accent" />
       <p className="mt-1 text-[11px] text-ios-subtext">{title}</p>
       <p className="mt-0.5 text-[13px] font-semibold text-ios-text">{value}</p>

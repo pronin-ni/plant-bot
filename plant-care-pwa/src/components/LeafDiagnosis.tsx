@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, Camera, CheckCircle2, Loader2, ScanSearch, Stethoscope } from 'lucide-react';
 
 import { diagnosePlantOpenRouter } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactMedium, success as hapticSuccess } from '@/lib/haptics';
 import type { PlantDto } from '@/types/api';
 
 interface LeafDiagnosisProps {
@@ -31,8 +31,8 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
         plant.name,
         `Категория=${plant.category ?? 'HOME'}; Тип=${plant.type ?? 'DEFAULT'}; Размещение=${plant.placement}; Интервал=${plant.baseIntervalDays ?? 7}; Последний полив=${plant.lastWateredDate}`
       ),
-    onSuccess: () => hapticNotify('success'),
-    onError: () => hapticNotify('error')
+    onSuccess: () => hapticSuccess(),
+    onError: () => hapticError()
   });
 
   const result = diagnoseMutation.data;
@@ -59,7 +59,7 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
         <span className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-ios-subtext">AI</span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-ios-border/60 bg-white/50 dark:bg-zinc-900/50">
+      <div className="theme-surface-subtle relative overflow-hidden rounded-2xl border">
         {preview ? (
           <img src={preview} alt="Лист растения" className="h-36 w-full object-cover" />
         ) : (
@@ -106,7 +106,7 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
           if (!file) {
             return;
           }
-          hapticImpact('medium');
+          impactMedium();
           void toDataUrl(file).then((dataUrl) => {
             setPreview(dataUrl);
             diagnoseMutation.mutate(dataUrl);
@@ -117,7 +117,7 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
 
       <button
         type="button"
-        className="android-ripple inline-flex h-11 w-full items-center justify-center rounded-2xl border border-ios-border/70 bg-white/60 px-5 text-ios-body font-medium dark:bg-zinc-900/50"
+        className="theme-surface-subtle android-ripple inline-flex h-11 w-full items-center justify-center rounded-2xl border px-5 text-ios-body font-medium"
         onClick={() => inputRef.current?.click()}
       >
         <Camera className="mr-2 h-4 w-4" />
@@ -125,12 +125,12 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
       </button>
 
       {diagnoseMutation.isError ? (
-        <p className="text-[12px] text-red-500">{diagnosisError}</p>
+        <p className="theme-text-danger text-[12px]">{diagnosisError}</p>
       ) : null}
 
       {result ? (
         <motion.div
-          className="rounded-2xl border border-ios-border/60 bg-white/60 p-3 text-sm dark:bg-zinc-900/45"
+          className="theme-surface-1 rounded-2xl border p-3 text-sm"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 28 }}
@@ -148,7 +148,7 @@ export function LeafDiagnosis({ plant }: LeafDiagnosisProps) {
           {result.treatment ? <p className="mt-2"><b>Что сделать:</b> {result.treatment}</p> : null}
           {result.prevention ? <p className="mt-1"><b>Дальше:</b> {result.prevention}</p> : null}
           {result.confidence < 60 ? (
-            <p className="mt-2 text-[12px] text-amber-700 dark:text-amber-400">Низкая уверенность. Сделайте ещё фото при хорошем освещении.</p>
+            <p className="theme-text-warning mt-2 text-[12px]">Низкая уверенность. Сделайте ещё фото при хорошем освещении.</p>
           ) : null}
         </motion.div>
       ) : null}

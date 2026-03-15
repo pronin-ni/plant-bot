@@ -23,13 +23,13 @@ export function SettingsSection({
   children
 }: SettingsSectionProps) {
   return (
-    <section className="ios-blur-card overflow-hidden border border-ios-border/60 bg-white/60 dark:border-emerald-500/20 dark:bg-zinc-950/55">
+    <section className="ios-blur-card theme-surface-1 overflow-hidden border">
       <button
         type="button"
         onClick={() => onToggle(id)}
         className="android-ripple flex w-full items-center gap-3 px-4 py-3 text-left"
       >
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-ios-border/60 bg-white/70 text-ios-accent dark:bg-zinc-900/60">
+        <span className="theme-surface-subtle inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border text-ios-accent">
           <Icon className="h-4 w-4" />
         </span>
 
@@ -57,7 +57,7 @@ export function SettingsSection({
             transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.85 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-ios-border/55 px-4 pb-4 pt-3 dark:border-emerald-500/15">{children}</div>
+            <div className="border-t border-ios-border/55 px-4 pb-4 pt-3">{children}</div>
           </motion.div>
         ) : null}
       </AnimatePresence>

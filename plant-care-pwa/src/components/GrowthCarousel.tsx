@@ -5,7 +5,8 @@ import { Camera, Sprout } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { uploadPlantPhoto } from '@/lib/api';
-import { cloudStorageGet, cloudStorageSet, hapticImpact, hapticNotify } from '@/lib/telegram';
+import { cloudStorageGet, cloudStorageSet } from '@/lib/telegram';
+import { error as hapticError, impactMedium, success as hapticSuccess } from '@/lib/haptics';
 
 interface GrowthCarouselProps {
   plantId: number;
@@ -41,7 +42,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
   const uploadMutation = useMutation({
     mutationFn: ({ id, dataUrl }: { id: number; dataUrl: string }) => uploadPlantPhoto(id, dataUrl),
     onSuccess: async (res) => {
-      hapticNotify('success');
+      hapticSuccess();
       const next: GrowthShot[] = [
         {
           createdAt: new Date().toISOString(),
@@ -57,7 +58,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
       void queryClient.invalidateQueries({ queryKey: ['plant', plantId] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   useEffect(() => {
@@ -114,7 +115,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
             {slides.map((shot, index) => (
               <motion.figure
                 key={`${shot.createdAt}-${shot.photoUrl}`}
-                className="relative w-[156px] shrink-0 snap-start overflow-hidden rounded-2xl border border-ios-border/55 bg-white/60 dark:bg-zinc-900/50"
+                className="theme-surface-subtle relative w-[156px] shrink-0 snap-start overflow-hidden rounded-2xl border"
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 360, damping: 30, delay: index * 0.04 }}
@@ -129,7 +130,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
         ) : (
           <motion.div
             key="empty"
-            className="relative flex h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-ios-border/60 bg-white/45 text-center dark:bg-zinc-900/35"
+            className="theme-surface-subtle relative flex h-40 flex-col items-center justify-center rounded-2xl border border-dashed text-center"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
@@ -158,7 +159,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
             if (!file) {
               return;
             }
-            hapticImpact('medium');
+            impactMedium();
             void toDataUrl(file).then((dataUrl) => uploadMutation.mutate({ id: plantId, dataUrl }));
           }}
         />

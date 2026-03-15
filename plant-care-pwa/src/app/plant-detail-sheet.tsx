@@ -453,7 +453,7 @@ export function PlantDetailSheet() {
                 }
               }}
             >
-              <div className="mb-4 rounded-2xl border border-red-300/60 bg-red-50/60 p-3 text-xs text-red-700 dark:border-red-700/60 dark:bg-red-950/35 dark:text-red-300">
+              <div className="theme-surface-danger mb-4 rounded-2xl border p-3 text-xs">
                 <p className="inline-flex items-center gap-1.5">
                   <AlertTriangle className="h-4 w-4" />
                   После удаления восстановить растение из приложения нельзя.
@@ -469,7 +469,7 @@ export function PlantDetailSheet() {
                   Отмена
                 </Button>
                 <Button
-                  className="bg-red-600 text-white hover:bg-red-700"
+                  className="border-[hsl(var(--destructive)/0.4)] bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground))] hover:brightness-[0.98]"
                   disabled={deleteMutation.isPending}
                   onClick={() => {
                     if (!selectedPlantId) {
@@ -552,7 +552,7 @@ function WaterStatusBlock({
   const wateredToday = hasWateredToday(plant);
 
   return (
-    <section className={`space-y-4 rounded-3xl border bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75 ${status.borderClassName}`}>
+    <section className={`theme-surface-1 space-y-4 rounded-3xl border p-4 shadow-sm backdrop-blur-ios ${status.borderClassName}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Текущий режим полива</p>
@@ -576,25 +576,25 @@ function WaterStatusBlock({
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
           <p className="text-xs text-ios-subtext">Следующий полив</p>
           <p className="mt-1 text-base font-semibold text-ios-text">{nextLabel}</p>
         </div>
-        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
           <p className="text-xs text-ios-subtext">Интервал</p>
           <p className="mt-1 text-base font-semibold text-ios-text">{intervalDays} дн.</p>
         </div>
-        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
           <p className="text-xs text-ios-subtext">Объём</p>
           <p className="mt-1 text-base font-semibold text-ios-text">{waterMl} мл</p>
         </div>
-        <div className="rounded-2xl border border-ios-border/55 bg-white/75 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle rounded-2xl border p-3">
           <p className="text-xs text-ios-subtext">Режим</p>
           <p className="mt-1 text-base font-semibold text-ios-text">{humanizeWateringMode(wateringMode)}</p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-ios-border/55 bg-white/70 p-3 dark:bg-zinc-900/55">
+      <div className="theme-surface-subtle rounded-2xl border p-3">
         <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
           {plant.placement === 'OUTDOOR' ? 'Уличные акценты' : 'Домашние акценты'}
         </p>
@@ -660,7 +660,7 @@ function AIAdviceCard({
   onRefresh: () => void;
 }) {
   return (
-    <section className="space-y-3 rounded-3xl border border-ios-border/60 bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75">
+    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
       <div className="flex items-center justify-between gap-2">
         <div className="inline-flex items-center gap-2">
           <div className="rounded-full bg-emerald-100/70 p-2 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
@@ -678,7 +678,7 @@ function AIAdviceCard({
       </div>
 
       {loading ? (
-        <div className="space-y-2 rounded-2xl border border-ios-border/50 bg-white/70 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle space-y-2 rounded-2xl border p-3">
           <div className="h-3 w-1/3 animate-pulse rounded bg-ios-border/70" />
           <div className="h-3 w-full animate-pulse rounded bg-ios-border/70" />
           <div className="h-3 w-2/3 animate-pulse rounded bg-ios-border/70" />
@@ -686,9 +686,9 @@ function AIAdviceCard({
       ) : null}
 
       {!loading && error ? (
-        <div className="rounded-2xl border border-red-300/60 bg-red-50/70 p-3 text-sm dark:border-red-700/50 dark:bg-red-950/30">
-          <p className="font-medium text-red-700 dark:text-red-300">Не удалось загрузить AI советы.</p>
-          <p className="mt-1 text-xs text-red-600/90 dark:text-red-200/90">Проверьте сеть и повторите запрос.</p>
+        <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
+          <p className="theme-text-danger font-medium">Не удалось загрузить AI советы.</p>
+          <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
           <Button type="button" variant="secondary" className="mt-3 h-10 rounded-xl" onClick={onRefresh}>
             Повторить
           </Button>
@@ -696,8 +696,8 @@ function AIAdviceCard({
       ) : null}
 
       {!loading && !error && hasAiAdvice && advice ? (
-        <div className="rounded-2xl border border-emerald-300/50 bg-emerald-50/75 p-3 dark:border-emerald-700/40 dark:bg-emerald-950/25">
-          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+        <div className="theme-surface-success rounded-2xl border p-3">
+          <p className="theme-text-success inline-flex items-center gap-1.5 text-xs font-medium">
             <Bot className="h-4 w-4" />
             Источник: {formatAiAdviceSource(source)}
           </p>
@@ -706,8 +706,8 @@ function AIAdviceCard({
       ) : null}
 
       {!loading && !error && !hasAiAdvice ? (
-        <div className="rounded-2xl border border-amber-300/55 bg-amber-50/70 p-3 dark:border-amber-700/45 dark:bg-amber-950/25">
-          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+        <div className="theme-surface-warning rounded-2xl border p-3">
+          <p className="theme-text-warning inline-flex items-center gap-1.5 text-xs font-medium">
             <AlertTriangle className="h-4 w-4" />
             AI временно недоступен, показан базовый совет.
           </p>
@@ -718,7 +718,7 @@ function AIAdviceCard({
       ) : null}
 
       {refreshError && !loading ? (
-        <p className="inline-flex items-center gap-1 text-xs text-red-500">
+        <p className="theme-text-danger inline-flex items-center gap-1 text-xs">
           <Droplets className="h-3.5 w-3.5" />
           Не удалось обновить совет, попробуйте ещё раз.
         </p>
@@ -773,7 +773,7 @@ function WateringRecommendationCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      className="space-y-3 rounded-3xl border border-ios-border/60 bg-white/80 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/75"
+      className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios"
     >
       <div className="flex items-center justify-between gap-2">
         <div>
@@ -793,13 +793,13 @@ function WateringRecommendationCard({
       </div>
 
       {state === 'idle' ? (
-        <div className="rounded-2xl border border-ios-border/50 bg-white/70 p-3 text-sm text-ios-subtext dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-subtext">
           Нажмите «Обновить», чтобы получить актуальную рекомендацию.
         </div>
       ) : null}
 
       {state === 'loading' ? (
-        <div className="space-y-2 rounded-2xl border border-ios-border/50 bg-white/70 p-3 dark:bg-zinc-900/55">
+        <div className="theme-surface-subtle space-y-2 rounded-2xl border p-3">
           <div className="h-3 w-1/3 animate-pulse rounded bg-ios-border/70" />
           <div className="h-3 w-full animate-pulse rounded bg-ios-border/70" />
           <div className="h-3 w-2/3 animate-pulse rounded bg-ios-border/70" />
@@ -807,9 +807,9 @@ function WateringRecommendationCard({
       ) : null}
 
       {state === 'error' ? (
-        <div className="rounded-2xl border border-red-300/60 bg-red-50/70 p-3 text-sm dark:border-red-700/50 dark:bg-red-950/30">
-          <p className="font-medium text-red-700 dark:text-red-300">Не удалось получить рекомендацию.</p>
-          <p className="mt-1 text-xs text-red-600/90 dark:text-red-200/90">Проверьте сеть и повторите запрос.</p>
+        <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
+          <p className="theme-text-danger font-medium">Не удалось получить рекомендацию.</p>
+          <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
           <Button type="button" variant="secondary" className="mt-3 h-10 rounded-xl" onClick={onRefresh}>
             Повторить
           </Button>
@@ -819,23 +819,23 @@ function WateringRecommendationCard({
       {(state === 'success' || state === 'fallback') && recommendation ? (
         <div className={`rounded-2xl border p-3 ${
           state === 'fallback'
-            ? 'border-amber-300/60 bg-amber-50/70 dark:border-amber-700/45 dark:bg-amber-950/25'
-            : 'border-emerald-300/60 bg-emerald-50/70 dark:border-emerald-700/45 dark:bg-emerald-950/25'
+            ? 'theme-surface-warning'
+            : 'theme-surface-success'
         }`}>
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
               Источник: {badge}
             </span>
-            <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
               Режим: {humanizeWateringMode(recommendation.wateringMode)}
             </span>
-            <span className="rounded-full border border-current/20 bg-white/55 px-2 py-0.5 dark:bg-black/10">
+            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
               Интервал: {recommendation.recommendedIntervalDays} дн.
             </span>
           </div>
           <p className="mt-3 text-sm leading-6 text-ios-text">{summary}</p>
 
-          <div className="mt-3 rounded-xl border border-current/15 bg-white/60 p-3 dark:bg-black/10">
+          <div className="theme-surface-subtle mt-3 rounded-xl border border-current/15 p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Факторы влияния</p>
             <ul className="mt-2 space-y-1.5 text-sm text-ios-text">
               {factors.map((item, idx) => (
@@ -847,9 +847,9 @@ function WateringRecommendationCard({
           </div>
 
           {warnings.length ? (
-            <div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-50/70 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Важные замечания</p>
-              <ul className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-100">
+            <div className="theme-surface-warning mt-3 rounded-xl border p-3">
+              <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
+              <ul className="mt-2 space-y-1 text-sm text-ios-text">
                 {warnings.map((item, idx) => (
                   <li key={`${item}-${idx}`}>• {item}</li>
                 ))}
@@ -859,7 +859,7 @@ function WateringRecommendationCard({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-ios-border/50 bg-white/70 p-3 dark:bg-zinc-900/55">
+      <div className="theme-surface-subtle rounded-2xl border p-3">
         <p className="text-xs font-medium text-ios-text">Ручная настройка</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <input
@@ -868,7 +868,7 @@ function WateringRecommendationCard({
             max={60}
             value={manualInterval}
             onChange={(e) => setManualInterval(e.target.value)}
-            className="h-10 rounded-xl border border-ios-border/70 bg-white/80 px-3 text-sm dark:bg-zinc-900/60"
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
             placeholder="Интервал"
           />
           <input
@@ -878,7 +878,7 @@ function WateringRecommendationCard({
             step={50}
             value={manualWaterMl}
             onChange={(e) => setManualWaterMl(e.target.value)}
-            className="h-10 rounded-xl border border-ios-border/70 bg-white/80 px-3 text-sm dark:bg-zinc-900/60"
+            className="theme-field h-10 rounded-xl border px-3 text-sm"
             placeholder="Объём мл"
           />
         </div>
@@ -907,7 +907,7 @@ function WateringRecommendationCard({
 
 function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
   return (
-    <section className="rounded-3xl border border-ios-border/60 bg-white/70 p-4 dark:bg-zinc-950/55">
+    <section className="theme-surface-1 rounded-3xl border p-4">
       <p className="text-sm font-semibold text-ios-text">Управление растением</p>
       <p className="mt-1 text-xs text-ios-subtext">
         Редкое действие. Удаление стирает растение, фото роста и связанную историю.
@@ -915,7 +915,7 @@ function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
       <Button
         type="button"
         variant="ghost"
-        className="mt-3 h-11 w-full rounded-2xl border border-red-200/70 bg-red-50/40 px-3 text-red-600 hover:bg-red-100/60 dark:border-red-800/50 dark:bg-red-950/20 dark:text-red-300"
+        className="theme-surface-danger theme-text-danger mt-3 h-11 w-full rounded-2xl border px-3 hover:bg-[hsl(var(--destructive)/0.16)]"
         onClick={onDeleteClick}
       >
         <Trash2 className="mr-2 h-4 w-4" />
@@ -937,7 +937,7 @@ function RecommendationHistorySection({
   const summary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'Последняя рекомендация сохранена для следующего обновления.';
 
   return (
-    <section className="rounded-3xl border border-ios-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-ios dark:bg-zinc-950/55">
+    <section className="theme-surface-1 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-ios-text">История рекомендаций</p>
@@ -946,7 +946,7 @@ function RecommendationHistorySection({
         <span className="rounded-full border border-ios-border/60 px-2.5 py-1 text-[11px] text-ios-subtext">{source}</span>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-ios-border/55 bg-white/70 p-3 dark:bg-zinc-900/45">
+      <div className="theme-surface-subtle mt-3 rounded-2xl border p-3">
         <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">Последняя рекомендация</p>
         <p className="mt-2 text-sm leading-5 text-ios-text">{summary}</p>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">

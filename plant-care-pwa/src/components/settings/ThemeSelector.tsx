@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { CheckCircle2, Monitor, Paintbrush } from 'lucide-react';
+import { CheckCircle2, Paintbrush } from 'lucide-react';
 
 import { selection } from '@/lib/haptics';
 import { APP_THEMES } from '@/lib/theme/themes';
@@ -10,9 +10,7 @@ import { useThemeStore } from '@/lib/theme/themeStore';
 export function ThemeSelector() {
   const prefersReducedMotion = useReducedMotion();
   const selectedThemeId = useThemeStore((s) => s.selectedThemeId);
-  const useSystemTheme = useThemeStore((s) => s.useSystemTheme);
   const setTheme = useThemeStore((s) => s.setTheme);
-  const setSystemTheme = useThemeStore((s) => s.setSystemTheme);
   const resolvedTheme = useThemeStore((s) => s.getResolvedTheme());
   const [justAppliedText, setJustAppliedText] = useState<string | null>(null);
   const previousResolvedThemeIdRef = useRef<string | null>(null);
@@ -23,13 +21,10 @@ export function ThemeSelector() {
     if (!prev || prev === resolvedTheme.id) {
       return;
     }
-    const text = useSystemTheme
-      ? `Применено: ${resolvedTheme.name} (системная)`
-      : `Применено: ${resolvedTheme.name}`;
-    setJustAppliedText(text);
+    setJustAppliedText(`Применено: ${resolvedTheme.name}`);
     const timer = window.setTimeout(() => setJustAppliedText(null), 1200);
     return () => window.clearTimeout(timer);
-  }, [resolvedTheme.id, resolvedTheme.name, useSystemTheme]);
+  }, [resolvedTheme.id, resolvedTheme.name]);
 
   return (
     <div className="space-y-3">
@@ -41,26 +36,7 @@ export function ThemeSelector() {
         <div className="theme-surface-subtle mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] text-ios-subtext">
           <Paintbrush className="h-3.5 w-3.5 text-ios-accent" />
           Текущая: <span className="font-medium text-ios-text">{resolvedTheme.name}</span>
-          {useSystemTheme ? <span>· Системная</span> : <span>· Ручная</span>}
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            selection();
-            setSystemTheme();
-          }}
-          className={`touch-target inline-flex items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${
-            useSystemTheme
-              ? 'theme-pill-active'
-              : 'theme-surface-subtle text-ios-text hover:border-ios-accent/45'
-          } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
-        >
-          <Monitor className="h-4 w-4" />
-          Следовать системе
-        </button>
       </div>
 
       <div
@@ -69,8 +45,7 @@ export function ThemeSelector() {
         aria-label="Выбор темы оформления"
       >
         {APP_THEMES.map((theme) => {
-          const isActive = useSystemTheme ? theme.id === resolvedTheme.id : theme.id === selectedThemeId;
-          const isSystemPicked = useSystemTheme && theme.id === resolvedTheme.id;
+          const isActive = theme.id === selectedThemeId;
 
           return (
             <motion.button
@@ -98,7 +73,7 @@ export function ThemeSelector() {
                 {isActive ? (
                   <span className="theme-badge-success inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    {isSystemPicked ? 'Системная' : 'Выбрана'}
+                    Выбрана
                   </span>
                 ) : null}
               </div>

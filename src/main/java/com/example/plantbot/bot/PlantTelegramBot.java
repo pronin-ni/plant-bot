@@ -63,6 +63,7 @@ import java.util.concurrent.TimeUnit;
 public class PlantTelegramBot extends TelegramLongPollingBot {
   private static final Locale RU_LOCALE = Locale.forLanguageTag("ru-RU");
   private static final int TELEGRAM_TEXT_LIMIT = 4000;
+  private static final long PSEUDO_TELEGRAM_ID_MIN = 900_000_000_000L;
   private final UserService userService;
   private final PlantService plantService;
   private final PlantCatalogService plantCatalogService;
@@ -86,6 +87,12 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
 
   @Value("${bot.list-card-cache-max-entries:1000}")
   private int listCardCacheMaxEntries;
+
+  @Value("${app.dev-auth-enabled:false}")
+  private boolean devAuthEnabled;
+
+  @Value("${app.dev-telegram-id:999000111}")
+  private long devTelegramId;
 
   private final Map<Long, ConversationState> states = new ConcurrentHashMap<>();
   private final Map<Long, List<CityOption>> pendingCityOptions = new ConcurrentHashMap<>();
@@ -200,10 +207,15 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   }
 
   public boolean sendWateringReminder(Plant plant, WateringRecommendation rec) {
+    Long telegramId = plant == null || plant.getUser() == null ? null : plant.getUser().getTelegramId();
+    if (!canSendToTelegramId(telegramId)) {
+      log.info("Skipping Telegram watering reminder for plantId={} because user has no real Telegram chat id", plant != null ? plant.getId() : null);
+      return false;
+    }
     String text = "\uD83D\uDCA7 Пора поливать \"" + plant.getName() + "\"!\n"
         + "Рекомендуемый интервал: " + formatDays(rec.intervalDays()) + "\n"
         + "Рекомендуемый объём воды: " + formatWaterAmount(plant, rec);
-    SendMessage msg = new SendMessage(String.valueOf(plant.getUser().getTelegramId()), text);
+    SendMessage msg = new SendMessage(String.valueOf(telegramId), text);
     msg.setReplyMarkup(wateredButton(plant.getId()));
     try {
       execute(msg);
@@ -215,6 +227,10 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   }
 
   public boolean sendSystemNotification(Long telegramId, String text) {
+    if (!canSendToTelegramId(telegramId)) {
+      log.info("Skipping Telegram system notification because chat id is synthetic or unavailable: {}", telegramId);
+      return false;
+    }
     SendMessage msg = new SendMessage(String.valueOf(telegramId), text);
     try {
       execute(msg);
@@ -264,6 +280,16 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
       default -> sendText(message.getChatId(), "Не понял команду.\nПопробуй: /add, /list, /calendar");
     }
     log.info("Command handled: user={} command='{}'", user.getTelegramId(), command);
+  }
+
+  private boolean canSendToTelegramId(Long telegramId) {
+    if (telegramId == null || telegramId <= 0) {
+      return false;
+    }
+    if (telegramId >= PSEUDO_TELEGRAM_ID_MIN) {
+      return false;
+    }
+    return !(devAuthEnabled && telegramId == devTelegramId);
   }
 
   private void handleConversation(User user, Message message, String text) {

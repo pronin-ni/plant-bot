@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight } from '@/lib/haptics';
 
 export function SupportPanel() {
   const supportEmail = 'support@plant-bot.app';
@@ -15,13 +15,13 @@ export function SupportPanel() {
           try {
             await navigator.clipboard.writeText(supportEmail);
             setStatus('Email скопирован в буфер обмена.');
-            hapticImpact('light');
+            impactLight();
           } catch {
             window.location.href = `mailto:${supportEmail}`;
             setStatus('Копирование недоступно, открываем почтовое приложение.');
           }
         }}
-        className="touch-target w-full rounded-ios-button border border-ios-border/60 bg-white/80 px-4 text-left text-sm text-ios-text transition-colors duration-200 ease-out active:bg-black/[0.03] dark:active:bg-white/[0.04]"
+        className="theme-surface-1 touch-target w-full rounded-ios-button border px-4 text-left text-sm text-ios-text transition-colors duration-200 ease-out active:bg-[hsl(var(--foreground)/0.04)]"
       >
         {supportEmail}
       </button>

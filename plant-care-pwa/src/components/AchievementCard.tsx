@@ -26,13 +26,13 @@ export function AchievementCard({ item }: { item: AchievementItem }) {
       className={[
         'rounded-ios-button border p-3',
         item.unlocked
-          ? 'border-emerald-400/40 bg-emerald-500/10'
-          : 'border-ios-border/60 bg-white/60 dark:border-emerald-500/20 dark:bg-zinc-900/40'
+          ? 'theme-surface-success'
+          : 'theme-surface-1'
       ].join(' ')}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/70 text-ios-accent dark:bg-zinc-900/60">
+          <span className="theme-surface-subtle inline-flex h-8 w-8 items-center justify-center rounded-xl border text-ios-accent">
             <Icon className="h-4 w-4" />
           </span>
           <div>
@@ -45,7 +45,7 @@ export function AchievementCard({ item }: { item: AchievementItem }) {
         </p>
       </div>
 
-      <div className="mt-2 h-2 rounded-full bg-black/10 dark:bg-white/10">
+      <div className="mt-2 h-2 rounded-full bg-[hsl(var(--foreground)/0.10)]">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${progressWidth}%` }}

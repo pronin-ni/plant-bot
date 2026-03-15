@@ -119,6 +119,9 @@ public class WebPushNotificationService {
     }
     List<WebPushSubscription> subscriptions = subscriptionRepository.findByUser(plant.getUser());
     if (subscriptions.isEmpty()) {
+      log.info("WebPush watering reminder skipped: plantId={} userId={} reason=no-subscriptions",
+          plant.getId(),
+          plant.getUser().getId());
       return false;
     }
 
@@ -131,6 +134,12 @@ public class WebPushNotificationService {
     payload.put("tag", "plant-watering-" + plant.getId());
     payload.put("url", resolvePwaPublicUrl());
     payload.put("plantId", plant.getId());
+    payload.put("icon", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("badge", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("vibrate", List.of(180, 60, 180));
+    payload.put("renotify", true);
+    payload.put("requireInteraction", true);
+    payload.put("timestamp", System.currentTimeMillis());
 
     String payloadJson = toJson(payload);
     return countDelivered(sendPayload(subscriptions, payloadJson)) > 0;
@@ -159,6 +168,10 @@ public class WebPushNotificationService {
     payload.put("body", safeBody);
     payload.put("tag", "admin-test-" + user.getId());
     payload.put("url", resolvePwaPublicUrl());
+    payload.put("icon", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("badge", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("vibrate", List.of(120, 50, 120));
+    payload.put("timestamp", System.currentTimeMillis());
 
     List<EndpointDeliveryResult> endpointResults = sendPayload(subscriptions, toJson(payload));
     int delivered = countDelivered(endpointResults);
@@ -201,6 +214,10 @@ public class WebPushNotificationService {
     payload.put("body", safeBody);
     payload.put("tag", safeTag);
     payload.put("url", resolvePwaPublicUrl());
+    payload.put("icon", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("badge", resolvePwaAssetUrl("icons/icon-192.svg"));
+    payload.put("vibrate", List.of(90, 40, 90));
+    payload.put("timestamp", System.currentTimeMillis());
 
     List<EndpointDeliveryResult> endpointResults = sendPayload(subscriptions, toJson(payload));
     int accepted = countDelivered(endpointResults);
@@ -331,6 +348,10 @@ public class WebPushNotificationService {
       resolved = resolved + "/";
     }
     return resolved;
+  }
+
+  private String resolvePwaAssetUrl(String relativePath) {
+    return resolvePwaPublicUrl() + relativePath.replaceFirst("^/+", "");
   }
 
   private String safeTag(String tag) {

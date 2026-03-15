@@ -64,14 +64,14 @@ export function InstallPrompt() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 12 }}
         transition={{ type: 'spring', stiffness: 360, damping: 28, mass: 1 }}
-        className="ios-blur-card mb-3 p-4"
+        className="ios-blur-card mb-3 p-3 max-[359px]:mb-2 max-[359px]:p-2.5"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-ios-body font-semibold">{title}</p>
+          <p className="text-ios-body font-semibold max-[359px]:text-[15px]">{title}</p>
           <button
             type="button"
             aria-label="Закрыть"
-            className="touch-target inline-flex w-11 items-center justify-center rounded-full text-ios-subtext transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/60"
+            className="touch-target inline-flex w-11 items-center justify-center rounded-full text-ios-subtext transition-colors hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ios-accent/60 max-[359px]:h-10 max-[359px]:w-10"
             onClick={() => {
               localStorage.setItem('plant-pwa-install-dismissed-at', String(Date.now()));
               setDismissed(true);
@@ -81,17 +81,19 @@ export function InstallPrompt() {
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-ios-caption text-ios-subtext">
-          Установите PWA на главный экран: быстрее запуск, оффлайн-кеш и пуш-уведомления.
+        <p className="text-ios-caption text-ios-subtext max-[359px]:text-[11px] max-[359px]:leading-5">
+          Установите PWA на главный экран:
+          <span className="max-[359px]:hidden"> быстрее запуск, оффлайн-кеш и пуш-уведомления.</span>
+          <span className="hidden max-[359px]:inline"> быстрее запуск и пуш-уведомления.</span>
         </p>
-        <ol className="mt-2 list-decimal space-y-1 pl-4 text-[12px] text-ios-subtext">
+        <ol className="mt-2 list-decimal space-y-1 pl-4 text-[12px] text-ios-subtext max-[359px]:mt-1.5 max-[359px]:space-y-0.5 max-[359px]:pl-3.5 max-[359px]:text-[11px]">
           {manualSteps.map((step) => (
             <li key={step}>{step}</li>
           ))}
         </ol>
         {canInstall ? (
           <Button
-            className="mt-3 w-full"
+            className="mt-3 w-full max-[359px]:mt-2 max-[359px]:h-10 max-[359px]:text-sm"
             disabled={installing}
             onClick={async () => {
               setInstalling(true);

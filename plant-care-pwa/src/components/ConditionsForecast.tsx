@@ -101,20 +101,20 @@ export function ConditionsForecast({ plantId, plantName }: ConditionsForecastPro
       ) : null}
 
       {forecastQuery.isError ? (
-        <div className="rounded-2xl border border-amber-300/60 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+        <div className="theme-surface-warning rounded-2xl border p-3 text-xs">
           <p className="inline-flex items-center gap-1.5"><TriangleAlert className="h-4 w-4" />Не удалось получить условия. Проверьте подключение HA.</p>
         </div>
       ) : null}
 
       {forecastQuery.data || weatherQuery.data ? (
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border border-ios-border/55 bg-white/50 p-2 text-xs dark:bg-zinc-900/50">
+          <div className="theme-surface-subtle rounded-2xl border p-2 text-xs">
             <p className="inline-flex items-center gap-1 text-ios-subtext"><ThermometerSun className="h-3.5 w-3.5" />Температура</p>
             <p className="mt-1 text-sm font-semibold text-ios-text">
               {isFiniteNumber(tempValue) ? `${tempValue.toFixed(1)}°C` : '—'}
             </p>
           </div>
-          <div className="rounded-2xl border border-ios-border/55 bg-white/50 p-2 text-xs dark:bg-zinc-900/50">
+          <div className="theme-surface-subtle rounded-2xl border p-2 text-xs">
             <p className="inline-flex items-center gap-1 text-ios-subtext"><Droplets className="h-3.5 w-3.5" />Влажность</p>
             <p className="mt-1 text-sm font-semibold text-ios-text">
               {isFiniteNumber(humidityValue) ? `${humidityValue.toFixed(0)}%` : '—'}
@@ -124,7 +124,7 @@ export function ConditionsForecast({ plantId, plantName }: ConditionsForecastPro
       ) : null}
 
       {weatherQuery.data ? (
-        <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-ios-border/50 bg-white/60 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-900/60">
+        <div className="theme-surface-subtle mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] text-ios-subtext">
           <WeatherIcon code={weatherQuery.data.icon} />
           <span>{weatherQuery.data.description ?? 'Погодный провайдер'}</span>
           <span className="text-ios-subtext/70">· {weatherQuery.data.city}</span>

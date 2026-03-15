@@ -30,13 +30,13 @@ export function SmartReminderCard({ plant }: { plant: PlantDto }) {
       <p className="mt-1 text-sm text-ios-subtext">{plant.name}</p>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-ios-button bg-white/60 p-2 dark:bg-zinc-900/40">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           <p className="flex items-center gap-1 text-ios-subtext"><Clock3 className="h-3.5 w-3.5" /> Следующий полив</p>
           <p className="mt-1 font-semibold text-ios-text">
             {nextDate ? nextDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' }) : '—'}
           </p>
         </div>
-        <div className="rounded-ios-button bg-white/60 p-2 dark:bg-zinc-900/40">
+        <div className="theme-surface-subtle rounded-ios-button border p-2">
           <p className="flex items-center gap-1 text-ios-subtext"><Droplets className="h-3.5 w-3.5" /> Рекоменд. вода</p>
           <p className="mt-1 font-semibold text-ios-text">{plant.recommendedWaterMl ?? 0} мл</p>
         </div>

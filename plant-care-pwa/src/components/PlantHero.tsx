@@ -6,7 +6,7 @@ import { PlantAvatar } from '@/components/PlantAvatar';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { Button } from '@/components/ui/button';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight } from '@/lib/haptics';
 import type { PlantDto } from '@/types/api';
 
 interface PlantHeroProps {
@@ -66,7 +66,7 @@ export function PlantHero({
 
   return (
     <motion.section
-      className="relative overflow-hidden rounded-[32px] border border-ios-border/60 bg-white/70 shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-ios dark:bg-zinc-950/75"
+      className="theme-surface-1 relative overflow-hidden rounded-[32px] border shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-ios"
       initial={{ opacity: 0, y: 10, scale: 0.995 }}
       animate={celebratePulse > 0 ? { opacity: 1, y: 0, scale: [1, 1.015, 1] } : { opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.24, ease: 'easeOut' }}
@@ -118,7 +118,7 @@ export function PlantHero({
             className="h-10 rounded-full border border-white/35 bg-black/25 px-3 text-xs text-white backdrop-blur-md hover:bg-black/35"
             disabled={photoUploading}
             onClick={() => {
-              hapticImpact('light');
+              impactLight();
               inputRef.current?.click();
             }}
           >

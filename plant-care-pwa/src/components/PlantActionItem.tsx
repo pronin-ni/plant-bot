@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, CheckCircle2, Droplets, ExternalLink, Leaf } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactHeavy, impactLight, success } from '@/lib/haptics';
 
 export interface PlantActionEvent {
   date: string;
@@ -47,10 +47,10 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
   const pieces = useMemo(() => buildBurstPieces(), []);
 
   const statusClass = event.isOverdue
-    ? 'bg-red-500/15 text-red-500'
+    ? 'theme-badge-danger'
     : event.isToday
-      ? 'bg-amber-500/15 text-amber-500'
-      : 'bg-emerald-500/12 text-emerald-600';
+      ? 'theme-badge-warning'
+      : 'theme-badge-success';
 
   const statusLabel = event.isOverdue
     ? 'Срочно'
@@ -64,13 +64,14 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
     }
 
     setLocalRunning(true);
-    hapticImpact('heavy');
+    impactHeavy();
 
     try {
       await onComplete(event.plantId);
       setBurst(true);
       setDone(true);
       setThankYou(true);
+      success();
       window.setTimeout(() => setBurst(false), 420);
       window.setTimeout(() => setDone(false), 1100);
       window.setTimeout(() => setThankYou(false), 1200);
@@ -86,7 +87,7 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.99 }}
       transition={{ type: 'spring', stiffness: 330, damping: 28 }}
-      className="relative overflow-hidden rounded-2xl border border-ios-border/55 bg-white/60 p-3 dark:bg-zinc-900/55"
+      className="theme-surface-1 relative overflow-hidden rounded-2xl border p-3"
     >
       <AnimatePresence>
         {burst ? (
@@ -117,12 +118,12 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
         <button
           type="button"
           onClick={() => {
-            hapticImpact('light');
+            impactLight();
             onOpenPlant(event.plantId);
           }}
           className="group flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ios-border/50 bg-white/80 text-sm font-semibold text-ios-text dark:bg-zinc-800/85">
+          <span className="theme-surface-subtle inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold text-ios-text">
             {event.plantName.slice(0, 1).toUpperCase()}
           </span>
 
@@ -139,7 +140,7 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
       </div>
 
       <div className="relative z-20 mt-3 flex items-center gap-2">
-        <div className="inline-flex items-center gap-1 rounded-full border border-ios-border/50 bg-white/70 px-2 py-1 text-[11px] text-ios-subtext dark:bg-zinc-800/65">
+        <div className="theme-surface-subtle inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] text-ios-subtext">
           <Droplets className="h-3.5 w-3.5 text-ios-accent" />
           Полив
         </div>
@@ -169,7 +170,7 @@ export function PlantActionItem({ event, pending = false, onComplete, onOpenPlan
       <AnimatePresence>
         {thankYou ? (
           <motion.div
-            className="pointer-events-none absolute bottom-2 left-3 z-20 inline-flex items-center gap-1 rounded-full border border-emerald-300/55 bg-emerald-500/12 px-2 py-1 text-[11px] text-emerald-600"
+            className="theme-surface-success pointer-events-none absolute bottom-2 left-3 z-20 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]"
             initial={{ opacity: 0, y: 8, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
