@@ -19,8 +19,8 @@ public class OpenRouterGlobalSettingsService {
   private static final long SINGLETON_ID = 1L;
   private static final String ENC_PREFIX = "enc::";
 
-  public static final String DEFAULT_CHAT_MODEL = "qwen/qwen2-7b-instruct";
-  public static final String DEFAULT_PHOTO_MODEL = "qwen/qwen2-vl-7b-instruct";
+  public static final String DEFAULT_CHAT_MODEL = "meta-llama/llama-3.3-8b-instruct:free";
+  public static final String DEFAULT_PHOTO_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free";
 
   private final GlobalSettingsRepository globalSettingsRepository;
   private final OpenRouterApiKeyCryptoService cryptoService;

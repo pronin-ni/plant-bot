@@ -16,8 +16,8 @@ import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 import type { OpenRouterModelOption } from '@/types/api';
 
-const DEFAULT_TEXT_MODEL = 'qwen/qwen2-7b-instruct';
-const DEFAULT_PHOTO_MODEL = 'qwen/qwen2-vl-7b-instruct';
+const DEFAULT_TEXT_MODEL = 'meta-llama/llama-3.3-8b-instruct:free';
+const DEFAULT_PHOTO_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
 
 function normalizeModelId(value: string | null | undefined): string {
   if (!value) {

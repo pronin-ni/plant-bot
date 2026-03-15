@@ -318,7 +318,9 @@ public class OpenRouterVisionService {
     addCandidate(candidates, photoIdentifyModel);
     addCandidate(candidates, plantModel);
     addCandidate(candidates, fallbackModel);
-    addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    if (candidates.isEmpty()) {
+      addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    }
     return candidates;
   }
 
@@ -355,7 +357,9 @@ public class OpenRouterVisionService {
     addCandidate(candidates, photoIdentifyModel);
     addCandidate(candidates, plantModel);
     addCandidate(candidates, fallbackModel);
-    addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    if (candidates.isEmpty()) {
+      addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
+    }
     return candidates;
   }
 

@@ -48,11 +48,11 @@ public class OpenRouterModelCatalogService {
 
   private static final List<FallbackModelPreset> CURATED_FALLBACK_PRESETS = List.of(
       // Бесплатные text-модели.
-      new FallbackModelPreset("qwen/qwen2-7b-instruct", true, false),
+      new FallbackModelPreset("meta-llama/llama-3.3-8b-instruct:free", true, false),
       new FallbackModelPreset("meta-llama/llama-3.3-8b-instruct:free", true, false),
       new FallbackModelPreset("mistralai/mistral-7b-instruct:free", true, false),
       // Бесплатные vision-модели.
-      new FallbackModelPreset("qwen/qwen2-vl-7b-instruct", true, true),
+      new FallbackModelPreset("meta-llama/llama-3.2-11b-vision-instruct:free", true, true),
       new FallbackModelPreset("meta-llama/llama-3.2-11b-vision-instruct:free", true, true),
       // Платные text-модели.
       new FallbackModelPreset("anthropic/claude-3.5-haiku", false, false),

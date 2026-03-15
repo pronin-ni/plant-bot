@@ -804,34 +804,27 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private List<String> resolveTextModelCandidates(User user) {
-    String primary = resolveTextModel(user);
-    if (!chatFallbackEnabled) {
-      return primary == null || primary.isBlank() ? List.of() : List.of(primary);
-    }
-
     List<String> models = new ArrayList<>();
-    if (primary != null && !primary.isBlank()) {
-      models.add(normalizeModelId(primary));
-    }
-    models.add(normalizeModelId(OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL));
+    addModelCandidate(models, resolveTextModel(user));
+    addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().chatModel());
     if (chatModel != null && !chatModel.isBlank()) {
-      models.add(normalizeModelId(chatModel));
+      addModelCandidate(models, chatModel);
+    }
+    if (plantModel != null && !plantModel.isBlank()) {
+      addModelCandidate(models, plantModel);
     }
     if (model != null && !model.isBlank()) {
-      models.add(normalizeModelId(model));
+      addModelCandidate(models, model);
+    }
+    if (models.isEmpty()) {
+      addModelCandidate(models, OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL);
     }
 
-    List<String> dedup = new ArrayList<>();
-    for (String candidate : models) {
-      if (candidate == null || candidate.isBlank()) {
-        continue;
-      }
-      boolean exists = dedup.stream().anyMatch(item -> item.equalsIgnoreCase(candidate));
-      if (!exists) {
-        dedup.add(candidate);
-      }
+    if (!chatFallbackEnabled) {
+      return models.isEmpty() ? List.of() : List.of(models.get(0));
     }
-    return dedup;
+
+    return models;
   }
 
   private String resolveChatModel(User user, boolean hasPhoto) {
@@ -842,45 +835,47 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private List<String> resolveChatModelCandidates(User user, boolean hasPhoto) {
-    String primary = resolveChatModel(user, hasPhoto);
-    if (!chatFallbackEnabled) {
-      return primary == null || primary.isBlank() ? List.of() : List.of(primary);
-    }
-
     List<String> models = new ArrayList<>();
-    if (primary != null && !primary.isBlank()) {
-      models.add(primary.trim());
-    }
+    addModelCandidate(models, resolveChatModel(user, hasPhoto));
 
-    // Fallback должен быть в рамках того же типа запроса: text->text, photo->photo.
-    String modeDefault = hasPhoto
-        ? OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL
-        : OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL;
-    if (modeDefault != null && !modeDefault.isBlank()) {
-      models.add(normalizeModelId(modeDefault));
+    if (hasPhoto) {
+      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel());
+      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
+    } else {
+      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().chatModel());
     }
 
     if (!hasPhoto && chatModel != null && !chatModel.isBlank()) {
-      models.add(normalizeModelId(chatModel));
+      addModelCandidate(models, chatModel);
     }
     if (hasPhoto && plantModel != null && !plantModel.isBlank()) {
-      models.add(normalizeModelId(plantModel));
+      addModelCandidate(models, plantModel);
     }
     if (model != null && !model.isBlank()) {
-      models.add(normalizeModelId(model));
+      addModelCandidate(models, model);
+    }
+    if (models.isEmpty()) {
+      addModelCandidate(models, hasPhoto
+          ? OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL
+          : OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL);
     }
 
-    List<String> dedup = new ArrayList<>();
-    for (String candidate : models) {
-      if (candidate == null || candidate.isBlank()) {
-        continue;
-      }
-      boolean exists = dedup.stream().anyMatch(item -> item.equalsIgnoreCase(candidate));
-      if (!exists) {
-        dedup.add(candidate);
-      }
+    if (!chatFallbackEnabled) {
+      return models.isEmpty() ? List.of() : List.of(models.get(0));
     }
-    return dedup;
+
+    return models;
+  }
+
+  private void addModelCandidate(List<String> models, String raw) {
+    String normalized = normalizeModelId(raw);
+    if (normalized == null || normalized.isBlank()) {
+      return;
+    }
+    boolean exists = models.stream().anyMatch(item -> item.equalsIgnoreCase(normalized));
+    if (!exists) {
+      models.add(normalized);
+    }
   }
 
   private String normalizePhotoBase64(String raw) {

@@ -126,8 +126,8 @@ export const useOfflineStore = create<OfflineState>((set) => ({
   setPendingMutations: (value) => set({ pendingMutations: Math.max(0, value) })
 }));
 
-const DEFAULT_OPENROUTER_TEXT_MODEL = 'qwen/qwen2-7b-instruct';
-const DEFAULT_OPENROUTER_PHOTO_MODEL = 'qwen/qwen2-vl-7b-instruct';
+const DEFAULT_OPENROUTER_TEXT_MODEL = 'meta-llama/llama-3.3-8b-instruct:free';
+const DEFAULT_OPENROUTER_PHOTO_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
 
 interface OpenRouterModelsState {
   textModel: string;
