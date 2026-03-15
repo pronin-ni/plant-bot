@@ -126,9 +126,6 @@ export const useOfflineStore = create<OfflineState>((set) => ({
   setPendingMutations: (value) => set({ pendingMutations: Math.max(0, value) })
 }));
 
-const DEFAULT_OPENROUTER_TEXT_MODEL = 'meta-llama/llama-3.3-8b-instruct:free';
-const DEFAULT_OPENROUTER_PHOTO_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
-
 interface OpenRouterModelsState {
   textModel: string;
   photoModel: string;
@@ -147,16 +144,16 @@ interface OpenRouterModelsState {
 }
 
 export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => ({
-  textModel: DEFAULT_OPENROUTER_TEXT_MODEL,
-  photoModel: DEFAULT_OPENROUTER_PHOTO_MODEL,
+  textModel: '',
+  photoModel: '',
   hasApiKey: false,
   isLoaded: false,
   source: 'default',
   updatedAt: undefined,
   setModels: ({ textModel, photoModel, hasApiKey, source, updatedAt }) =>
     set({
-      textModel: textModel?.trim() || DEFAULT_OPENROUTER_TEXT_MODEL,
-      photoModel: photoModel?.trim() || DEFAULT_OPENROUTER_PHOTO_MODEL,
+      textModel: textModel?.trim() || '',
+      photoModel: photoModel?.trim() || '',
       hasApiKey: Boolean(hasApiKey),
       isLoaded: true,
       source,
@@ -164,8 +161,8 @@ export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => (
     }),
   resetToDefault: () =>
     set({
-      textModel: DEFAULT_OPENROUTER_TEXT_MODEL,
-      photoModel: DEFAULT_OPENROUTER_PHOTO_MODEL,
+      textModel: '',
+      photoModel: '',
       hasApiKey: false,
       isLoaded: true,
       source: 'default',

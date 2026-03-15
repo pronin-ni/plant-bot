@@ -19,9 +19,6 @@ public class OpenRouterGlobalSettingsService {
   private static final long SINGLETON_ID = 1L;
   private static final String ENC_PREFIX = "enc::";
 
-  public static final String DEFAULT_CHAT_MODEL = "meta-llama/llama-3.3-8b-instruct:free";
-  public static final String DEFAULT_PHOTO_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free";
-
   private final GlobalSettingsRepository globalSettingsRepository;
   private final OpenRouterApiKeyCryptoService cryptoService;
 
@@ -66,16 +63,13 @@ public class OpenRouterGlobalSettingsService {
   public ResolvedModels resolveModels(GlobalSettings settings) {
     // ORB1: приоритет у новых упрощённых глобальных полей text/photo.
     String chat = resolveModel(
-        firstNonBlank(settings == null ? null : settings.getOpenrouterTextModel(), settings == null ? null : settings.getChatModel()),
-        DEFAULT_CHAT_MODEL
+        firstNonBlank(settings == null ? null : settings.getOpenrouterTextModel(), settings == null ? null : settings.getChatModel())
     );
     String recognition = resolveModel(
-        firstNonBlank(settings == null ? null : settings.getOpenrouterPhotoModel(), settings == null ? null : settings.getPhotoRecognitionModel()),
-        DEFAULT_PHOTO_MODEL
+        firstNonBlank(settings == null ? null : settings.getOpenrouterPhotoModel(), settings == null ? null : settings.getPhotoRecognitionModel())
     );
     String diagnosis = resolveModel(
-        firstNonBlank(settings == null ? null : settings.getOpenrouterPhotoModel(), settings == null ? null : settings.getPhotoDiagnosisModel()),
-        DEFAULT_PHOTO_MODEL
+        firstNonBlank(settings == null ? null : settings.getOpenrouterPhotoModel(), settings == null ? null : settings.getPhotoDiagnosisModel())
     );
     return new ResolvedModels(chat, recognition, diagnosis);
   }
@@ -127,12 +121,8 @@ public class OpenRouterGlobalSettingsService {
     );
   }
 
-  private String resolveModel(String currentValue, String fallback) {
-    String normalized = normalizeModel(currentValue);
-    if (normalized != null && !normalized.isBlank()) {
-      return normalized;
-    }
-    return fallback;
+  private String resolveModel(String currentValue) {
+    return normalizeModel(currentValue);
   }
 
   private String firstNonBlank(String... values) {

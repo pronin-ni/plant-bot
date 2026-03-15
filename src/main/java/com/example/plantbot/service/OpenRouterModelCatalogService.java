@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -45,22 +46,6 @@ public class OpenRouterModelCatalogService {
 
   @Value("${openrouter.model-chat:}")
   private String fallbackModelChat;
-
-  private static final List<FallbackModelPreset> CURATED_FALLBACK_PRESETS = List.of(
-      // Бесплатные text-модели.
-      new FallbackModelPreset("meta-llama/llama-3.3-8b-instruct:free", true, false),
-      new FallbackModelPreset("meta-llama/llama-3.3-8b-instruct:free", true, false),
-      new FallbackModelPreset("mistralai/mistral-7b-instruct:free", true, false),
-      // Бесплатные vision-модели.
-      new FallbackModelPreset("meta-llama/llama-3.2-11b-vision-instruct:free", true, true),
-      new FallbackModelPreset("meta-llama/llama-3.2-11b-vision-instruct:free", true, true),
-      // Платные text-модели.
-      new FallbackModelPreset("anthropic/claude-3.5-haiku", false, false),
-      new FallbackModelPreset("openai/gpt-4.1-mini", false, false),
-      // Платные vision-модели.
-      new FallbackModelPreset("google/gemini-1.5-pro", false, true),
-      new FallbackModelPreset("openai/gpt-4o", false, true)
-  );
 
   public List<OpenRouterModelOptionResponse> fetchModels(User user) {
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
@@ -114,6 +99,14 @@ public class OpenRouterModelCatalogService {
     }
   }
 
+  public String resolveDynamicTextFallback(User user) {
+    return resolveDynamicFallback(fetchModels(user), false);
+  }
+
+  public String resolveDynamicPhotoFallback(User user) {
+    return resolveDynamicFallback(fetchModels(user), true);
+  }
+
   public KeyValidationResult validateApiKey(String apiKey) {
     if (apiKey == null || apiKey.isBlank()) {
       return new KeyValidationResult(false, "API-ключ не задан");
@@ -154,30 +147,13 @@ public class OpenRouterModelCatalogService {
   private List<OpenRouterModelOptionResponse> fallbackModels() {
     Map<String, OpenRouterModelOptionResponse> byId = new LinkedHashMap<>();
 
-    // 1) Сначала вшитые пресеты, чтобы UI не "ломался" при недоступном каталоге OpenRouter.
-    for (FallbackModelPreset preset : CURATED_FALLBACK_PRESETS) {
-      byId.putIfAbsent(
-          preset.id(),
-          new OpenRouterModelOptionResponse(
-              preset.id(),
-              preset.id(),
-              null,
-              null,
-              null,
-              preset.free(),
-              preset.supportsImageToText()
-          )
-      );
-    }
-
-    // 2) Затем модели из конфигурации проекта (могут переопределять/дополнять пресеты).
-    List<String> raw = List.of(
-        fallbackModel,
-        fallbackModelPlant,
-        fallbackModelPhotoIdentify,
-        fallbackModelPhotoDiagnose,
-        fallbackModelChat
-    );
+    // Если каталог OpenRouter недоступен, используем только модели из конфигурации окружения.
+    List<String> raw = new ArrayList<>();
+    raw.add(fallbackModel);
+    raw.add(fallbackModelPlant);
+    raw.add(fallbackModelPhotoIdentify);
+    raw.add(fallbackModelPhotoDiagnose);
+    raw.add(fallbackModelChat);
     for (String id : raw) {
       if (id == null || id.isBlank()) {
         continue;
@@ -201,6 +177,23 @@ public class OpenRouterModelCatalogService {
     items.sort(Comparator.comparing(OpenRouterModelOptionResponse::free).reversed()
         .thenComparing(OpenRouterModelOptionResponse::id));
     return items;
+  }
+
+  private String resolveDynamicFallback(List<OpenRouterModelOptionResponse> models, boolean supportsImageToText) {
+    Optional<String> free = models.stream()
+        .filter(model -> model.supportsImageToText() == supportsImageToText)
+        .filter(OpenRouterModelOptionResponse::free)
+        .map(OpenRouterModelOptionResponse::id)
+        .findFirst();
+    if (free.isPresent()) {
+      return free.get();
+    }
+
+    return models.stream()
+        .filter(model -> model.supportsImageToText() == supportsImageToText)
+        .map(OpenRouterModelOptionResponse::id)
+        .findFirst()
+        .orElse(null);
   }
 
   private boolean supportsImageToText(JsonNode model) {
@@ -256,13 +249,6 @@ public class OpenRouterModelCatalogService {
       return null;
     }
     return value.trim();
-  }
-
-  private record FallbackModelPreset(
-      String id,
-      boolean free,
-      boolean supportsImageToText
-  ) {
   }
 
   public record KeyValidationResult(

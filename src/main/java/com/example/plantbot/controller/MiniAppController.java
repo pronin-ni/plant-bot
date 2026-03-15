@@ -34,6 +34,7 @@ import com.example.plantbot.service.PlantPresetCatalogService;
 import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
+import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.UserService;
@@ -105,6 +106,7 @@ public class MiniAppController {
   private final PhotoUrlSignerService photoUrlSignerService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
+  private final OpenRouterModelCatalogService openRouterModelCatalogService;
   private final WeatherService weatherService;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
@@ -590,9 +592,11 @@ public class MiniAppController {
     var models = openRouterUserSettingsService.resolveGlobalModels();
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     boolean hasApiKey = apiKey != null && !apiKey.isBlank();
+    String effectiveTextModel = firstNonBlank(models.chatModel(), openRouterModelCatalogService.resolveDynamicTextFallback(user));
+    String effectivePhotoModel = firstNonBlank(models.photoRecognitionModel(), openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
     return new OpenRouterRuntimeSettingsResponse(
-        models.chatModel(),
-        models.photoRecognitionModel(),
+        effectiveTextModel,
+        effectivePhotoModel,
         hasApiKey
     );
   }
@@ -862,6 +866,18 @@ public class MiniAppController {
     }
     events.sort(Comparator.comparing(CalendarEventResponse::date).thenComparing(CalendarEventResponse::plantName));
     return events;
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   private CalendarSyncResponse toCalendarSyncResponse(User user) {

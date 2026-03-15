@@ -35,6 +35,7 @@ public class OpenRouterVisionService {
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
+  private final OpenRouterModelCatalogService openRouterModelCatalogService;
 
   @Value("${openrouter.model-plant:}")
   private String plantModel;
@@ -309,18 +310,16 @@ public class OpenRouterVisionService {
     if (fallbackModel != null && !fallbackModel.isBlank()) {
       return normalizeModelId(fallbackModel);
     }
-    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
+    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
   }
 
   private List<String> resolveIdentifyModelCandidates(User user) {
     List<String> candidates = new ArrayList<>();
+    addCandidate(candidates, resolveIdentifyModel(user));
     addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
     addCandidate(candidates, photoIdentifyModel);
     addCandidate(candidates, plantModel);
     addCandidate(candidates, fallbackModel);
-    if (candidates.isEmpty()) {
-      addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
-    }
     return candidates;
   }
 
@@ -346,20 +345,18 @@ public class OpenRouterVisionService {
     if (fallbackModel != null && !fallbackModel.isBlank()) {
       return normalizeModelId(fallbackModel);
     }
-    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
+    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
   }
 
   private List<String> resolveDiagnoseModelCandidates(User user) {
     List<String> candidates = new ArrayList<>();
+    addCandidate(candidates, resolveDiagnoseModel(user));
     addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel());
     addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
     addCandidate(candidates, photoDiagnoseModel);
     addCandidate(candidates, photoIdentifyModel);
     addCandidate(candidates, plantModel);
     addCandidate(candidates, fallbackModel);
-    if (candidates.isEmpty()) {
-      addCandidate(candidates, OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL);
-    }
     return candidates;
   }
 

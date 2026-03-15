@@ -33,6 +33,7 @@ import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
+import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.WeatherService;
@@ -80,6 +81,7 @@ public class AdminController {
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
+  private final OpenRouterModelCatalogService openRouterModelCatalogService;
   @Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
 
@@ -195,11 +197,13 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     var settings = openRouterGlobalSettingsService.getOrCreate();
     var models = openRouterGlobalSettingsService.resolveModels(settings);
+    String effectiveTextModel = firstNonBlank(models.chatModel(), openRouterModelCatalogService.resolveDynamicTextFallback(admin));
+    String effectivePhotoModel = firstNonBlank(models.photoRecognitionModel(), openRouterModelCatalogService.resolveDynamicPhotoFallback(admin));
     log.info("Admin openrouter models requested: userId={} telegramId={} textModel={} photoModel={}",
-        admin.getId(), admin.getTelegramId(), models.chatModel(), models.photoRecognitionModel());
+        admin.getId(), admin.getTelegramId(), effectiveTextModel, effectivePhotoModel);
     return new AdminOpenRouterModelsResponse(
-        models.chatModel(),
-        models.photoRecognitionModel(),
+        effectiveTextModel,
+        effectivePhotoModel,
         openRouterGlobalSettingsService.hasApiKey(settings),
         settings.getUpdatedAt()
     );
@@ -212,19 +216,33 @@ public class AdminController {
   ) {
     User admin = requireAdmin(authentication);
     var result = openRouterGlobalSettingsService.updateModels(request);
+    String effectiveTextModel = firstNonBlank(result.textModel(), openRouterModelCatalogService.resolveDynamicTextFallback(admin));
+    String effectivePhotoModel = firstNonBlank(result.photoModel(), openRouterModelCatalogService.resolveDynamicPhotoFallback(admin));
     log.warn("Admin openrouter models updated: userId={} telegramId={} changedFields={} textModel={} photoModel={} hasApiKey={}",
         admin.getId(),
         admin.getTelegramId(),
         result.changedFields(),
-        result.textModel(),
-        result.photoModel(),
+        effectiveTextModel,
+        effectivePhotoModel,
         result.hasApiKey());
     return new AdminOpenRouterModelsResponse(
-        result.textModel(),
-        result.photoModel(),
+        effectiveTextModel,
+        effectivePhotoModel,
         result.hasApiKey(),
         result.settings().getUpdatedAt()
     );
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   @PostMapping("/openrouter/test")

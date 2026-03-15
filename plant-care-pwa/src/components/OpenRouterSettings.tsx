@@ -16,8 +16,6 @@ import { hapticImpact } from '@/lib/telegram';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 import type { OpenRouterModelOption } from '@/types/api';
 
-const DEFAULT_TEXT_MODEL = 'meta-llama/llama-3.3-8b-instruct:free';
-const DEFAULT_PHOTO_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
 
 function normalizeModelId(value: string | null | undefined): string {
   if (!value) {
@@ -60,6 +58,15 @@ function ensureOption(options: OpenRouterModelOption[], value: string, supportsI
   ];
 }
 
+function pickRecommendedModel(models: OpenRouterModelOption[], supportsImageToText: boolean): string {
+  const free = models.find((item) => item.supportsImageToText === supportsImageToText && item.free);
+  if (free) {
+    return free.id;
+  }
+  const fallback = models.find((item) => item.supportsImageToText === supportsImageToText);
+  return fallback?.id ?? '';
+}
+
 // ORB5: упрощённая секция OpenRouter — только 2 глобальные модели (text/photo) + тесты.
 export function OpenRouterSettings() {
   const queryClient = useQueryClient();
@@ -78,8 +85,8 @@ export function OpenRouterSettings() {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const [allModels, setAllModels] = useState<OpenRouterModelOption[]>([]);
-  const [textModel, setTextModel] = useState(DEFAULT_TEXT_MODEL);
-  const [photoModel, setPhotoModel] = useState(DEFAULT_PHOTO_MODEL);
+  const [textModel, setTextModel] = useState('');
+  const [photoModel, setPhotoModel] = useState('');
 
   useEffect(() => {
     if (!isAdmin) {
@@ -105,8 +112,10 @@ export function OpenRouterSettings() {
         .filter((item) => item.id);
 
       setAllModels(normalized);
-      const nextText = normalizeModelId(globalModels.textModel) || runtimeModels.textModel || DEFAULT_TEXT_MODEL;
-      const nextPhoto = normalizeModelId(globalModels.photoModel) || runtimeModels.photoModel || DEFAULT_PHOTO_MODEL;
+      const recommendedText = pickRecommendedModel(normalized, false);
+      const recommendedPhoto = pickRecommendedModel(normalized, true);
+      const nextText = normalizeModelId(globalModels.textModel) || runtimeModels.textModel || recommendedText;
+      const nextPhoto = normalizeModelId(globalModels.photoModel) || runtimeModels.photoModel || recommendedPhoto;
       setTextModel(nextText);
       setPhotoModel(nextPhoto);
 
@@ -122,7 +131,9 @@ export function OpenRouterSettings() {
       setStatus(
         globalModels.hasApiKey
           ? 'Глобальные модели загружены'
-          : 'Ключ не задан: будут работать fallback-модели'
+          : (recommendedText || recommendedPhoto)
+            ? 'Ключ не задан: используем актуальные fallback-модели из каталога OpenRouter'
+            : 'Ключ не задан и каталог OpenRouter не вернул доступные fallback-модели'
       );
     } catch (error) {
       console.error(error);
@@ -135,6 +146,9 @@ export function OpenRouterSettings() {
   const filtered = useMemo(() => {
     return allModels.filter((item) => (showPaid ? true : item.free));
   }, [allModels, showPaid]);
+
+  const recommendedTextModel = useMemo(() => pickRecommendedModel(allModels, false), [allModels]);
+  const recommendedPhotoModel = useMemo(() => pickRecommendedModel(allModels, true), [allModels]);
 
   const textOptions = useMemo(
     () => ensureOption(filtered.filter((item) => !item.supportsImageToText), textModel, false),
@@ -149,13 +163,21 @@ export function OpenRouterSettings() {
     setSaving(true);
     setStatus('Сохраняем глобальные модели...');
     try {
+      const nextRequestedText = normalizeModelId(textModel) || recommendedTextModel;
+      const nextRequestedPhoto = normalizeModelId(photoModel) || recommendedPhotoModel;
+      if (!nextRequestedText || !nextRequestedPhoto) {
+        setStatus('OpenRouter не вернул подходящие fallback-модели. Обновите каталог или задайте модели вручную.');
+        hapticImpact('light');
+        return;
+      }
+
       const result = await updateAdminOpenRouterModels({
-        textModel: normalizeModelId(textModel) || DEFAULT_TEXT_MODEL,
-        photoModel: normalizeModelId(photoModel) || DEFAULT_PHOTO_MODEL
+        textModel: nextRequestedText,
+        photoModel: nextRequestedPhoto
       });
 
-      const nextText = normalizeModelId(result.textModel) || DEFAULT_TEXT_MODEL;
-      const nextPhoto = normalizeModelId(result.photoModel) || DEFAULT_PHOTO_MODEL;
+      const nextText = normalizeModelId(result.textModel) || recommendedTextModel;
+      const nextPhoto = normalizeModelId(result.photoModel) || recommendedPhotoModel;
       setTextModel(nextText);
       setPhotoModel(nextPhoto);
 
@@ -263,10 +285,10 @@ export function OpenRouterSettings() {
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ios-subtext">
           <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
-            Runtime text: {runtimeModels.textModel || DEFAULT_TEXT_MODEL}
+            Runtime text: {runtimeModels.textModel || recommendedTextModel || 'автовыбор недоступен'}
           </span>
           <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
-            Runtime photo: {runtimeModels.photoModel || DEFAULT_PHOTO_MODEL}
+            Runtime photo: {runtimeModels.photoModel || recommendedPhotoModel || 'автовыбор недоступен'}
           </span>
           <span className="rounded-full border border-ios-border/60 bg-white/70 px-2 py-1 dark:bg-zinc-900/60">
             Синхр.: {formatSyncTime(lastSavedAt ?? runtimeModels.updatedAt)}
@@ -322,12 +344,13 @@ export function OpenRouterSettings() {
             <select
               value={textModel}
               onChange={(e) => {
-                setTextModel(normalizeModelId(e.target.value) || DEFAULT_TEXT_MODEL);
+                setTextModel(normalizeModelId(e.target.value));
                 hapticImpact('light');
               }}
-              disabled={loading}
+              disabled={loading || textOptions.length === 0}
               className="h-11 w-full rounded-ios-button border border-ios-border/60 bg-white/70 px-3 text-sm outline-none dark:bg-zinc-900/60"
             >
+              {textOptions.length === 0 ? <option value="">Нет доступных text-моделей</option> : null}
               {textOptions.map((model) => (
                 <option key={`text-${model.id}`} value={model.id}>
                   {model.name} {model.free ? '· free' : '· paid'}
@@ -341,12 +364,13 @@ export function OpenRouterSettings() {
             <select
               value={photoModel}
               onChange={(e) => {
-                setPhotoModel(normalizeModelId(e.target.value) || DEFAULT_PHOTO_MODEL);
+                setPhotoModel(normalizeModelId(e.target.value));
                 hapticImpact('light');
               }}
-              disabled={loading}
+              disabled={loading || photoOptions.length === 0}
               className="h-11 w-full rounded-ios-button border border-ios-border/60 bg-white/70 px-3 text-sm outline-none dark:bg-zinc-900/60"
             >
+              {photoOptions.length === 0 ? <option value="">Нет доступных vision-моделей</option> : null}
               {photoOptions.map((model) => (
                 <option key={`photo-${model.id}`} value={model.id}>
                   {model.name} {model.free ? '· free' : '· paid'}
@@ -358,7 +382,7 @@ export function OpenRouterSettings() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button className="h-11 rounded-2xl" onClick={handleSave} disabled={saving || loading || !hasUnsavedChanges}>
+        <Button className="h-11 rounded-2xl" onClick={handleSave} disabled={saving || loading || !hasUnsavedChanges || !textModel || !photoModel}>
           {saving ? 'Сохраняем...' : 'Сохранить глобально'}
         </Button>
         <Button

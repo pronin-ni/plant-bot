@@ -46,6 +46,7 @@ public class OpenRouterPlantAdvisorService {
   private final ObjectMapper objectMapper;
   private final OpenRouterCacheRepository openRouterCacheRepository;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
+  private final OpenRouterModelCatalogService openRouterModelCatalogService;
 
   @Value("${openrouter.model:}")
   private String model;
@@ -785,7 +786,7 @@ public class OpenRouterPlantAdvisorService {
     if (model != null && !model.isBlank()) {
       return normalizeModelId(model);
     }
-    return OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL;
+    return normalizeModelId(openRouterModelCatalogService.resolveDynamicTextFallback(user));
   }
 
   private String resolvePhotoModel(User user) {
@@ -800,7 +801,7 @@ public class OpenRouterPlantAdvisorService {
     if (model != null && !model.isBlank()) {
       return normalizeModelId(model);
     }
-    return OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL;
+    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
   }
 
   private List<String> resolveTextModelCandidates(User user) {
@@ -816,10 +817,6 @@ public class OpenRouterPlantAdvisorService {
     if (model != null && !model.isBlank()) {
       addModelCandidate(models, model);
     }
-    if (models.isEmpty()) {
-      addModelCandidate(models, OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL);
-    }
-
     if (!chatFallbackEnabled) {
       return models.isEmpty() ? List.of() : List.of(models.get(0));
     }
@@ -854,12 +851,6 @@ public class OpenRouterPlantAdvisorService {
     if (model != null && !model.isBlank()) {
       addModelCandidate(models, model);
     }
-    if (models.isEmpty()) {
-      addModelCandidate(models, hasPhoto
-          ? OpenRouterGlobalSettingsService.DEFAULT_PHOTO_MODEL
-          : OpenRouterGlobalSettingsService.DEFAULT_CHAT_MODEL);
-    }
-
     if (!chatFallbackEnabled) {
       return models.isEmpty() ? List.of() : List.of(models.get(0));
     }
