@@ -20,8 +20,16 @@ import {
   waitForServiceWorkerRegistration,
   type PushReceipt
 } from '@/lib/pwa';
+import {
+  error as hapticError,
+  impactHeavy,
+  impactLight,
+  impactMedium,
+  selection,
+  success as hapticSuccess,
+  warning as hapticWarning
+} from '@/lib/haptics';
 import { useAuthStore } from '@/lib/store';
-import { hapticImpact } from '@/lib/telegram';
 
 import { NOTIFICATION_PATTERN_KEY, NOTIFICATION_TIME_KEY } from './panel-shared';
 
@@ -238,6 +246,7 @@ export function NotificationsPanel() {
   const persist = (nextTime: string, nextPattern: string) => {
     localStorage.setItem(NOTIFICATION_TIME_KEY, nextTime);
     localStorage.setItem(NOTIFICATION_PATTERN_KEY, nextPattern);
+    selection();
   };
 
   const getPushErrorMessage = (error: unknown, fallback: string) => {
@@ -325,18 +334,21 @@ export function NotificationsPanel() {
     const unsubscribe = subscribeToPushReceipts((receipt) => {
       setPanelState((current) => ({ ...current, lastReceipt: receipt }));
       setStatus(`Уведомление получено на этом устройстве: ${receipt.title}`);
-      hapticImpact('medium');
+      hapticSuccess();
     });
     return unsubscribe;
   }, []);
 
   const testPattern = () => {
-    const patternMap: Record<string, number[]> = {
-      light: [40],
-      medium: [80, 40, 80],
-      heavy: [150, 60, 150]
-    };
-    navigator.vibrate?.(patternMap[pattern] ?? [80, 40, 80]);
+    if (pattern === 'light') {
+      impactLight();
+      return;
+    }
+    if (pattern === 'heavy') {
+      impactHeavy();
+      return;
+    }
+    impactMedium();
   };
 
   const subscribe = async () => {
@@ -369,7 +381,7 @@ export function NotificationsPanel() {
       }
 
       await subscribePwaPush(subscription.toJSON());
-      hapticImpact('medium');
+      hapticSuccess();
       setStatus('Это устройство подключено к Web Push. Теперь можно отправить self-test.');
       await refresh();
     } catch (error) {
@@ -377,6 +389,7 @@ export function NotificationsPanel() {
         console.error(error);
       }
       setStatus(getPushErrorMessage(error, 'Не удалось подключить Web Push на этом устройстве.'));
+      hapticError();
     } finally {
       setAction(null);
     }
@@ -395,12 +408,14 @@ export function NotificationsPanel() {
         await unsubscribePwaPush(panelState.localEndpoint);
       }
       setStatus('Подписка текущего устройства отключена.');
+      selection();
       await refresh();
     } catch (error) {
       if (!shouldSilencePushError(error)) {
         console.error(error);
       }
       setStatus(getPushErrorMessage(error, 'Не удалось отключить Web Push на этом устройстве.'));
+      hapticError();
     } finally {
       setAction(null);
     }
@@ -425,6 +440,7 @@ export function NotificationsPanel() {
       });
       if (!result.acceptedByProvider) {
         setStatus(result.message || 'Push не принят провайдером.');
+        hapticWarning();
         return;
       }
       setStatus('Push принят провайдером. Теперь ждём подтверждение receipt на этом устройстве...');
@@ -432,14 +448,16 @@ export function NotificationsPanel() {
       if (receipt) {
         setPanelState((current) => ({ ...current, lastReceipt: receipt }));
         setStatus(`Receipt подтверждён: ${receipt.title}`);
-        hapticImpact('medium');
+        hapticSuccess();
       } else {
         setStatus('Backend получил acceptance, но это устройство пока не подтвердило receipt. Проверьте фоновые ограничения браузера или stale subscription.');
+        hapticWarning();
       }
       await refresh();
     } catch (error) {
       console.error(error);
       setStatus('Не удалось выполнить self-test push для этого устройства.');
+      hapticError();
     } finally {
       setAction(null);
     }
@@ -465,14 +483,15 @@ export function NotificationsPanel() {
       });
       if (res.ok) {
         setStatus(`Admin test принят провайдером: ${res.delivered}/${res.subscriptions}. Receipt конкретного устройства проверяйте отдельно.`);
-        hapticImpact('medium');
+        hapticSuccess();
       } else {
         setStatus(res.message || 'Admin push-тест не был принят провайдером.');
-        hapticImpact('light');
+        hapticWarning();
       }
     } catch (error) {
       console.error(error);
       setStatus('Не удалось выполнить admin push-тест.');
+      hapticError();
     } finally {
       setPushTestPending(false);
     }

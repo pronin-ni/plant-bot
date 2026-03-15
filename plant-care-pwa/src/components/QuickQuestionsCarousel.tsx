@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import { hapticSelectionChanged } from '@/lib/telegram';
+import { selection } from '@/lib/haptics';
 
 interface QuickQuestionsCarouselProps {
   items: string[];
@@ -68,7 +68,7 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
                 return;
               }
               setExpandedQuestion(null);
-              hapticSelectionChanged();
+              selection();
               onPick(item);
             }}
           >

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bell,
+  SmartphoneNfc,
   Bot,
   CalendarSync,
   ChevronRight,
@@ -28,12 +29,13 @@ import { ThemeSelector } from '@/components/settings/ThemeSelector';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { OpenRouterSettings } from '@/components/OpenRouterSettings';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, selection, success as hapticSuccess } from '@/lib/haptics';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import {
   AppStatusPanel,
   BackupsPanel,
   CalendarPanel,
+  HapticsPanel,
   DiagnosticsPanel,
   ExportDataPanel,
   HomeAssistantPanel,
@@ -48,6 +50,7 @@ import {
 type SettingsDetailId =
   | 'theme'
   | 'notifications'
+  | 'haptics'
   | 'weather'
   | 'home-assistant'
   | 'calendar'
@@ -88,6 +91,14 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
         subtitle: 'Светлая, тёмная, ботаническая палитра',
         icon: Palette,
         detailId: 'theme',
+        action: 'dialog'
+      },
+      {
+        id: 'haptics',
+        title: 'Виброотклик',
+        subtitle: 'Включение haptic feedback и быстрый preview',
+        icon: SmartphoneNfc,
+        detailId: 'haptics',
         action: 'dialog'
       },
       {
@@ -253,6 +264,10 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
     title: 'Уведомления',
     description: 'Настройте push-подписку, время и тактильный паттерн.'
   },
+  haptics: {
+    title: 'Виброотклик',
+    description: 'Включите haptic feedback для значимых действий и проверьте его на этом устройстве.'
+  },
   weather: {
     title: 'Город и погода',
     description: 'Выберите город и проверьте автоматический погодный источник.'
@@ -315,7 +330,7 @@ export function SettingsPage() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const handleRefresh = async () => {
-    hapticImpact('light');
+    impactLight();
     await queryClient.invalidateQueries();
     await queryClient.refetchQueries({ type: 'active' });
   };
@@ -330,7 +345,7 @@ export function SettingsPage() {
   }, [isAdmin]);
 
   const openDetail = (item: SettingsItem) => {
-    hapticImpact('light');
+    selection();
 
     if (item.action === 'admin-tab') {
       setActiveTab('admin');
@@ -348,7 +363,7 @@ export function SettingsPage() {
   };
 
   const handleLogout = async () => {
-    hapticImpact('medium');
+    hapticSuccess();
     clearAuth();
     setActiveDetail(null);
     setLogoutConfirmOpen(false);
@@ -392,7 +407,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  hapticImpact('light');
+                  impactMedium();
                   setLogoutConfirmOpen(true);
                 }}
                 className="theme-badge-danger touch-target inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border px-4 text-sm font-medium transition hover:border-[hsl(var(--destructive)/0.34)]"
@@ -535,6 +550,7 @@ function SettingsDetailDialog({
         <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+22px)]">
           {detailId === 'theme' ? <ThemeSelector /> : null}
           {detailId === 'notifications' ? <NotificationsPanel /> : null}
+          {detailId === 'haptics' ? <HapticsPanel /> : null}
           {detailId === 'weather' ? <WeatherPanel /> : null}
           {detailId === 'home-assistant' ? <HomeAssistantPanel /> : null}
           {detailId === 'calendar' ? <CalendarPanel /> : null}

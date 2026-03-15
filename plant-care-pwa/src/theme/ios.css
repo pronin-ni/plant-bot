@@ -88,6 +88,12 @@ body {
   padding: max(env(safe-area-inset-top), 10px) 16px calc(max(env(safe-area-inset-bottom), 14px) + 92px);
 }
 
+.app-shell-chat {
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
 
 
 .settings-premium-shell {

@@ -9,7 +9,12 @@ import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefre
 import { Button } from '@/components/ui/button';
 import { getPlants, getWeatherCurrent, waterPlant } from '@/lib/api';
 import { parseDateOnly } from '@/lib/date';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import {
+  error as hapticError,
+  impactLight,
+  selection,
+  success as hapticSuccess
+} from '@/lib/haptics';
 import { useAuthStore, useOfflineStore, useUiStore } from '@/lib/store';
 import type { PlantDto } from '@/types/api';
 
@@ -284,11 +289,11 @@ export function PlantsList() {
   const waterMutation = useMutation({
     mutationFn: (plantId: number) => waterPlant(plantId),
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
     onError: () => {
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -344,7 +349,7 @@ export function PlantsList() {
           variant="secondary"
           size="sm"
           onClick={() => {
-            hapticImpact('light');
+            impactLight();
             void plantsQuery.refetch();
           }}
         >
@@ -369,7 +374,7 @@ export function PlantsList() {
           variant="secondary"
           className="mt-4 rounded-xl bg-ios-accent/15 text-ios-accent hover:bg-ios-accent/25"
           onClick={() => {
-            hapticImpact('light');
+            impactLight();
             setActiveTab('add');
           }}
         >
@@ -435,7 +440,7 @@ export function PlantsList() {
               type="button"
               className="theme-surface-subtle touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border text-ios-subtext transition-transform duration-150 active:scale-95"
               onClick={() => {
-                hapticImpact('light');
+                impactLight();
                 void refreshAll();
               }}
               aria-label="Обновить список"
@@ -450,7 +455,7 @@ export function PlantsList() {
               onChange={(next) => {
                 setCategoryFilter(next);
                 localStorage.setItem(categoryStorageKey, next);
-                hapticImpact('light');
+                selection();
               }}
             />
           </div>
@@ -466,7 +471,7 @@ export function PlantsList() {
                 const next = !onlyOverdue;
                 setOnlyOverdue(next);
                 localStorage.setItem(overdueStorageKey, next ? '1' : '0');
-                hapticImpact('light');
+                selection();
               }}
             >
               Просроченные
@@ -479,7 +484,7 @@ export function PlantsList() {
                   const next = event.target.value as SortMode;
                   setSortMode(next);
                   localStorage.setItem(sortStorageKey, next);
-                  hapticImpact('light');
+                  selection();
                 }}
                 className="h-8 min-w-0 flex-1 bg-transparent text-xs font-semibold text-ios-text outline-none sm:min-w-[138px] sm:flex-none"
               >
@@ -558,7 +563,7 @@ export function PlantsList() {
                         }
                       }}
                       onOpen={() => {
-                        hapticImpact('light');
+                        selection();
                         openPlantDetail(plant.id);
                       }}
                     />
@@ -586,7 +591,7 @@ export function PlantsList() {
                 variant="secondary"
                 className="mt-1 rounded-xl bg-ios-accent/15 text-ios-accent hover:bg-ios-accent/25"
                 onClick={() => {
-                  hapticImpact('light');
+                  impactLight();
                   setActiveTab('add');
                 }}
               >

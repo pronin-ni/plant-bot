@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, BarChart3, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 
 import { getCalendar, waterPlant } from '@/lib/api';
-import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
+import { error as hapticError, impactLight, selection, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { useOfflineStore, useUiStore } from '@/lib/store';
 import { PlatformPullToRefresh } from '@/components/adaptive/PlatformPullToRefresh';
 import { DayCard } from '@/components/DayCard';
@@ -124,13 +124,12 @@ export function CalendarPage() {
   const completeMutation = useMutation({
     mutationFn: (plantId: number) => waterPlant(plantId),
     onSuccess: () => {
-      hapticNotify('success');
-      navigator.vibrate?.([100, 50, 100]);
+      hapticSuccess();
       setWateringWavePulse((prev) => prev + 1);
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const massCompleteMutation = useMutation({
@@ -143,19 +142,18 @@ export function CalendarPage() {
     },
     onSuccess: ({ successCount, failedCount }) => {
       if (successCount > 0) {
-        hapticNotify('success');
-        navigator.vibrate?.([100, 50, 100]);
+        hapticSuccess();
         setWateringWavePulse((prev) => prev + 1);
       } else {
-        hapticNotify('warning');
+        hapticWarning();
       }
       if (failedCount > 0) {
-        hapticImpact('rigid');
+        impactLight();
       }
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const now = new Date();
@@ -245,11 +243,6 @@ export function CalendarPage() {
 
   const forecastPlant = selectedDayEvents[0] ?? overdueEvents[0] ?? null;
 
-  useEffect(() => {
-    hapticImpact('light');
-    navigator.vibrate?.(50);
-  }, []);
-
   return (
     <PlatformPullToRefresh onRefresh={() => calendarQuery.refetch()}>
       <section className="calendar-premium-shell relative space-y-3 overflow-hidden pt-[max(12px,env(safe-area-inset-top))] pb-[calc(9rem+env(safe-area-inset-bottom))]">
@@ -298,7 +291,7 @@ export function CalendarPage() {
               type="button"
               className="theme-surface-subtle touch-target android-ripple inline-flex shrink-0 items-center rounded-full border px-3 text-ios-caption text-ios-subtext"
               onClick={() => {
-                hapticImpact('light');
+                impactLight();
                 void calendarQuery.refetch();
               }}
             >
@@ -410,7 +403,7 @@ export function CalendarPage() {
                       : 'theme-surface-subtle text-ios-subtext hover:text-ios-text'
                   }`}
                   onClick={() => {
-                    hapticSelectionChanged();
+                    selection();
                     setFilter(tab.key);
                   }}
                 >
@@ -462,7 +455,7 @@ export function CalendarPage() {
                   key={`upcoming-${event.date}-${event.plantId}`}
                   type="button"
                   onClick={() => {
-                    hapticSelectionChanged();
+                    selection();
                     setSelectedDate(event.dayKey);
                     openPlantDetail(event.plantId);
                   }}

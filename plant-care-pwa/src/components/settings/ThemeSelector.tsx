@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, Monitor, Paintbrush } from 'lucide-react';
 
+import { selection } from '@/lib/haptics';
 import { APP_THEMES } from '@/lib/theme/themes';
 import { useThemeStore } from '@/lib/theme/themeStore';
 
@@ -47,7 +48,10 @@ export function ThemeSelector() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={setSystemTheme}
+          onClick={() => {
+            selection();
+            setSystemTheme();
+          }}
           className={`touch-target inline-flex items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${
             useSystemTheme
               ? 'theme-pill-active'
@@ -72,7 +76,10 @@ export function ThemeSelector() {
             <motion.button
               key={theme.id}
               type="button"
-              onClick={() => setTheme(theme.id)}
+              onClick={() => {
+                selection();
+                setTheme(theme.id);
+              }}
               whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
               role="radio"
               aria-checked={isActive}

@@ -13,7 +13,13 @@ import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
 import { apiFetch, deletePlant, getPlantById, getPlantCareAdvice, uploadPlantPhoto, waterPlant } from '@/lib/api';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import {
+  error as hapticError,
+  impactHeavy,
+  impactLight,
+  impactMedium,
+  success as hapticSuccess
+} from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
 import type { PlantCareAdviceDto, PlantDto, WateringRecommendationPreviewDto } from '@/types/api';
 
@@ -248,60 +254,59 @@ export function PlantDetailSheet() {
         })
       }),
     onSuccess: async () => {
-      hapticNotify('success');
+      hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       await queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const refreshAdviceMutation = useMutation({
     mutationFn: (id: number) => getPlantCareAdvice(id, true),
     onSuccess: (data, id) => {
       queryClient.setQueryData(['plant-care-advice', id], data);
-      hapticNotify('success');
     },
     onError: () => {
-      hapticNotify('error');
+      hapticError();
     }
   });
 
   const waterMutation = useMutation({
     mutationFn: (id: number) => waterPlant(id),
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
     },
     onError: () => {
-      hapticNotify('error');
+      hapticError();
     }
   });
 
   const photoMutation = useMutation({
     mutationFn: ({ id, dataUrl }: { id: number; dataUrl: string }) => uploadPlantPhoto(id, dataUrl),
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deletePlant(id),
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       setDeleteConfirmOpen(false);
       closePlantDetail();
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const plant = useMemo(() => plantQuery.data ?? null, [plantQuery.data]);
@@ -367,6 +372,7 @@ export function PlantDetailSheet() {
                   if (!selectedPlantId || recommendationQuery.isFetching) {
                     return;
                   }
+                  impactLight();
                   void recommendationQuery.refetch();
                 }}
                 onManualApply={(intervalDays, waterMl) => {
@@ -398,6 +404,7 @@ export function PlantDetailSheet() {
                     if (!selectedPlantId || refreshAdviceMutation.isPending) {
                       return;
                     }
+                    impactLight();
                     refreshAdviceMutation.mutate(selectedPlantId);
                   }}
                 />
@@ -408,7 +415,7 @@ export function PlantDetailSheet() {
 
                 <DangerZoneSection
                   onDeleteClick={() => {
-                    hapticImpact('rigid');
+                    impactMedium();
                     setDeleteConfirmOpen(true);
                   }}
                 />
@@ -418,8 +425,7 @@ export function PlantDetailSheet() {
               if (!selectedPlantId) {
                 return;
               }
-              hapticImpact('medium');
-              navigator.vibrate?.(100);
+              impactMedium();
               const dataUrl = await toDataUrl(file);
               setPreviewDataUrl(dataUrl);
               photoMutation.mutate({ id: selectedPlantId, dataUrl });
@@ -469,7 +475,7 @@ export function PlantDetailSheet() {
                     if (!selectedPlantId) {
                       return;
                     }
-                    hapticImpact('heavy');
+                    impactHeavy();
                     setDeleteShake(true);
                     deleteMutation.mutate(selectedPlantId);
                   }}

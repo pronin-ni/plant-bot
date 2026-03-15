@@ -18,7 +18,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { getHomeAssistantRoomsAndSensors, saveHomeAssistantConfig } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, selection, success as hapticSuccess } from '@/lib/haptics';
 import type { HaSensor } from '@/types/home-assistant';
 
 const springTransition = {
@@ -117,15 +117,14 @@ export function HomeAssistantSetup() {
       token: token.trim()
     }),
     onMutate: () => {
-      hapticImpact('light');
+      impactLight();
       setConnectionState('loading');
       setConnectionMessage('Проверяем подключение к Home Assistant...');
       setSummaryMessage(null);
       setSelectionMessage(null);
     },
     onSuccess: (response) => {
-      hapticImpact('medium');
-      hapticNotify('success');
+      hapticSuccess();
       setConnectionState('success');
       setConnectionMessage(response.message || 'Подключение подтверждено. Home Assistant доступен.');
       setToken('');
@@ -133,7 +132,7 @@ export function HomeAssistantSetup() {
       void queryClient.invalidateQueries({ queryKey: ['home-assistant-rooms-sensors-for-setup'] });
     },
     onError: (error) => {
-      hapticNotify('error');
+      hapticError();
       setConnectionState('error');
       setConnectionMessage(getHomeAssistantErrorMessage(error));
       setSelectionMessage(null);
@@ -219,7 +218,7 @@ export function HomeAssistantSetup() {
     };
     window.localStorage.setItem(HA_SELECTION_STORAGE_KEY, JSON.stringify(payload));
     setSelectionMessage('Выбор сохранен.');
-    hapticNotify('success');
+    hapticSuccess();
   }, [
     selectedRoomId,
     selectedTemperatureSensorId,
@@ -231,10 +230,10 @@ export function HomeAssistantSetup() {
   const copyInstruction = async () => {
     try {
       await navigator.clipboard.writeText(HA_SETUP_INSTRUCTION_TEXT);
-      hapticNotify('success');
+      hapticSuccess();
       setCopyMessage('Инструкция скопирована');
     } catch {
-      hapticNotify('error');
+      hapticError();
       setCopyMessage('Не удалось скопировать инструкцию');
     }
   };
@@ -554,7 +553,10 @@ export function HomeAssistantSetup() {
       <section className={`${cardClass} overflow-hidden p-0`}>
         <button
           type="button"
-          onClick={() => setIsHelpOpen((prev) => !prev)}
+          onClick={() => {
+            selection();
+            setIsHelpOpen((prev) => !prev);
+          }}
           className="android-ripple flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:scale-[0.995] transition-transform"
         >
           <span className="text-sm font-medium text-ios-text">Как получить token в Home Assistant</span>

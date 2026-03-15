@@ -10,3 +10,5 @@ export { AppStatusPanel } from './AppStatusPanel';
 export { DiagnosticsPanel } from './DiagnosticsPanel';
 export { VersionPanel } from './VersionPanel';
 export { SupportPanel } from './SupportPanel';
+
+export { HapticsPanel } from './HapticsPanel';

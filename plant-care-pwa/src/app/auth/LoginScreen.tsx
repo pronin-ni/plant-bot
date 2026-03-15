@@ -15,7 +15,13 @@ import { ApiError } from '@/lib/api';
 import { cacheSet } from '@/lib/indexeddb';
 import { pwaLoginTelegram, pwaLoginTelegramWidget, pwaRequestEmailMagicLink, pwaVerifyEmailMagicLink } from '@/lib/api';
 import { isTestAuditMode } from '@/lib/runtime';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import {
+  error as hapticError,
+  impactLight,
+  selection,
+  success as hapticSuccess,
+  warning as hapticWarning
+} from '@/lib/haptics';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import type { CalendarEventDto, PlantDto } from '@/types/api';
 
@@ -298,7 +304,7 @@ export function LoginScreen() {
       title: 'Добро пожаловать в сад! 🌿',
       subtitle
     });
-    hapticImpact('heavy');
+    hapticSuccess();
 
     successTimerRef.current = window.setTimeout(() => {
       useAuthStore.getState().setAuth(payload);
@@ -333,7 +339,7 @@ export function LoginScreen() {
       setActiveProvider(null);
     },
     onError: (error, providerId) => {
-      hapticNotify('error');
+      hapticError();
       const message = error instanceof Error ? error.message : 'Ошибка входа. Проверьте провайдер и настройки backend.';
       if (message === 'TELEGRAM_WIDGET_REQUIRED') {
         setShowTelegramWidget(true);
@@ -364,7 +370,7 @@ export function LoginScreen() {
     },
     onError: (error) => {
       setLoginError(mapTelegramAuthError(error));
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -386,7 +392,7 @@ export function LoginScreen() {
     },
     onError: () => {
       setMigrationState('error');
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -397,13 +403,13 @@ export function LoginScreen() {
       setMagicLinkSent(true);
       setMagicLinkSentToEmail(magicEmail.trim().toLowerCase());
       setMagicLinkExpiresAt(response.expiresAt ?? null);
-      hapticImpact('medium');
+      hapticSuccess();
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Не удалось отправить ссылку. Попробуйте еще раз.';
       setMagicLinkSent(false);
       setMagicLinkError(message);
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -428,7 +434,7 @@ export function LoginScreen() {
       const message = error instanceof Error ? error.message : 'Не удалось подтвердить ссылку входа.';
       setMagicLinkVerifyState('error');
       setMagicLinkVerifyError(message);
-      hapticNotify('error');
+      hapticError();
       clearMagicLinkTokenFromUrl();
     }
   });
@@ -458,11 +464,6 @@ export function LoginScreen() {
   }, [loginTheme]);
 
   useEffect(() => {
-    // Приветственный haptic-паттерн для логин-экрана.
-    hapticImpact('light');
-  }, []);
-
-  useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener('online', handleOnline);
@@ -482,7 +483,7 @@ export function LoginScreen() {
   const activateGuestMode = async () => {
     if (testAuditMode) {
       setLoginError('Demo mode отключён для test audit. Используйте реальную авторизацию.');
-      hapticNotify('warning');
+      hapticWarning();
       return;
     }
 
@@ -499,12 +500,12 @@ export function LoginScreen() {
       roles: [],
       isAdmin: false
     }, 'Демо-режим активирован');
-    hapticImpact('medium');
+    hapticSuccess();
   };
 
   const toggleLoginTheme = () => {
     setLoginTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-    hapticImpact('light');
+    selection();
   };
 
   // Опираемся на явный state, чтобы UI гарантированно разблокировался после ошибки verify.
@@ -517,13 +518,14 @@ export function LoginScreen() {
     if (isOffline) {
       setMagicLinkError('Нет подключения к сети. Подключитесь к интернету и попробуйте снова.');
       setMagicLinkSent(false);
-      hapticNotify('warning');
+      hapticWarning();
       return;
     }
     const normalized = magicEmail.trim().toLowerCase();
     if (!normalized) {
       setMagicLinkError('Введите email.');
       setMagicLinkSent(false);
+      hapticWarning();
       return;
     }
     setMagicLinkError(null);
@@ -533,6 +535,7 @@ export function LoginScreen() {
   const resendMagicLink = () => {
     if (!magicEmail.trim()) {
       setMagicLinkError('Введите email перед повторной отправкой.');
+      hapticWarning();
       return;
     }
     submitMagicLink();
@@ -634,9 +637,10 @@ export function LoginScreen() {
             onLogin={(providerId) => {
               if (isOffline) {
                 setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
-                hapticNotify('warning');
+                hapticWarning();
                 return;
               }
+              impactLight();
               loginMutation.mutate(providerId);
             }}
           />

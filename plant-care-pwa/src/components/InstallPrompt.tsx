@@ -3,7 +3,7 @@ import { Download, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { detectInstallPlatform, isPwaStandalone, requestPwaInstall, subscribeInstallAvailability } from '@/lib/pwa';
 
 export function InstallPrompt() {
@@ -75,7 +75,7 @@ export function InstallPrompt() {
             onClick={() => {
               localStorage.setItem('plant-pwa-install-dismissed-at', String(Date.now()));
               setDismissed(true);
-              hapticImpact('light');
+              impactLight();
             }}
           >
             <X className="h-4 w-4" />
@@ -95,14 +95,14 @@ export function InstallPrompt() {
             disabled={installing}
             onClick={async () => {
               setInstalling(true);
-              hapticImpact('medium');
+              impactMedium();
               const outcome = await requestPwaInstall();
               if (outcome === 'accepted') {
-                hapticNotify('success');
+                hapticSuccess();
               } else if (outcome === 'dismissed') {
-                hapticNotify('warning');
+                hapticWarning();
               } else {
-                hapticNotify('error');
+                hapticError();
               }
               setInstalling(false);
             }}

@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight } from '@/lib/haptics';
 
 interface QuickWaterButtonProps {
   isLoading?: boolean;
@@ -73,8 +73,7 @@ export function QuickWaterButton({
     }
 
     setIsRunning(true);
-    hapticImpact('heavy');
-    navigator.vibrate?.([50, 30, 50]);
+    impactLight();
 
     try {
       await onWater();

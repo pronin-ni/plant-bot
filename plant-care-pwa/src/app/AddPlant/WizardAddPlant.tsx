@@ -31,7 +31,13 @@ import {
 } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { ensurePushSubscription } from '@/lib/pwa';
-import { hapticImpact, hapticNotify, hapticSelectionChanged } from '@/lib/telegram';
+import {
+  error as hapticError,
+  impactLight,
+  selection,
+  success as hapticSuccess,
+  warning as hapticWarning
+} from '@/lib/haptics';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import type {
   HaSensorDto,
@@ -506,9 +512,14 @@ export function WizardAddPlant() {
       setHaContextPreview(result.sensorContext ?? null);
       setLatestRecommendationPreview(result);
       setAiRecommendation(normalized);
-      setAiState(normalized.source === 'fallback' ? 'fallback' : 'success');
+      const nextState = normalized.source === 'fallback' ? 'fallback' : 'success';
+      setAiState(nextState);
       setManualOverrideEnabled(false);
-      hapticNotify('success');
+      if (nextState === 'fallback') {
+        hapticWarning();
+      } else {
+        hapticSuccess();
+      }
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Ошибка AI расчёта';
@@ -516,7 +527,7 @@ export function WizardAddPlant() {
       setAiState('error');
       setAppliedRecommendationSource('none');
       setLatestRecommendationPreview(null);
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -533,11 +544,15 @@ export function WizardAddPlant() {
     }),
     onSuccess: (result) => {
       setHaContextPreview(result);
-      hapticNotify(result.available ? 'success' : 'warning');
+      if (result.available) {
+        hapticSuccess();
+      } else {
+        hapticWarning();
+      }
     },
     onError: () => {
       setHaContextPreview(null);
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -553,11 +568,15 @@ export function WizardAddPlant() {
     }),
     onSuccess: (result) => {
       setWeatherContextPreview(result);
-      hapticNotify(result.available ? 'success' : 'warning');
+      if (result.available) {
+        hapticSuccess();
+      } else {
+        hapticWarning();
+      }
     },
     onError: () => {
       setWeatherContextPreview(null);
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -587,7 +606,6 @@ export function WizardAddPlant() {
       }
       await subscribePwaPush(subscription.toJSON());
       localStorage.setItem(promptKey, '1');
-      hapticNotify('success');
     } catch {
       // Пользователь может включить push позже в настройках.
     }
@@ -646,7 +664,7 @@ export function WizardAddPlant() {
           // Не блокируем создание растения, если пост-сохранение источника рекомендации не удалось.
         }
       }
-      hapticNotify('success');
+      hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void maybeEnablePushOnFirstPlant(hadPlantsBeforeCreate);
@@ -654,7 +672,7 @@ export function WizardAddPlant() {
       openPlantDetail(createdPlant.id);
     },
     onError: () => {
-      hapticNotify('error');
+      hapticError();
     }
   });
 
@@ -747,13 +765,13 @@ export function WizardAddPlant() {
     if (!canGoNext) {
       return;
     }
-    hapticImpact('light');
+    impactLight();
     setStepDirection(1);
     setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
   };
 
   const goBack = () => {
-    hapticImpact('light');
+    impactLight();
     setStepDirection(-1);
     setStepIndex((prev) => Math.max(prev - 1, 0));
   };
@@ -829,7 +847,7 @@ export function WizardAddPlant() {
                         : 'theme-surface-2 hover:border-ios-accent/35'
                     )}
                     onClick={() => {
-                      hapticSelectionChanged();
+                      selection();
                       setEnvironmentType(key);
                       setAiState('idle');
                       setAiRecommendation(null);
@@ -892,7 +910,7 @@ export function WizardAddPlant() {
                         type="button"
                         className="theme-surface-subtle rounded-full border px-3 py-1.5 text-xs"
                         onClick={() => {
-                          hapticSelectionChanged();
+                          selection();
                           setName(item.name);
                           setSearchQuery(item.name);
                           suggestProfileMutation.mutate(item.name);
@@ -912,7 +930,7 @@ export function WizardAddPlant() {
                         type="button"
                         className="rounded-full border border-ios-border/60 bg-transparent px-2.5 py-1 text-xs"
                         onClick={() => {
-                          hapticSelectionChanged();
+                          selection();
                           setName(hint);
                           setSearchQuery(hint);
                         }}
@@ -1303,6 +1321,7 @@ export function WizardAddPlant() {
                       setAiRecommendation(fallback);
                       setAiState('fallback');
                       setAppliedRecommendationSource('none');
+                      hapticWarning();
                       setLatestRecommendationPreview({
                         source: 'FALLBACK',
                         environmentType,
@@ -1354,7 +1373,7 @@ export function WizardAddPlant() {
                       setAppliedRecommendationSource(aiRecommendation.source === 'fallback' ? 'fallback' : 'ai');
                     }
                     setManualOverrideEnabled(false);
-                    hapticNotify('success');
+                    hapticSuccess();
                   }}
                 >
                   Применить рекомендации
@@ -1396,7 +1415,7 @@ export function WizardAddPlant() {
                       setFinalIntervalDays(nextInterval);
                       setFinalWaterMl(nextWater);
                       setAppliedRecommendationSource('manual');
-                      hapticNotify('success');
+                      hapticSuccess();
                     }}
                   >
                     Применить вручную

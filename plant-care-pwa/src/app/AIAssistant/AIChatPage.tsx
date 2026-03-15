@@ -4,7 +4,7 @@ import { AlertTriangle, Eraser, RefreshCcw } from 'lucide-react';
 
 import { askAssistant, clearAssistantHistory, diagnosePlantOpenRouter, getAssistantHistory } from '@/lib/api';
 import { cacheGet, cacheSet } from '@/lib/indexeddb';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, selection } from '@/lib/haptics';
 import { QuickQuestionsCarousel } from '@/components/QuickQuestionsCarousel';
 import { ChatHistory } from '@/components/ChatHistory';
 import { ChatInput } from '@/components/ChatInput';
@@ -290,7 +290,6 @@ export function AIChatPage() {
         model: answer.model,
         createdAt: new Date().toISOString()
       });
-      hapticNotify('success');
       void historyQuery.refetch();
     } catch {
       const message = navigator.onLine
@@ -298,7 +297,7 @@ export function AIChatPage() {
         : 'Нет сети. Вопрос сохранён локально. Повторите отправку после подключения.';
 
       setChatError({ message, request });
-      hapticNotify('error');
+      hapticError();
     } finally {
       setIsTyping(false);
       setIsSending(false);
@@ -319,7 +318,7 @@ export function AIChatPage() {
     setQuestion('');
     setAttachedPhotoDataUrl(null);
     setAttachedPhotoName(null);
-    hapticImpact('light');
+    impactLight();
 
     await sendAssistantRequest(request, true);
   };
@@ -328,11 +327,12 @@ export function AIChatPage() {
     if (!chatError) {
       return;
     }
+    impactLight();
     await sendAssistantRequest(chatError.request, false);
   };
 
   const clearHistory = async () => {
-    hapticImpact('light');
+    selection();
     setQuestion('');
     setMessages([]);
     setAttachedPhotoDataUrl(null);
@@ -354,7 +354,7 @@ export function AIChatPage() {
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pb-[calc(5.8rem+env(safe-area-inset-bottom))]">
+    <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
       <header className="flex items-center justify-end gap-3 px-1">
         <button
           type="button"
@@ -374,17 +374,17 @@ export function AIChatPage() {
             items={QUICK_QUESTIONS}
             onPick={(item) => {
               setQuestion(item);
-              hapticImpact('light');
+              selection();
             }}
           />
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl">
         <ChatHistory
           messages={messages}
           isTyping={isTyping}
-          className="h-full"
+          className="flex-1"
           viewportClassName="h-full"
         />
       </div>
@@ -409,7 +409,7 @@ export function AIChatPage() {
         </div>
       ) : null}
 
-      <div className="theme-surface-1 sticky bottom-[calc(5.1rem+env(safe-area-inset-bottom))] z-20 shrink-0 rounded-[20px] border p-2 shadow-[0_14px_34px_rgb(15_23_42/0.12)]">
+      <div className="theme-surface-1 shrink-0 rounded-[20px] border p-2 shadow-[0_14px_34px_rgb(15_23_42/0.12)]">
         <ChatInput
           value={question}
           disabled={false}
