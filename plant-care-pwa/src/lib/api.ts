@@ -1029,6 +1029,13 @@ export async function createPlant(payload: Record<string, unknown>): Promise<Pla
   });
 }
 
+export async function updatePlant(plantId: number, payload: Record<string, unknown>): Promise<PlantDto> {
+  return apiFetch<PlantDto>(`/api/plants/${plantId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function previewSeedRecommendation(payload: {
   plantName: string;
   seedStage: 'SOWN' | 'GERMINATING' | 'SPROUTED' | 'SEEDLING' | 'READY_TO_TRANSPLANT';
