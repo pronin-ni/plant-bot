@@ -273,39 +273,25 @@ export function PlantDetailSheet() {
     retry: 1
   });
 
-   const applyManualRecommendationMutation = useMutation({
-     mutationFn: ({ plantId, intervalDays, waterMl }: { plantId: number; intervalDays: number; waterMl: number }) =>
-       apiFetch(`/api/watering/recommendation/${plantId}/apply`, {
-         method: 'POST',
-         body: JSON.stringify({
-           source: 'MANUAL',
-           recommendedIntervalDays: intervalDays,
-           recommendedWaterMl: waterMl,
-           summary: 'Ручная настройка из карточки растения.'
-         })
-       }),
-     onSuccess: async () => {
-       hapticSuccess();
-       await queryClient.invalidateQueries({ queryKey: ['plants'] });
-       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
-       await queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
-     },
-     onError: () => hapticError()
-   });
-
-   const updatePlantMutation = useMutation({
-     mutationFn: ({ plantId, payload }: { plantId: number; payload: Record<string, unknown> }) =>
-       apiFetch<PlantDto>(`/api/plants/${plantId}`, {
-         method: 'PUT',
-         body: JSON.stringify(payload)
-       }),
-     onSuccess: async () => {
-       hapticSuccess();
-       await queryClient.invalidateQueries({ queryKey: ['plants'] });
-       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
-     },
-     onError: () => hapticError()
-   });
+  const applyManualRecommendationMutation = useMutation({
+    mutationFn: ({ plantId, intervalDays, waterMl }: { plantId: number; intervalDays: number; waterMl: number }) =>
+      apiFetch(`/api/watering/recommendation/${plantId}/apply`, {
+        method: 'POST',
+        body: JSON.stringify({
+          source: 'MANUAL',
+          recommendedIntervalDays: intervalDays,
+          recommendedWaterMl: waterMl,
+          summary: 'Ручная настройка из карточки растения.'
+        })
+      }),
+    onSuccess: async () => {
+      hapticSuccess();
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
+    },
+    onError: () => hapticError()
+  });
 
   const refreshAdviceMutation = useMutation({
     mutationFn: (id: number) => getPlantCareAdvice(id, true),
@@ -1422,8 +1408,7 @@ function WateringRecommendationCard({
   loading,
   onRefresh,
   onManualApply,
-  manualApplying,
-  onApplyAiRecommendation
+  manualApplying
 }: {
   plant: PlantDto;
   state: 'idle' | 'loading' | 'success' | 'fallback' | 'error';
@@ -1432,7 +1417,6 @@ function WateringRecommendationCard({
   onRefresh: () => void;
   onManualApply: (intervalDays: number, waterMl: number) => void;
   manualApplying: boolean;
-  onApplyAiRecommendation: () => void;
 }) {
   const [manualInterval, setManualInterval] = useState(String(Math.max(1, plant.baseIntervalDays ?? 7)));
   const [manualWaterMl, setManualWaterMl] = useState(String(Math.max(50, plant.preferredWaterMl ?? 250)));
@@ -1572,39 +1556,24 @@ function WateringRecommendationCard({
             placeholder="Объём мл"
           />
         </div>
-           <div className="mt-2 grid grid-cols-2 gap-2">
-             <Button
-               type="button"
-               variant="secondary"
-               className="h-10 w-full rounded-xl"
-               disabled={manualApplying}
-               onClick={() => {
-                 const interval = Math.max(1, Math.min(60, Number(manualInterval) || 7));
-                 const waterMl = Math.max(50, Math.min(10000, Number(manualWaterMl) || 250));
-                 onManualApply(interval, waterMl);
-               }}
-             >
-               {manualApplying ? (
-                 <span className="inline-flex items-center gap-2">
-                   <Loader2 className="h-4 w-4 animate-spin" />
-                   Применяем...
-                 </span>
-               ) : 'Применить вручную'}
-             </Button>
-             <Button
-               type="button"
-               variant="secondary"
-               className="h-10 w-full rounded-xl"
-               disabled={manualApplying || state === 'loading' || state === 'idle'}
-               onClick={() => {
-                 if (recommendation) {
-                   onManualApply(recommendation.recommendedIntervalDays, recommendation.recommendedWaterMl);
-                 }
-               }}
-             >
-               Применить рекомендацию
-             </Button>
-           </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-2 h-10 w-full rounded-xl"
+          disabled={manualApplying}
+          onClick={() => {
+            const interval = Math.max(1, Math.min(60, Number(manualInterval) || 7));
+            const waterMl = Math.max(50, Math.min(10000, Number(manualWaterMl) || 250));
+            onManualApply(interval, waterMl);
+          }}
+        >
+          {manualApplying ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Применяем...
+            </span>
+          ) : 'Применить вручную'}
+        </Button>
       </div>
     </motion.section>
   );

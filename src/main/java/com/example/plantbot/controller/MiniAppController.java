@@ -251,205 +251,30 @@ public class MiniAppController {
     plant.setContainerVolumeLiters(request.containerVolumeLiters());
     plant.setCropType(request.cropType());
     plant.setGrowthStage(request.growthStage());
-    if (environmentType == PlantEnvironmentType.SEED_START) {
-      seedLifecycleService.applySeedCreateFields(plant, request);
-    }
+    seedLifecycleService.applySeedCreateFields(plant, request);
     plant.setGreenhouse(request.greenhouse());
     plant.setDripIrrigation(request.dripIrrigation());
     plantService.save(plant);
     return toPlantResponse(plant, user);
   }
 
-   @PutMapping("/plants/{id}/water")
-   public PlantResponse waterPlant(
-       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-       Authentication authentication,
-       @PathVariable("id") Long plantId
-   ) {
-     User user = currentUserService.resolve(authentication, initData);
-     Plant plant = requireOwnedPlant(user, plantId);
+  @PutMapping("/plants/{id}/water")
+  public PlantResponse waterPlant(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @PathVariable("id") Long plantId
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    Plant plant = requireOwnedPlant(user, plantId);
 
-     WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
-     LocalDate today = LocalDate.now();
-     plant.setLastWateredDate(today);
-     plant.setLastReminderDate(null);
-     plantService.save(plant);
-     wateringLogService.addLog(plant, today, rec.intervalDays(), rec.waterLiters(), null, null);
-     return toPlantResponse(plant, user);
-   }
-
-   @PutMapping("/plants/{id}")
-   public PlantResponse updatePlant(
-       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-       Authentication authentication,
-       @PathVariable("id") Long plantId,
-       @RequestBody CreatePlantRequest request
-   ) {
-     User user = currentUserService.resolve(authentication, initData);
-     Plant plant = requireOwnedPlant(user, plantId);
-     
-     // Update basic fields if provided in request
-     if (request.name() != null && !request.name().isBlank()) {
-       plant.setName(request.name().trim());
-     }
-     
-     if (request.potVolumeLiters() != null) {
-       plant.setPotVolumeLiters(request.potVolumeLiters());
-     }
-     
-     if (request.baseIntervalDays() != null) {
-       plant.setBaseIntervalDays(request.baseIntervalDays());
-     }
-     
-     if (request.type() != null) {
-       plant.setType(request.type());
-     }
-     
-     if (request.placement() != null) {
-       plant.setPlacement(request.placement());
-     }
-     
-     if (request.category() != null) {
-       plant.setCategory(request.category());
-     }
-     
-     // Handle wateringProfile/environmentType - temporary compatibility field
-     PlantEnvironmentType environmentToUse = request.environmentType() != null 
-         ? request.environmentType() 
-         : request.wateringProfile();
-     if (environmentToUse != null) {
-       plant.setWateringProfile(environmentToUse);
-     }
-     
-     if (request.region() != null) {
-       plant.setRegion(request.region().trim());
-     }
-     
-     if (request.containerType() != null) {
-       plant.setContainerType(request.containerType());
-     }
-     
-     if (request.containerVolumeLiters() != null) {
-       plant.setContainerVolumeLiters(request.containerVolumeLiters());
-     }
-     
-     if (request.cropType() != null) {
-       plant.setCropType(request.cropType().trim());
-     }
-     
-     if (request.growthStage() != null) {
-       plant.setGrowthStage(request.growthStage());
-     }
-     
-     // Seed-related fields
-     if (request.targetEnvironmentType() != null) {
-       plant.setTargetEnvironmentType(request.targetEnvironmentType());
-     }
-     
-     if (request.seedStage() != null) {
-       plant.setSeedStage(request.seedStage());
-     }
-     
-     if (request.seedContainerType() != null) {
-       plant.setSeedContainerType(request.seedContainerType());
-     }
-     
-     if (request.seedSubstrateType() != null) {
-       plant.setSeedSubstrateType(request.seedSubstrateType());
-     }
-     
-     if (request.sowingDate() != null) {
-       plant.setSowingDate(request.sowingDate());
-     }
-     
-     if (request.underCover() != null) {
-       plant.setUnderCover(request.underCover());
-     }
-     
-     if (request.growLight() != null) {
-       plant.setGrowLight(request.growLight());
-     }
-     
-     if (request.germinationTemperatureC() != null) {
-       plant.setGerminationTemperatureC(request.germinationTemperatureC());
-     }
-     
-     if (request.expectedGerminationDaysMin() != null) {
-       plant.setExpectedGerminationDaysMin(request.expectedGerminationDaysMin());
-     }
-     
-     if (request.expectedGerminationDaysMax() != null) {
-       plant.setExpectedGerminationDaysMax(request.expectedGerminationDaysMax());
-     }
-     
-     if (request.recommendedCheckIntervalHours() != null) {
-       plant.setRecommendedCheckIntervalHours(request.recommendedCheckIntervalHours());
-     }
-     
-     if (request.recommendedWateringMode() != null) {
-       plant.setRecommendedWateringMode(request.recommendedWateringMode());
-     }
-     
-     if (request.seedCareMode() != null) {
-       plant.setSeedCareMode(request.seedCareMode());
-     }
-     
-     if (request.seedSummary() != null) {
-       plant.setSeedSummary(request.seedSummary());
-     }
-     
-     if (request.seedReasoningJson() != null) {
-       plant.setSeedReasoningJson(request.seedReasoningJson());
-     }
-     
-     if (request.seedWarningsJson() != null) {
-       plant.setSeedWarningsJson(request.seedWarningsJson());
-     }
-     
-     if (request.seedCareSource() != null) {
-       plant.setSeedCareSource(request.seedCareSource());
-     }
-     
-     if (request.greenhouse() != null) {
-       plant.setGreenhouse(request.greenhouse());
-     }
-     
-     if (request.dripIrrigation() != null) {
-       plant.setDripIrrigation(request.dripIrrigation());
-     }
-     
-     if (request.outdoorAreaM2() != null) {
-       plant.setOutdoorAreaM2(request.outdoorAreaM2());
-     }
-     
-     if (request.outdoorSoilType() != null) {
-       plant.setOutdoorSoilType(request.outdoorSoilType());
-     }
-     
-     if (request.sunExposure() != null) {
-       plant.setSunExposure(request.sunExposure());
-     }
-     
-     if (request.mulched() != null) {
-       plant.setMulched(request.mulched());
-     }
-     
-     if (request.perennial() != null) {
-       plant.setPerennial(request.perennial());
-     }
-     
-     if (request.winterDormancyEnabled() != null) {
-       plant.setWinterDormancyEnabled(request.winterDormancyEnabled());
-     }
-     
-     // Update preferred water volume if provided
-     if (request.preferredWaterMl() != null) {
-       plant.setPreferredWaterMl(request.preferredWaterMl());
-     }
-     
-     Plant saved = plantService.save(plant);
-     return toPlantResponse(saved, user);
-   }
+    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
+    LocalDate today = LocalDate.now();
+    plant.setLastWateredDate(today);
+    plant.setLastReminderDate(null);
+    plantService.save(plant);
+    wateringLogService.addLog(plant, today, rec.intervalDays(), rec.waterLiters(), null, null);
+    return toPlantResponse(plant, user);
+  }
 
   @PostMapping(value = "/plants/{id}/photo", consumes = MediaType.APPLICATION_JSON_VALUE)
   public PhotoUploadResponse uploadPhoto(
