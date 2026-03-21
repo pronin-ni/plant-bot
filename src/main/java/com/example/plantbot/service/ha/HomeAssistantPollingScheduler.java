@@ -1,6 +1,5 @@
 package com.example.plantbot.service.ha;
 
-import com.example.plantbot.bot.PlantTelegramBot;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.ha.HomeAssistantConnection;
 import com.example.plantbot.domain.ha.PlantHomeAssistantBinding;
@@ -21,7 +20,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public class HomeAssistantPollingScheduler {
   private final HomeAssistantIntegrationService haIntegrationService;
   private final HomeAssistantApiService haApiService;
-  private final org.springframework.beans.factory.ObjectProvider<PlantTelegramBot> plantTelegramBotProvider;
 
   @Value("${home-assistant.poll-random-offset-max-seconds:300}")
   private long randomOffsetMaxSeconds;
@@ -83,14 +81,9 @@ public class HomeAssistantPollingScheduler {
 
     String text = "⚠️ Home Assistant недоступен более 6 часов. "
         + "Автокоррекция временно отключена, используем базовый график полива.";
-    PlantTelegramBot plantTelegramBot = plantTelegramBotProvider.getIfAvailable();
-    if (plantTelegramBot == null) {
-      return;
-    }
-    boolean sent = plantTelegramBot.sendSystemNotification(connection.getUser().getTelegramId(), text);
-    if (sent) {
-      connection.setLastUnavailableAlertAt(Instant.now());
-      haIntegrationService.saveConnection(connection);
-    }
+    log.warn("HA long outage notification not delivered via Telegram anymore: userId={} message='{}'",
+        connection.getUser() != null ? connection.getUser().getId() : null, text);
+    connection.setLastUnavailableAlertAt(Instant.now());
+    haIntegrationService.saveConnection(connection);
   }
 }

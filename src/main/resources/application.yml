@@ -18,7 +18,7 @@ spring:
       hibernate:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         format_sql: false
-        generate_statistics: ${APP_DB_HIBERNATE_STATS:true}
+        generate_statistics: ${APP_DB_HIBERNATE_STATS:false}
         session:
           events:
             log:
@@ -27,12 +27,6 @@ spring:
   mvc:
     pathmatch:
       matching-strategy: ant_path_matcher
-
-bot:
-  token: ${TELEGRAM_BOT_TOKEN:}
-  username: ${TELEGRAM_BOT_USERNAME:}
-  update-threads: ${BOT_UPDATE_THREADS:4}
-  list-card-cache-max-entries: ${BOT_LIST_CARD_CACHE_MAX_ENTRIES:1000}
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}
@@ -127,10 +121,8 @@ scheduler:
   daily-cron: "0 0 9 * * *"
 
 telegram:
-  bot:
-    enabled: ${TELEGRAM_BOT_ENABLED:true}
-    fail-fast: ${TELEGRAM_BOT_FAIL_FAST:false}
   auth:
+    token: ${TELEGRAM_AUTH_TOKEN:${TELEGRAM_BOT_TOKEN:}}
     max-age-seconds: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:86400}
 
 web:
@@ -156,7 +148,6 @@ app:
       max-requests: ${APP_MAGIC_LINK_VERIFY_RATE_LIMIT_MAX_REQUESTS:20}
       window-seconds: ${APP_MAGIC_LINK_VERIFY_RATE_LIMIT_WINDOW_SECONDS:60}
   features:
-    mini-app-enabled: ${APP_FEATURE_MINI_APP_ENABLED:true}
     pwa-enabled: ${APP_FEATURE_PWA_ENABLED:true}
   backup:
     enabled: ${APP_BACKUP_ENABLED:true}

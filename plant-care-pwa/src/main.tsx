@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { App } from '@/app/App';
-import { initTelegramWebApp, TelegramSdkProviderBridge } from '@/lib/telegram';
 import { initPwa } from '@/lib/pwa';
 import { initOfflineSync } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -22,33 +21,6 @@ const queryClient = new QueryClient({
 });
 
 type PortraitOrientationLock = 'portrait';
-
-function ensureTelegramScriptLoaded(): Promise<void> {
-  if (window.Telegram?.WebApp) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-telegram-webapp="1"]');
-    if (existing) {
-      if (window.Telegram?.WebApp) {
-        resolve();
-        return;
-      }
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => resolve(), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-web-app.js';
-    script.async = true;
-    script.dataset.telegramWebapp = '1';
-    script.addEventListener('load', () => resolve(), { once: true });
-    script.addEventListener('error', () => resolve(), { once: true });
-    document.head.appendChild(script);
-  });
-}
 
 function initMotionLifecycleFlags() {
   const root = document.documentElement;
@@ -129,8 +101,6 @@ async function bootstrap() {
   initZoomGestureGuards();
   await lockPortraitOrientationIfSupported();
   initPwa();
-  await ensureTelegramScriptLoaded();
-  initTelegramWebApp();
   await initOfflineSync();
 
   // Для PWA режимов без Telegram считаем приложение готовым сразу после bootstrap.
@@ -138,11 +108,9 @@ async function bootstrap() {
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <TelegramSdkProviderBridge>
-        <QueryClientProvider client={queryClient}>
-          <App />
-        </QueryClientProvider>
-      </TelegramSdkProviderBridge>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
     </React.StrictMode>
   );
 }

@@ -5,7 +5,7 @@ import { Camera, Sprout } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { uploadPlantPhoto } from '@/lib/api';
-import { cloudStorageGet, cloudStorageSet } from '@/lib/telegram';
+import { clientStorageGet, clientStorageSet } from '@/lib/clientStorage';
 import { error as hapticError, impactMedium, success as hapticSuccess } from '@/lib/haptics';
 
 interface GrowthCarouselProps {
@@ -54,7 +54,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
         .slice(0, 30);
 
       setHistory(next);
-      await cloudStorageSet(storageKey(plantId), JSON.stringify(next));
+      await clientStorageSet(storageKey(plantId), JSON.stringify(next));
       void queryClient.invalidateQueries({ queryKey: ['plant', plantId] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
@@ -63,7 +63,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
 
   useEffect(() => {
     let cancelled = false;
-    void cloudStorageGet(storageKey(plantId)).then((raw) => {
+    void clientStorageGet(storageKey(plantId)).then((raw) => {
       if (cancelled || !raw) {
         return;
       }

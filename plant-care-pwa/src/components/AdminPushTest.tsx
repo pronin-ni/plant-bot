@@ -5,7 +5,7 @@ import { Activity, AlertTriangle, Loader2, MessageSquare, Send, Users } from 'lu
 
 import { Button } from '@/components/ui/button';
 import { getAdminActivityLogs, getAdminMonitoring, getAdminUsers, sendAdminPushTest } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 
 type PushType = 'info' | 'urgent' | 'test';
 
@@ -76,16 +76,16 @@ export function AdminPushTest() {
     if (!window.confirm('Отправить тестовый push выбранному пользователю?')) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     const result = await sendPushMutation.mutateAsync({
       userId: selectedUserId,
       title: resolvePushTitle(type),
       body: message.trim()
     });
     if (result.delivered > 0) {
-      hapticNotify('success');
+      hapticSuccess();
     } else {
-      hapticNotify('warning');
+      hapticWarning();
     }
     window.alert(`Push отправлен: доставлено ${result.delivered} из ${result.subscriptions}`);
   };
@@ -120,7 +120,7 @@ export function AdminPushTest() {
                     type="button"
                     onClick={() => {
                       setSelectedUserId(user.id);
-                      hapticImpact('light');
+                      impactLight();
                     }}
                     className={`w-full rounded-lg px-2 py-1 text-left text-xs transition ${
                       selectedUserId === user.id ? 'bg-emerald-500/15 text-emerald-700' : 'hover:bg-ios-border/30 text-ios-text'

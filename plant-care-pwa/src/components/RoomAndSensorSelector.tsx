@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { Check, Home, LoaderCircle, Thermometer, Waves, SunMedium, Droplets } from 'lucide-react';
 
 import { bindPlantRoom, getHomeAssistantRoomsAndSensors } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import type { HaSensor, HaSelectionMode, PlantRoomBindingRequest } from '@/types/home-assistant';
 import { Button } from '@/components/ui/button';
 
@@ -39,10 +39,10 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
       return bindPlantRoom(plantId, payload);
     },
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       onSaved?.();
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   const sensorsByKind = useMemo(() => {
@@ -73,7 +73,7 @@ export function RoomAndSensorSelector({ plantId, compact = false, onSaved }: Pro
       autoAdjustmentEnabled,
       maxAdjustmentFraction: 0.35
     };
-    hapticImpact('medium');
+    impactMedium();
     bindMutation.mutate(payload);
   };
 

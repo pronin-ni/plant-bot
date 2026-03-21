@@ -24,8 +24,8 @@ public class TelegramInitDataService {
   private final ObjectMapper objectMapper;
   private final UserService userService;
 
-  @Value("${bot.token:}")
-  private String botToken;
+  @Value("${telegram.auth.token:}")
+  private String telegramAuthToken;
 
   @Value("${telegram.auth.max-age-seconds:86400}")
   private long maxAgeSeconds;
@@ -46,11 +46,11 @@ public class TelegramInitDataService {
       }
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "X-Telegram-Init-Data пустой");
     }
-    if (botToken == null || botToken.isBlank()) {
+    if (telegramAuthToken == null || telegramAuthToken.isBlank()) {
       if (devAuthEnabled) {
         return userService.getOrCreateByTelegramData(devTelegramId, devUsername, "Dev", "User");
       }
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен bot.token");
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен telegram.auth.token");
     }
 
     Map<String, String> params = parseQuery(initData);
@@ -74,7 +74,7 @@ public class TelegramInitDataService {
         .reduce((a, b) -> a + "\n" + b)
         .orElse("");
 
-    String calculated = calculateHash(dataCheckString, botToken);
+    String calculated = calculateHash(dataCheckString, telegramAuthToken);
     if (!constantTimeEquals(calculated, hash.toLowerCase())) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "initData hash не прошел проверку");
     }

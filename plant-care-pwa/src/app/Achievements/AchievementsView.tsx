@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { checkAchievements, getAchievements } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { Button } from '@/components/ui/button';
 import { AchievementCard } from '@/components/AchievementCard';
 
@@ -13,10 +13,10 @@ export function AchievementsView() {
   const checkMutation = useMutation({
     mutationFn: checkAchievements,
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       void query.refetch();
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function AchievementsView() {
       return;
     }
     if (prevUnlockedRef.current != null && unlocked > prevUnlockedRef.current) {
-      hapticImpact('heavy');
+      impactHeavy();
     }
     prevUnlockedRef.current = unlocked;
   }, [query.data?.unlocked]);
@@ -42,7 +42,7 @@ export function AchievementsView() {
             size="sm"
             variant="secondary"
             onClick={() => {
-              hapticImpact('light');
+              impactLight();
               checkMutation.mutate();
             }}
           >

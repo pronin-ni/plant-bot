@@ -4,7 +4,7 @@ import { Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createAdminBackup, getAdminBackups, restoreAdminBackup } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import type { AdminBackupItemDto } from '@/types/api';
 
 export function BackupsPanel() {
@@ -47,7 +47,7 @@ export function BackupsPanel() {
     try {
       const response = await createAdminBackup();
       setStatus(response.fileName ? `Бэкап создан: ${response.fileName}` : 'Бэкап создан.');
-      hapticImpact('medium');
+      impactMedium();
       await loadBackups();
     } catch (error) {
       console.error(error);
@@ -70,7 +70,7 @@ export function BackupsPanel() {
     try {
       const res = await restoreAdminBackup(fileName);
       setStatus(res.message || `Бэкап ${fileName} восстановлен.`);
-      hapticImpact('medium');
+      impactMedium();
       await loadBackups();
     } catch (error) {
       console.error(error);

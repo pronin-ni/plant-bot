@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { trackMigrationEvent } from '@/lib/analytics';
-import { getConfiguredPwaUrl, openPwaMigrationFlow } from '@/lib/pwa-migration';
 
 export function PwaInstallPanel() {
   const [status, setStatus] = useState<string>('');
   const [checking, setChecking] = useState(false);
   const [opening, setOpening] = useState(false);
-  const pwaUrl = getConfiguredPwaUrl();
+  const pwaUrl = typeof window !== 'undefined' ? `${window.location.origin}/pwa/` : '';
 
   const checkInstalled = () => {
     setChecking(true);
@@ -28,9 +26,8 @@ export function PwaInstallPanel() {
     }
     setOpening(true);
     try {
-      await openPwaMigrationFlow();
-      trackMigrationEvent({ type: 'migration_started' });
-      setStatus('Открываем поток установки PWA...');
+      window.open(pwaUrl, '_blank', 'noopener,noreferrer');
+      setStatus('Открываем PWA в новой вкладке.');
     } catch (error) {
       console.error(error);
       setStatus('Не удалось открыть поток установки.');

@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -40,6 +41,17 @@ public class ApiExceptionHandler {
     return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of(
         "message", ex.getMessage() == null ? "Некорректная операция" : ex.getMessage(),
         "status", HttpStatus.BAD_REQUEST.value()
+    ));
+  }
+
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<?> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+    if (!acceptsJson(request)) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON).body(Map.of(
+        "message", ex.getMessage() == null ? "Ресурс не найден" : ex.getMessage(),
+        "status", HttpStatus.NOT_FOUND.value()
     ));
   }
 

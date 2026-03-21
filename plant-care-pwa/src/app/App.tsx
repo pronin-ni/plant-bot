@@ -16,14 +16,12 @@ import { AuthPage } from '@/app/auth/AuthPage';
 import { AdminScreen } from '@/app/admin-screen';
 import { AdminGuard } from '@/components/AdminGuard';
 import { pwaMe } from '@/lib/api';
-import { hapticImpact, useTelegramThemeSync } from '@/lib/telegram';
+import { impactMedium } from '@/lib/haptics';
 import { useAuthStore, useUiStore } from '@/lib/store';
 import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
 import { applyThemeToDocument, useThemeStore } from '@/lib/theme/themeStore';
 
 export function App() {
-  useTelegramThemeSync();
-
   const { isAuthorized, isGuest, isReady } = useAuthStore();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const activeTab = useUiStore((s) => s.activeTab);
@@ -86,7 +84,7 @@ export function App() {
         roles: payload.roles,
         isAdmin: payload.roles.includes('ROLE_ADMIN')
       });
-      hapticImpact('medium');
+      impactMedium();
     },
     onError: () => {
       useAuthStore.getState().clearAuth();

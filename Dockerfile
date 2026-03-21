@@ -1,12 +1,4 @@
 # syntax=docker/dockerfile:1
-
-FROM node:20-alpine AS miniapp-build
-WORKDIR /frontend-mini
-COPY plant-care-mini-app/package.json ./
-RUN npm install
-COPY plant-care-mini-app ./
-RUN npm run build
-
 FROM node:20-alpine AS pwa-build
 ARG VITE_API_BASE_URL=
 ARG VITE_TELEGRAM_BOT_USERNAME=
@@ -26,7 +18,6 @@ FROM gradle:8.6-jdk17 AS build
 WORKDIR /app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY src ./src
-COPY --from=miniapp-build /frontend-mini/dist ./src/main/resources/static/mini-app
 COPY --from=pwa-build /frontend-pwa/dist ./src/main/resources/static/pwa
 RUN gradle -q bootJar
 

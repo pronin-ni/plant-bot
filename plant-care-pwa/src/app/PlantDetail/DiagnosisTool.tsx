@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 
 import { diagnosePlantOpenRouter } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import type { PlantDto } from '@/types/api';
 
 export function DiagnosisTool({ plant }: { plant: PlantDto }) {
@@ -17,8 +17,8 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
         plant.name,
         `Тип=${plant.type ?? 'DEFAULT'}; Размещение=${plant.placement}; Интервал=${plant.baseIntervalDays ?? 7}; Последний полив=${plant.lastWateredDate}`
       ),
-    onSuccess: () => hapticNotify('success'),
-    onError: () => hapticNotify('error')
+    onSuccess: () => hapticSuccess(),
+    onError: () => hapticError()
   });
   const diagnosisError =
     diagnoseMutation.isError && diagnoseMutation.error instanceof Error
@@ -51,7 +51,7 @@ export function DiagnosisTool({ plant }: { plant: PlantDto }) {
           if (!file) {
             return;
           }
-          hapticImpact('light');
+          impactLight();
           void toDataUrl(file).then((dataUrl) => {
             setPreview(dataUrl);
             diagnoseMutation.mutate(dataUrl);

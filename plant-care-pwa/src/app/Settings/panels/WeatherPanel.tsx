@@ -9,7 +9,7 @@ import {
   validateTelegramAuth
 } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import type { WeatherCurrentDto, WeatherForecastDto } from '@/types/api';
 
 import { fetchOpenMeteoCities, normalizeWeatherCity, SETTINGS_CITY_KEY } from './panel-shared';
@@ -114,7 +114,7 @@ export function WeatherPanel() {
       setForecast(nextForecast);
       setLastUpdatedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
       setStatus('Город сохранён, погода обновлена.');
-      hapticImpact('light');
+      impactLight();
     } catch (error) {
       console.error(error);
       setStatus(error instanceof ApiError ? error.message : 'Не удалось сохранить город или загрузить погоду.');

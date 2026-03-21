@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { createPlant, deletePlant, getPlants } from '@/lib/api';
-import { cloudStorageGet, cloudStorageSet, hapticImpact, hapticNotify } from '@/lib/telegram';
+import { clientStorageGet, clientStorageSet } from '@/lib/clientStorage';
+import { error as hapticError, impactLight, success as hapticSuccess } from '@/lib/haptics';
 import type { PlantDto } from '@/types/api';
 import { ExportImportSection } from '@/components/ExportImportSection';
 
@@ -25,16 +26,16 @@ export function BackupRestore() {
     mutationFn: async () => {
       const plants = plantsQuery.data ?? [];
       const payload: BackupPayload = { savedAt: new Date().toISOString(), plants };
-      await cloudStorageSet(BACKUP_KEY, JSON.stringify(payload));
+      await clientStorageSet(BACKUP_KEY, JSON.stringify(payload));
       return payload;
     },
-    onSuccess: () => hapticNotify('success'),
-    onError: () => hapticNotify('error')
+    onSuccess: () => hapticSuccess(),
+    onError: () => hapticError()
   });
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      const raw = await cloudStorageGet(BACKUP_KEY);
+      const raw = await clientStorageGet(BACKUP_KEY);
       if (!raw) {
         throw new Error('В Cloud Storage нет бэкапа');
       }
@@ -72,11 +73,11 @@ export function BackupRestore() {
       return imported;
     },
     onSuccess: () => {
-      hapticNotify('success');
+      hapticSuccess();
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   return (
@@ -87,22 +88,22 @@ export function BackupRestore() {
           <p className="text-ios-body font-semibold">Экспорт / импорт</p>
         </div>
         <p className="text-ios-caption text-ios-subtext">
-          Сохранение и восстановление через Telegram Cloud Storage между устройствами.
+          Сохранение и восстановление через локальное хранилище браузера.
         </p>
       </div>
 
       <ExportImportSection
         restoreMode={restoreMode}
         onChangeMode={(next) => {
-          hapticImpact('light');
+          impactLight();
           setRestoreMode(next);
         }}
         onExport={() => {
-          hapticImpact('light');
+          impactLight();
           exportMutation.mutate();
         }}
         onImport={() => {
-          hapticImpact('light');
+          impactLight();
           importMutation.mutate();
         }}
         exportPending={exportMutation.isPending}

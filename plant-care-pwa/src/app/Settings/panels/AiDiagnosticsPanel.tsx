@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
 
 export function AiDiagnosticsPanel() {
@@ -11,7 +11,7 @@ export function AiDiagnosticsPanel() {
       <Button
         variant="secondary"
         onClick={() => {
-          hapticImpact('light');
+          impactLight();
           setActiveTab('ai');
         }}
       >

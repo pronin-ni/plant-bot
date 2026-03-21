@@ -1,6 +1,6 @@
 # Plant Bot / «Мои Растения»
 
-Plant Bot is a Java Spring Boot application with two React clients (Telegram Mini App and PWA) for plant care management: watering schedules, AI recommendations, weather-aware tips, Home Assistant integration, push notifications, and admin operations.
+Plant Bot is a Java Spring Boot application with a React PWA client for plant care management: watering schedules, AI recommendations, weather-aware tips, Home Assistant integration, push notifications, and admin operations.
 
 ## Features
 
@@ -17,16 +17,15 @@ Plant Bot is a Java Spring Boot application with two React clients (Telegram Min
 ## Tech Stack
 
 - Frontend (PWA): React 19, Vite 7, TypeScript, Tailwind, shadcn/ui primitives, Framer Motion, TanStack Query/Table, Zustand.
-- Frontend (Mini App): React 19, Vite 7, TypeScript, Tailwind, Framer Motion, Zustand.
 - Backend: Java 17, Spring Boot 3.2, Spring Web, Spring Data JPA, Spring Security.
 - Database: SQLite (Hibernate + community SQLite dialect).
-- Integrations: Telegram Bot API, OpenRouter, Home Assistant, Open-Meteo/OpenWeather APIs, Web Push (VAPID).
+- Integrations: Telegram auth, OpenRouter, Home Assistant, Open-Meteo/OpenWeather APIs, Web Push (VAPID).
 - Infra: Docker, Docker Compose, GitHub Actions (GHCR publish).
 
 ## High-Level Architecture
 
 ```text
-PWA (React) / Mini App (React)
+PWA (React)
             |
             | REST API + JWT / Telegram init-data
             v
@@ -36,7 +35,7 @@ PWA (React) / Mini App (React)
             v
         SQLite database
 
-External services: Telegram, OpenRouter, Weather APIs, Home Assistant, Web Push
+External services: Telegram auth, OpenRouter, Weather APIs, Home Assistant, Web Push
 ```
 
 ## Installation
@@ -63,8 +62,7 @@ cp .env.example .env
 
 Fill required secrets at least:
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_BOT_USERNAME`
+- `TELEGRAM_AUTH_TOKEN`
 - `APP_SECURITY_JWT_SECRET`
 - optional: `OPENROUTER_API_KEY`, `OPENWEATHER_API_KEY`, `WEB_PUSH_VAPID_*`
 
@@ -93,15 +91,6 @@ npm install
 npm run dev
 ```
 
-### 5. Run Mini App frontend (optional)
-
-```bash
-cd ../plant-care-mini-app
-cp .env.example .env
-npm install
-npm run dev
-```
-
 ## Running with Docker
 
 ```bash
@@ -125,13 +114,6 @@ cd plant-care-pwa
 npm run dev
 ```
 
-### Mini App frontend
-
-```bash
-cd plant-care-mini-app
-npm run dev
-```
-
 ### Docker
 
 ```bash
@@ -150,7 +132,6 @@ src/main/java/com/example/plantbot
   config/          Spring and infra config
 
 plant-care-pwa/    PWA frontend
-plant-care-mini-app/ Telegram Mini App frontend
 ```
 
 Detailed docs:
@@ -178,7 +159,6 @@ Full endpoint documentation is in `DOCUMENTATION.md`.
 
 - Backend: `./gradlew build` / `./gradlew bootRun`
 - Frontend PWA: `npm run dev`, `npm run build` (inside `plant-care-pwa`)
-- Frontend Mini App: `npm run dev`, `npm run build` (inside `plant-care-mini-app`)
 
 See `DEVELOPMENT_GUIDE.md` for task-oriented implementation recipes.
 

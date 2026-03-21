@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { uploadPlantPhoto } from '@/lib/api';
-import { cloudStorageGet, cloudStorageSet, hapticImpact, hapticNotify } from '@/lib/telegram';
+import { clientStorageGet, clientStorageSet } from '@/lib/clientStorage';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { Button } from '@/components/ui/button';
 
 type GrowthShot = {
@@ -22,7 +23,7 @@ export function GrowthGallery({ plantId, photoUrl }: { plantId: number; photoUrl
   const uploadMutation = useMutation({
     mutationFn: ({ id, dataUrl }: { id: number; dataUrl: string }) => uploadPlantPhoto(id, dataUrl),
     onSuccess: async (res) => {
-      hapticNotify('success');
+      hapticSuccess();
       const next: GrowthShot[] = [
         {
           createdAt: new Date().toISOString(),
@@ -31,16 +32,16 @@ export function GrowthGallery({ plantId, photoUrl }: { plantId: number; photoUrl
         ...history
       ].filter((item) => item.photoUrl).slice(0, 20);
       setHistory(next);
-      await cloudStorageSet(keyForPlant(plantId), JSON.stringify(next));
+      await clientStorageSet(keyForPlant(plantId), JSON.stringify(next));
       void queryClient.invalidateQueries({ queryKey: ['plant', plantId] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   useEffect(() => {
     let cancelled = false;
-    void cloudStorageGet(keyForPlant(plantId)).then((raw) => {
+    void clientStorageGet(keyForPlant(plantId)).then((raw) => {
       if (cancelled || !raw) {
         return;
       }
@@ -71,7 +72,7 @@ export function GrowthGallery({ plantId, photoUrl }: { plantId: number; photoUrl
               if (!file) {
                 return;
               }
-              hapticImpact('light');
+              impactLight();
               void toDataUrl(file).then((dataUrl) => uploadMutation.mutate({ id: plantId, dataUrl }));
             }}
           />

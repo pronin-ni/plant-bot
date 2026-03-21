@@ -102,7 +102,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-public class MiniAppController {
+public class AppController {
   private final CurrentUserService currentUserService;
   private final PlantService plantService;
   private final PlantRepository plantRepository;

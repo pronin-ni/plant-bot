@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, CheckCircle2, Droplets } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 
 interface MassWaterButtonProps {
   disabled?: boolean;
@@ -42,7 +42,7 @@ export function MassWaterButton({ disabled = false, pending = false, count, onRu
     }
 
     setIsRunning(true);
-    hapticImpact('heavy');
+    impactHeavy();
 
     try {
       await onRun();

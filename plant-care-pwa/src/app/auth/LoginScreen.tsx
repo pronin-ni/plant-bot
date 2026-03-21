@@ -51,27 +51,6 @@ function readInitialLoginTheme(): LoginTheme {
   return 'dark';
 }
 
-function getMigrationInitDataFromUrl(): string | null {
-  const queryValue = new URLSearchParams(window.location.search).get('tg_init_data');
-  if (queryValue) {
-    return queryValue;
-  }
-
-  const hash = window.location.hash.replace(/^#/, '');
-  if (!hash) {
-    return null;
-  }
-  const hashParams = new URLSearchParams(hash);
-  return hashParams.get('tg_init_data');
-}
-
-function clearMigrationInitDataFromUrl() {
-  if (!window.location.hash.includes('tg_init_data') && !window.location.search.includes('tg_init_data')) {
-    return;
-  }
-  window.history.replaceState(null, '', window.location.pathname);
-}
-
 function getMagicLinkTokenFromUrl(): string | null {
   const path = window.location.pathname.toLowerCase();
   const queryToken = new URLSearchParams(window.location.search).get('token');
@@ -275,7 +254,6 @@ function mapTelegramAuthError(error: unknown): string {
 export function LoginScreen() {
   const prefersReducedMotion = useReducedMotion();
   const [activeProvider, setActiveProvider] = useState<AuthProviderId | null>(null);
-  const [migrationState, setMigrationState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [magicLinkVerifyState, setMagicLinkVerifyState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [magicLinkVerifyError, setMagicLinkVerifyError] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -290,7 +268,6 @@ export function LoginScreen() {
   const [isOffline, setIsOffline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? !navigator.onLine : false));
   const successTimerRef = useRef<number | null>(null);
   const magicLinkVerifyAttemptRef = useRef(false);
-  const migrationInitData = useMemo(() => getMigrationInitDataFromUrl(), []);
   const magicLinkTokenFromUrl = useMemo(() => getMagicLinkTokenFromUrl(), []);
   const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -374,28 +351,6 @@ export function LoginScreen() {
     }
   });
 
-  const migrationMutation = useMutation({
-    mutationFn: (initData: string) => pwaLoginTelegram(initData),
-    onSuccess: (session) => {
-      scheduleAuthSuccess({
-        isAuthorized: true,
-        accessToken: session.accessToken,
-        telegramUserId: session.user.telegramId,
-        username: session.user.username,
-        firstName: session.user.firstName,
-        email: session.user.email,
-        roles: session.user.roles,
-        isAdmin: session.user.roles.includes('ROLE_ADMIN')
-      }, 'Сессия Telegram Mini App перенесена');
-      setMigrationState('done');
-      clearMigrationInitDataFromUrl();
-    },
-    onError: () => {
-      setMigrationState('error');
-      hapticError();
-    }
-  });
-
   const magicLinkMutation = useMutation({
     mutationFn: (email: string) => pwaRequestEmailMagicLink(email),
     onSuccess: (response) => {
@@ -438,14 +393,6 @@ export function LoginScreen() {
       clearMagicLinkTokenFromUrl();
     }
   });
-
-  useEffect(() => {
-    if (!migrationInitData || migrationState !== 'idle') {
-      return;
-    }
-    setMigrationState('running');
-    migrationMutation.mutate(migrationInitData);
-  }, [migrationInitData, migrationState, migrationMutation]);
 
   useEffect(() => {
     if (!magicLinkTokenFromUrl || magicLinkVerifyAttemptRef.current) {
@@ -585,20 +532,6 @@ export function LoginScreen() {
         </p>
 
         <AnimatePresence initial={false}>
-          {migrationInitData ? (
-            <motion.p
-              key={migrationState}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className="theme-surface-subtle mt-3 rounded-2xl border px-3 py-2 text-xs text-ios-subtext"
-            >
-              {migrationState === 'running' ? 'Переносим аккаунт из Telegram Mini App...' : null}
-              {migrationState === 'error' ? 'Не удалось автоматически перенести сессию. Выполните вход вручную.' : null}
-              {migrationState === 'done' ? 'Сессия успешно перенесена. Добро пожаловать.' : null}
-            </motion.p>
-          ) : null}
         </AnimatePresence>
 
         <AnimatePresence initial={false}>

@@ -45,8 +45,8 @@ public class PwaAuthService {
   @Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
 
-  @Value("${bot.token:}")
-  private String botToken;
+  @Value("${telegram.auth.token:}")
+  private String telegramAuthToken;
 
   @Value("${telegram.auth.max-age-seconds:86400}")
   private long telegramAuthMaxAgeSeconds;
@@ -62,8 +62,8 @@ public class PwaAuthService {
     if (request == null || request.id() == null || request.id() <= 0 || request.authDate() == null || request.hash() == null || request.hash().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный Telegram payload");
     }
-    if (botToken == null || botToken.isBlank()) {
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен bot.token");
+    if (telegramAuthToken == null || telegramAuthToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Не настроен telegram.auth.token");
     }
     long age = Math.abs(Instant.now().getEpochSecond() - request.authDate());
     if (age > Math.max(60, telegramAuthMaxAgeSeconds)) {
@@ -131,7 +131,7 @@ public class PwaAuthService {
   private String computeTelegramWidgetHash(String dataCheckString) {
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] secret = digest.digest(botToken.getBytes(StandardCharsets.UTF_8));
+      byte[] secret = digest.digest(telegramAuthToken.getBytes(StandardCharsets.UTF_8));
       Mac mac = Mac.getInstance("HmacSHA256");
       mac.init(new SecretKeySpec(secret, "HmacSHA256"));
       byte[] signature = mac.doFinal(dataCheckString.getBytes(StandardCharsets.UTF_8));

@@ -11,7 +11,7 @@ import {
   getAdminBackups,
   restoreAdminBackup
 } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 
 function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -83,9 +83,9 @@ export function AdminBackupList() {
     ) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     const result = await clearAllMutation.mutateAsync();
-    hapticNotify('success');
+    hapticSuccess();
     window.alert(
       `Кэш очищен.\nПогода: ${result.weatherEntries}\nOpenRouter: ${result.openRouterCareEntries + result.openRouterWateringEntries + result.openRouterChatEntries}`
     );
@@ -105,14 +105,14 @@ export function AdminBackupList() {
     ) {
       return;
     }
-    hapticImpact('light');
+    impactLight();
     const mutation = scope === 'weather'
       ? clearWeatherMutation
       : scope === 'openrouter'
         ? clearOpenRouterMutation
         : clearUsersMutation;
     const result = await mutation.mutateAsync();
-    hapticNotify('success');
+    hapticSuccess();
     window.alert(result.message);
   };
 
@@ -125,9 +125,9 @@ export function AdminBackupList() {
     ) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     const result = await createBackupMutation.mutateAsync();
-    hapticNotify('success');
+    hapticSuccess();
     window.alert(`Backup создан: ${result.fileName}`);
   };
 
@@ -140,13 +140,13 @@ export function AdminBackupList() {
     ) {
       return;
     }
-    hapticImpact('heavy');
+    impactHeavy();
     const result = await restoreBackupMutation.mutateAsync(fileName);
     if (result.ok) {
-      hapticNotify('warning');
+      hapticWarning();
       window.alert(`${result.message}\nФайл: ${result.restoredFile}`);
     } else {
-      hapticNotify('error');
+      hapticError();
       window.alert('Не удалось восстановить backup');
     }
   };

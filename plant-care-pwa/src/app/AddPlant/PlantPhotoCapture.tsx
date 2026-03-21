@@ -3,7 +3,7 @@ import { Camera, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { identifyPlantOpenRouter } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import type { OpenRouterIdentifyResult } from '@/types/api';
 
 
@@ -17,10 +17,10 @@ export function PlantPhotoCapture({
   const identifyMutation = useMutation({
     mutationFn: identifyPlantOpenRouter,
     onSuccess: (result) => {
-      hapticNotify('success');
+      hapticSuccess();
       onIdentified(result);
     },
-    onError: () => hapticNotify('error')
+    onError: () => hapticError()
   });
 
   async function onFile(file: File) {
@@ -29,7 +29,7 @@ export function PlantPhotoCapture({
     }
     const dataUrl = await toDataUrl(file);
     setPreview(dataUrl);
-    hapticImpact('light');
+    impactLight();
     identifyMutation.mutate(dataUrl);
   }
 

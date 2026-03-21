@@ -2,7 +2,7 @@ import { CloudOff, RefreshCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { syncOfflineQueue } from '@/lib/api';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import { useOfflineStore } from '@/lib/store';
 
 export function OfflineStatusBar() {
@@ -29,7 +29,7 @@ export function OfflineStatusBar() {
           size="sm"
           className="h-8 px-2 text-[11px]"
           onClick={() => {
-            hapticImpact('light');
+            impactLight();
             void syncOfflineQueue();
           }}
         >

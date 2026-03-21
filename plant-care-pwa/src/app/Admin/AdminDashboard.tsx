@@ -22,7 +22,7 @@ import { AdminUserTable } from '@/components/AdminUserTable';
 import { Button } from '@/components/ui/button';
 import { getAdminOverview, getAdminStats, getAdminUsers } from '@/lib/api';
 import { useMotionGuard } from '@/lib/motion';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import type { AdminStatsItemDto } from '@/types/api';
 
 type AdminTab = 'users' | 'plants';
@@ -90,7 +90,7 @@ export function AdminDashboard() {
       statsQuery.refetch(),
       usersQuery.refetch()
     ]);
-    hapticNotify('success');
+    hapticSuccess();
   };
 
   return (
@@ -195,7 +195,7 @@ export function AdminDashboard() {
                 setSort('PLANTS_DESC');
                 setRegisteredFrom('');
                 setWateringFrom('');
-                hapticImpact('light');
+                impactLight();
               }}
             >
               Сбросить фильтры
@@ -272,7 +272,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
     <button
       type="button"
       onClick={() => {
-        hapticImpact('light');
+        impactLight();
         onClick();
       }}
       className={`rounded-full px-4 py-1.5 text-sm transition ${

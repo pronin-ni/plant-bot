@@ -13,7 +13,7 @@ import { Droplets, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { deleteAdminPlant, getAdminPlants, updateAdminPlant, waterAdminOverduePlants, waterAdminPlant } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import type { AdminPlantItemDto } from '@/types/api';
 
 type CategoryFilter = 'ALL' | 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN';
@@ -334,7 +334,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                   if (!confirmDangerousAction('Отметить растение как политое?', 'Подтвердите действие.')) {
                     return;
                   }
-                  hapticImpact('medium');
+                  impactMedium();
                   waterOneMutation.mutate(plant.id);
                 }}
               >
@@ -364,7 +364,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                     baseIntervalDays: Math.round(parsedInterval),
                     category: plant.category
                   } as const;
-                  hapticImpact('light');
+                  impactLight();
                   updateMutation.mutate({ plantId: plant.id, payload });
                 }}
               >
@@ -382,7 +382,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                   ) {
                     return;
                   }
-                  hapticImpact('heavy');
+                  impactHeavy();
                   deleteMutation.mutate(plant.id);
                 }}
               >
@@ -441,12 +441,12 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
     ) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     const result = await waterBulkMutation.mutateAsync(targetIds);
     if (result.updated > 0) {
-      hapticNotify('success');
+      hapticSuccess();
     } else {
-      hapticNotify('warning');
+      hapticWarning();
     }
     window.alert(`${result.message}. Обновлено: ${result.updated}, пропущено: ${result.skipped}`);
   };
@@ -540,7 +540,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                       if (!confirmDangerousAction('Отметить растение как политое?', 'Подтвердите действие.')) {
                         return;
                       }
-                      hapticImpact('medium');
+                      impactMedium();
                       waterOneMutation.mutate(plant.id);
                     }}
                   >
@@ -570,7 +570,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                         baseIntervalDays: Math.round(parsedInterval),
                         category: plant.category
                       } as const;
-                      hapticImpact('light');
+                      impactLight();
                       updateMutation.mutate({ plantId: plant.id, payload });
                     }}
                   >
@@ -588,7 +588,7 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
                       ) {
                         return;
                       }
-                      hapticImpact('heavy');
+                      impactHeavy();
                       deleteMutation.mutate(plant.id);
                     }}
                   >

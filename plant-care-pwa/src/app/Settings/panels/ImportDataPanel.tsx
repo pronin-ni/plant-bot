@@ -4,7 +4,7 @@ import { FileUp } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { createPlant, getPlants } from '@/lib/api';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 
 interface ImportPlantShape {
   name?: string;
@@ -57,7 +57,7 @@ export function ImportDataPanel() {
 
       if (!plants.length) {
         setStatus('Файл не содержит данных растений.');
-        hapticImpact('light');
+        impactLight();
         return;
       }
 
@@ -108,7 +108,11 @@ export function ImportDataPanel() {
       }
 
       setStatus(`Импорт завершён. Добавлено: ${imported}, пропущено: ${skipped}, ошибок: ${failed}.`);
-      hapticImpact(imported > 0 ? 'medium' : 'light');
+      if (imported > 0) {
+        impactMedium();
+      } else {
+        impactLight();
+      }
 
       if (imported > 0) {
         await queryClient.invalidateQueries({ queryKey: ['plants'] });

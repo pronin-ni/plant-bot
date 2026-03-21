@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 
 interface WaterButtonProps {
   isLoading?: boolean;
@@ -33,7 +33,7 @@ export function WaterButton({ isLoading = false, onClick }: WaterButtonProps) {
         disabled={isLoading}
         onClick={() => {
           // В момент полива делаем более выраженный отклик.
-          hapticImpact('heavy');
+          impactHeavy();
           setBurst(true);
           window.setTimeout(() => setBurst(false), 320);
           onClick();

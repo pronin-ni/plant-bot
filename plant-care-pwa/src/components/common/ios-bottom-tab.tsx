@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { CalendarDays, Leaf, MessageCircle, PlusCircle, Settings } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
-import { hapticSelectionChanged } from '@/lib/telegram';
+import { selection } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
 import type { AppTabKey } from '@/types/navigation';
 
@@ -36,7 +36,7 @@ export function IOSBottomTab() {
             type="button"
             onClick={() => {
               setActiveTab(tab.key);
-              hapticSelectionChanged();
+              selection();
             }}
             className={cn(
               'relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-ios-tab px-1 py-1.5 text-[10px] transition-colors',

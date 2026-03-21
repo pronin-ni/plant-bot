@@ -15,7 +15,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { getCalendarSync, updateCalendarSync } from '@/lib/api';
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 import type { CalendarSyncDto } from '@/types/api';
 
 type StatusTone = 'success' | 'warning' | 'neutral';
@@ -101,7 +101,7 @@ export function CalendarPanel() {
           : 'Подписка выключена. Ссылки календаря больше не будут доступны внешним приложениям.'
       );
       setCopyState('idle');
-      hapticImpact('light');
+      impactLight();
     } catch (error) {
       console.error(error);
       setStatus('Не удалось обновить настройку календаря.');
@@ -118,7 +118,7 @@ export function CalendarPanel() {
       await navigator.clipboard.writeText(sync.httpsUrl);
       setCopyState('copied');
       setStatus('Ссылка календарной подписки скопирована. Её можно вставить в Google Calendar или другое приложение с поддержкой ICS/webcal.');
-      hapticImpact('light');
+      impactLight();
     } catch (error) {
       console.error(error);
       setCopyState('error');
@@ -132,7 +132,7 @@ export function CalendarPanel() {
     }
     window.location.href = sync.webcalUrl;
     setStatus('Открываем подписку через Apple Calendar. После добавления календарь будет обновляться автоматически по этой ссылке.');
-    hapticImpact('light');
+    impactLight();
   };
 
   const openSubscriptionLink = () => {
@@ -141,7 +141,7 @@ export function CalendarPanel() {
     }
     window.open(sync.httpsUrl, '_blank', 'noopener,noreferrer');
     setStatus('Открываем HTTPS-ссылку подписки. Используйте её для приложений, которые поддерживают ICS-подписки по URL.');
-    hapticImpact('light');
+    impactLight();
   };
 
   const summaryTone: StatusTone = useMemo(() => {

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Loader2, Mic, Paperclip, SendHorizonal, X } from 'lucide-react';
 
-import { hapticImpact } from '@/lib/telegram';
+import { impactLight, impactMedium, impactHeavy } from '@/lib/haptics';
 
 interface ChatInputProps {
   value: string;
@@ -41,7 +41,7 @@ export function ChatInput({
             type="button"
             className="touch-target inline-flex min-w-11 items-center justify-center rounded-full text-ios-subtext"
             onClick={() => {
-              hapticImpact('light');
+              impactLight();
               onClearAttachment?.();
             }}
             aria-label="Убрать вложение"
@@ -63,7 +63,7 @@ export function ChatInput({
               if (!file) {
                 return;
               }
-              hapticImpact('light');
+              impactLight();
               onAttachPhoto?.(file);
               event.currentTarget.value = '';
             }}
@@ -98,7 +98,11 @@ export function ChatInput({
                 if (disabled) {
                   return;
                 }
-                hapticImpact(micActive ? 'light' : 'medium');
+                if (micActive) {
+                  impactLight();
+                } else {
+                  impactMedium();
+                }
                 onMicToggle?.();
               }}
               disabled={disabled}
@@ -127,7 +131,7 @@ export function ChatInput({
             if (!canSend) {
               return;
             }
-            hapticImpact('medium');
+            impactMedium();
             onSubmit();
           }}
           disabled={!canSend}

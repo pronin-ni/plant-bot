@@ -20,7 +20,7 @@ import {
   sendAdminPushTest,
   setAdminUserBlocked
 } from '@/lib/api';
-import { hapticImpact, hapticNotify } from '@/lib/telegram';
+import { error as hapticError, impactLight, impactMedium, impactHeavy, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { cn } from '@/lib/cn';
 import type { AdminUserDetailsDto, AdminUserItemDto } from '@/types/api';
 
@@ -314,7 +314,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                 variant="secondary"
                 className="h-10 min-w-10 rounded-lg px-2"
                 onClick={() => {
-                  hapticImpact('light');
+                  impactLight();
                   setDetailsUserId(user.id);
                 }}
               >
@@ -327,7 +327,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                   if (!confirmDangerousAction('Изменить статус блокировки?', blocked ? 'Разблокировать пользователя?' : 'Заблокировать пользователя?')) {
                     return;
                   }
-                  hapticImpact('medium');
+                  impactMedium();
                   toggleBlockMutation.mutate({ userId: user.id, blocked: !blocked });
                 }}
               >
@@ -345,7 +345,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                   ) {
                     return;
                   }
-                  hapticImpact('heavy');
+                  impactHeavy();
                   deleteUserMutation.mutate(user.id);
                 }}
               >
@@ -394,7 +394,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
     if (!message || !message.trim()) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     const result = await bulkPushMutation.mutateAsync({
       userIds: selectedRows.map((row) => row.id),
       message: message.trim()
@@ -402,9 +402,9 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
     const success = result.filter((item) => item.status === 'fulfilled').length;
     const failed = result.length - success;
     if (failed === 0) {
-      hapticNotify('success');
+      hapticSuccess();
     } else {
-      hapticNotify('warning');
+      hapticWarning();
     }
     window.alert(`Push отправлен: успешно ${success}, с ошибкой ${failed}`);
   };
@@ -421,9 +421,9 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
     ) {
       return;
     }
-    hapticImpact('medium');
+    impactMedium();
     await bulkCacheMutation.mutateAsync();
-    hapticNotify('success');
+    hapticSuccess();
     window.alert('Кэш успешно очищен');
   };
 
@@ -480,7 +480,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
             disabled={selectedRows.length === 0}
             onClick={() => {
               downloadCsv(selectedRows);
-              hapticImpact('light');
+              impactLight();
             }}
           >
             <Download className="mr-1 h-4 w-4" />
@@ -524,7 +524,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                   variant="secondary"
                   className="h-10 min-w-10 rounded-lg px-2"
                   onClick={() => {
-                    hapticImpact('light');
+                    impactLight();
                     setDetailsUserId(user.id);
                   }}
                 >
@@ -538,7 +538,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                     if (!confirmDangerousAction('Изменить статус блокировки?', blocked ? 'Разблокировать пользователя?' : 'Заблокировать пользователя?')) {
                       return;
                     }
-                    hapticImpact('medium');
+                    impactMedium();
                     toggleBlockMutation.mutate({ userId: user.id, blocked: !blocked });
                   }}
                 >
@@ -556,7 +556,7 @@ export function AdminUserTable({ search, registeredFrom, sort }: AdminUserTableP
                     ) {
                       return;
                     }
-                    hapticImpact('heavy');
+                    impactHeavy();
                     deleteUserMutation.mutate(user.id);
                   }}
                 >
