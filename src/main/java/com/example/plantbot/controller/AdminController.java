@@ -38,6 +38,7 @@ import com.example.plantbot.service.OpenRouterModelAvailabilityCheckService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityPersistenceService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
+import com.example.plantbot.service.AiTextCacheService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.service.DatabaseBackupScheduler;
@@ -87,6 +88,7 @@ public class AdminController {
   private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
   private final OpenRouterModelAvailabilityPersistenceService openRouterModelAvailabilityPersistenceService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
+  private final AiTextCacheService aiTextCacheService;
   @Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
 
@@ -210,6 +212,10 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         openRouterGlobalSettingsService.hasApiKey(settings),
+        settings.isAiTextCacheEnabled(),
+        settings.getAiTextCacheTtlDays(),
+        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
+        settings.getAiTextCacheLastCleanupAt(),
         settings.getUpdatedAt(),
         settings.getTextModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getTextModelAvailabilityStatus().name(),
         settings.getTextModelLastCheckedAt(),
@@ -246,6 +252,10 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         result.hasApiKey(),
+        result.settings().isAiTextCacheEnabled(),
+        result.settings().getAiTextCacheTtlDays(),
+        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
+        result.settings().getAiTextCacheLastCleanupAt(),
         result.settings().getUpdatedAt(),
         result.settings().getTextModelAvailabilityStatus() == null ? "UNKNOWN" : result.settings().getTextModelAvailabilityStatus().name(),
         result.settings().getTextModelLastCheckedAt(),
@@ -389,6 +399,7 @@ public class AdminController {
             0,
             0,
             0,
+            0,
             "Кэш погоды очищен"
         );
       }
@@ -405,7 +416,44 @@ public class AdminController {
             openRouterStats.wateringProfileEntries(),
             openRouterStats.chatEntries(),
             0,
+            0,
             "Кэш OpenRouter очищен"
+        );
+      }
+      case "ai-text" -> {
+        int deleted = aiTextCacheService.clearAll();
+        openRouterGlobalSettingsService.markAiTextCacheCleanupAt(java.time.Instant.now());
+        log.info("Admin AI text cache clear executed: userId={} telegramId={} entries={}",
+            admin.getId(), admin.getTelegramId(), deleted);
+        return new AdminScopedCacheClearResponse(
+            "ai-text",
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            deleted,
+            0,
+            "AI text cache очищен"
+        );
+      }
+      case "ai-text-expired" -> {
+        int deleted = aiTextCacheService.cleanupExpiredOrInvalidated();
+        openRouterGlobalSettingsService.markAiTextCacheCleanupAt(java.time.Instant.now());
+        log.info("Admin AI text cache expired cleanup executed: userId={} telegramId={} entries={}",
+            admin.getId(), admin.getTelegramId(), deleted);
+        return new AdminScopedCacheClearResponse(
+            "ai-text-expired",
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            deleted,
+            0,
+            "Просроченный AI text cache очищен"
         );
       }
       case "users" -> {
@@ -414,6 +462,7 @@ public class AdminController {
             admin.getId(), admin.getTelegramId(), userCacheEntries);
         return new AdminScopedCacheClearResponse(
             "users",
+            0,
             0,
             0,
             0,

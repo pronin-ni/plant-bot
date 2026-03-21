@@ -22,6 +22,7 @@ public class WateringRecommendationPreviewService {
   private final PlantService plantService;
   private final OutdoorWeatherContextService outdoorWeatherContextService;
   private final RecommendationSnapshotService recommendationSnapshotService;
+  private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
   private final ObjectMapper objectMapper;
 
   public WateringRecommendationResponse preview(User user, WateringRecommendationPreviewRequest request) {
@@ -33,6 +34,7 @@ public class WateringRecommendationPreviewService {
     applyRecommendationToPlant(plant, response);
     plantService.save(plant);
     recommendationSnapshotService.saveFromResponse(plant, response);
+    aiTextCacheInvalidationService.invalidateForPlantMutation(user, plant, "watering_recommendation_refresh");
     return response;
   }
 
@@ -79,6 +81,7 @@ public class WateringRecommendationPreviewService {
     plant.setGeneratedAt(Instant.now());
     plantService.save(plant);
     recommendationSnapshotService.saveManualSnapshot(plant, source, interval, waterMl, request.summary());
+    aiTextCacheInvalidationService.invalidateForPlantMutation(user, plant, "manual_recommendation_apply");
 
     return new ApplyWateringRecommendationResponse(
         true,

@@ -82,6 +82,15 @@ public class GlobalSettings {
   @Column(name = "photo_model_check_interval_minutes")
   private Integer photoModelCheckIntervalMinutes;
 
+  @Column(name = "ai_text_cache_enabled", nullable = false)
+  private boolean aiTextCacheEnabled = true;
+
+  @Column(name = "ai_text_cache_ttl_days")
+  private Integer aiTextCacheTtlDays;
+
+  @Column(name = "ai_text_cache_last_cleanup_at")
+  private Instant aiTextCacheLastCleanupAt;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 

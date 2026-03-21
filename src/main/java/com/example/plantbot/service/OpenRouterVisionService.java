@@ -2,6 +2,7 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.controller.dto.OpenRouterDiagnoseResponse;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyResponse;
+import com.example.plantbot.domain.AiTextFeatureType;
 import com.example.plantbot.domain.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,6 +37,7 @@ public class OpenRouterVisionService {
 
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
+  private final AiTextCacheService aiTextCacheService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
 
@@ -68,6 +72,17 @@ public class OpenRouterVisionService {
     String modelToUse = null;
     ResponseStatusException lastError = null;
     for (String candidate : resolveIdentifyModelCandidates(user)) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          null,
+          AiTextFeatureType.PLANT_IDENTIFY_TEXT,
+          candidate,
+          buildIdentifyCacheInput(imageBase64),
+          OpenRouterIdentifyResponse.class
+      );
+      if (cached.hit()) {
+        return cached.payload();
+      }
       try {
         payload = callOpenRouter(user, candidate, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
         modelToUse = candidate;
@@ -113,6 +128,15 @@ public class OpenRouterVisionService {
         alternatives
     );
 
+    aiTextCacheService.put(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.PLANT_IDENTIFY_TEXT,
+        modelToUse,
+        buildIdentifyCacheInput(imageBase64),
+        response
+    );
+
     log.info("OpenRouter identify success: model={}, confidence={}, russian='{}', latin='{}'",
         modelToUse, response.confidence(), response.russianName(), response.latinName());
 
@@ -137,6 +161,17 @@ public class OpenRouterVisionService {
     String modelToUse = null;
     ResponseStatusException lastError = null;
     for (String candidate : resolveDiagnoseModelCandidates(user)) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          null,
+          AiTextFeatureType.PLANT_DIAGNOSIS_TEXT,
+          candidate,
+          buildDiagnoseCacheInput(imageBase64, plantName, plantContext),
+          OpenRouterDiagnoseResponse.class
+      );
+      if (cached.hit()) {
+        return cached.payload();
+      }
       try {
         payload = callOpenRouter(user, candidate, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
         modelToUse = candidate;
@@ -182,6 +217,15 @@ public class OpenRouterVisionService {
         textOrNull(json, "treatment"),
         textOrNull(json, "prevention"),
         urgency
+    );
+
+    aiTextCacheService.put(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.PLANT_DIAGNOSIS_TEXT,
+        modelToUse,
+        buildDiagnoseCacheInput(imageBase64, plantName, plantContext),
+        response
     );
 
     log.info("OpenRouter diagnose success: model={}, confidence={}, problem='{}', urgency={}",
@@ -260,6 +304,34 @@ public class OpenRouterVisionService {
     } catch (Exception ex) {
       log.warn("OpenRouter invalid JSON payload: {}", preview(content));
       throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter вернул невалидный JSON");
+    }
+  }
+
+  private Map<String, Object> buildIdentifyCacheInput(String imageBase64) {
+    return Map.of(
+        "imageDigest", digestString(imageBase64)
+    );
+  }
+
+  private Map<String, Object> buildDiagnoseCacheInput(String imageBase64, String plantName, String plantContext) {
+    return Map.of(
+        "imageDigest", digestString(imageBase64),
+        "plantName", plantName == null ? "" : plantName.trim(),
+        "plantContext", plantContext == null ? "" : plantContext.trim()
+    );
+  }
+
+  private String digestString(String value) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] hash = digest.digest((value == null ? "" : value.trim()).getBytes(StandardCharsets.UTF_8));
+      StringBuilder sb = new StringBuilder(hash.length * 2);
+      for (byte b : hash) {
+        sb.append(String.format("%02x", b));
+      }
+      return sb.toString();
+    } catch (Exception ex) {
+      throw new IllegalStateException("Не удалось посчитать digest для AI vision cache", ex);
     }
   }
 

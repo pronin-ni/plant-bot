@@ -46,6 +46,7 @@ import com.example.plantbot.service.SeedLifecycleService;
 import com.example.plantbot.service.RecommendationSnapshotService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.AssistantChatHistoryService;
+import com.example.plantbot.service.AiTextCacheInvalidationService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.service.WeatherService;
@@ -121,6 +122,7 @@ public class AppController {
   private final WeatherService weatherService;
   private final SeedLifecycleService seedLifecycleService;
   private final RecommendationSnapshotService recommendationSnapshotService;
+  private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
   private final ObjectMapper objectMapper;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
@@ -331,6 +333,7 @@ public class AppController {
     }
     plant = plantService.save(plant);
     recommendationSnapshotService.saveInitialOnCreate(plant);
+    aiTextCacheInvalidationService.invalidateUserDraftFeatures(user, "plant_created_from_wizard");
     return toPlantResponse(plant, user, false);
   }
 
@@ -662,6 +665,7 @@ public class AppController {
     user.setCity(normalizedCity);
     user.setCityDisplayName(normalizedCity);
     user = userService.save(user);
+    aiTextCacheInvalidationService.invalidateForLocationMutation(user, "user_city_update");
     return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
 

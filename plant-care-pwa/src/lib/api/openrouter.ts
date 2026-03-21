@@ -6,6 +6,7 @@ import type {
   OpenRouterTypedTestDto
 } from '@/types/api';
 import {
+  clearAdminCacheScope,
   getAdminOpenRouterModels,
   checkAdminOpenRouterAvailability,
   getOpenRouterModels,
@@ -29,8 +30,14 @@ export async function updateAdminOpenRouterModels(payload: {
   photoModel?: string | null;
   textModelCheckIntervalMinutes?: number | null;
   photoModelCheckIntervalMinutes?: number | null;
+  aiTextCacheEnabled?: boolean | null;
+  aiTextCacheTtlDays?: number | null;
 }): Promise<AdminOpenRouterModelsDto> {
   return saveAdminOpenRouterModels(payload);
+}
+
+export async function clearAdminOpenRouterCacheScope(scope: 'ai-text' | 'ai-text-expired') {
+  return clearAdminCacheScope(scope);
 }
 
 export async function runOpenRouterAvailabilityCheck(type: 'text' | 'photo'): Promise<AdminOpenRouterAvailabilityCheckDto> {

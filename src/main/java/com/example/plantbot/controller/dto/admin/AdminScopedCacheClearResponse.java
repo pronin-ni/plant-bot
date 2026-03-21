@@ -8,6 +8,7 @@ public record AdminScopedCacheClearResponse(
     int openRouterCareEntries,
     int openRouterWateringEntries,
     int openRouterChatEntries,
+    int aiTextCacheEntries,
     int userCacheEntries,
     String message
 ) {

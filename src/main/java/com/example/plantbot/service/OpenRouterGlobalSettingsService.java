@@ -2,12 +2,14 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequest;
 import com.example.plantbot.domain.GlobalSettings;
+import com.example.plantbot.repository.AiTextCacheEntryRepository;
 import com.example.plantbot.repository.GlobalSettingsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,8 +20,12 @@ import java.util.Objects;
 public class OpenRouterGlobalSettingsService {
   private static final long SINGLETON_ID = 1L;
   private static final String ENC_PREFIX = "enc::";
+  private static final int DEFAULT_AI_TEXT_CACHE_TTL_DAYS = 7;
+  private static final int MIN_AI_TEXT_CACHE_TTL_DAYS = 1;
+  private static final int MAX_AI_TEXT_CACHE_TTL_DAYS = 30;
 
   private final GlobalSettingsRepository globalSettingsRepository;
+  private final AiTextCacheEntryRepository aiTextCacheEntryRepository;
   private final OpenRouterApiKeyCryptoService cryptoService;
 
   @Transactional
@@ -29,10 +35,33 @@ public class OpenRouterGlobalSettingsService {
       created.setId(SINGLETON_ID);
       return globalSettingsRepository.save(created);
     });
+    if (settings.getAiTextCacheTtlDays() == null) {
+      settings.setAiTextCacheTtlDays(DEFAULT_AI_TEXT_CACHE_TTL_DAYS);
+    }
     if (migrateLegacyPlainApiKey(settings)) {
       settings = globalSettingsRepository.save(settings);
     }
     return settings;
+  }
+
+  public long countActiveAiTextCacheEntries() {
+    return aiTextCacheEntryRepository.countByInvalidatedAtIsNull();
+  }
+
+  public boolean isAiTextCacheEnabled() {
+    return getOrCreate().isAiTextCacheEnabled();
+  }
+
+  public int resolveAiTextCacheTtlDays() {
+    Integer configured = getOrCreate().getAiTextCacheTtlDays();
+    return normalizeAiTextCacheTtlDays(configured);
+  }
+
+  @Transactional
+  public void markAiTextCacheCleanupAt(Instant cleanupAt) {
+    GlobalSettings settings = getOrCreate();
+    settings.setAiTextCacheLastCleanupAt(cleanupAt == null ? Instant.now() : cleanupAt);
+    globalSettingsRepository.save(settings);
   }
 
   public String resolveApiKey(GlobalSettings settings) {
@@ -120,6 +149,20 @@ public class OpenRouterGlobalSettingsService {
         && !Objects.equals(settings.getPhotoModelCheckIntervalMinutes(), request.photoModelCheckIntervalMinutes())) {
       settings.setPhotoModelCheckIntervalMinutes(normalizeCheckInterval(request.photoModelCheckIntervalMinutes()));
       changedFields.add("photoModelCheckIntervalMinutes");
+    }
+
+    if (request != null && request.aiTextCacheEnabled() != null
+        && settings.isAiTextCacheEnabled() != request.aiTextCacheEnabled()) {
+      settings.setAiTextCacheEnabled(request.aiTextCacheEnabled());
+      changedFields.add("aiTextCacheEnabled");
+    }
+
+    if (request != null && request.aiTextCacheTtlDays() != null) {
+      Integer normalizedTtlDays = normalizeAiTextCacheTtlDays(request.aiTextCacheTtlDays());
+      if (!Objects.equals(settings.getAiTextCacheTtlDays(), normalizedTtlDays)) {
+        settings.setAiTextCacheTtlDays(normalizedTtlDays);
+        changedFields.add("aiTextCacheTtlDays");
+      }
     }
 
     GlobalSettings saved = globalSettingsRepository.save(settings);
@@ -220,6 +263,13 @@ public class OpenRouterGlobalSettingsService {
       return 0;
     }
     return Math.min(minutes, 24 * 60);
+  }
+
+  private Integer normalizeAiTextCacheTtlDays(Integer ttlDays) {
+    if (ttlDays == null) {
+      return DEFAULT_AI_TEXT_CACHE_TTL_DAYS;
+    }
+    return Math.max(MIN_AI_TEXT_CACHE_TTL_DAYS, Math.min(MAX_AI_TEXT_CACHE_TTL_DAYS, ttlDays));
   }
 
   public record ResolvedModels(

@@ -28,6 +28,7 @@ public class SeedLifecycleService {
 
   private final PlantService plantService;
   private final RecommendationSnapshotService recommendationSnapshotService;
+  private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
   private final ObjectMapper objectMapper;
 
   public Plant applySeedCreateFields(Plant plant, CreatePlantRequest request) {
@@ -64,7 +65,9 @@ public class SeedLifecycleService {
 
   public Plant updateStage(Plant plant, SeedStage nextStage) {
     plant.setSeedStage(nextStage == null ? plant.getSeedStage() : nextStage);
-    return plantService.save(plant);
+    Plant saved = plantService.save(plant);
+    aiTextCacheInvalidationService.invalidateForPlantMutation(saved.getUser(), saved, "seed_stage_update");
+    return saved;
   }
 
   public Plant recordAction(Plant plant, SeedCareActionType action) {
@@ -78,7 +81,9 @@ public class SeedLifecycleService {
     };
     actions.add(0, Instant.now() + " | " + label);
     plant.setSeedActionHistoryJson(toJson(actions.stream().limit(20).toList()));
-    return plantService.save(plant);
+    Plant saved = plantService.save(plant);
+    aiTextCacheInvalidationService.invalidateForPlantMutation(saved.getUser(), saved, "seed_action_recorded");
+    return saved;
   }
 
   public List<String> getActions(Plant plant) {
@@ -121,6 +126,8 @@ public class SeedLifecycleService {
     plant.setSeedStage(SeedStage.READY_TO_TRANSPLANT);
     Plant saved = plantService.save(plant);
     recommendationSnapshotService.saveManualSnapshot(saved, RecommendationSource.MANUAL, saved.getBaseIntervalDays(), saved.getPreferredWaterMl(), "Migration from seed mode.");
+    aiTextCacheInvalidationService.invalidateForPlantMutation(saved.getUser(), saved, "seed_migration_apply");
+    aiTextCacheInvalidationService.invalidateUserDraftFeatures(saved.getUser(), "seed_migration_apply");
     return saved;
   }
 

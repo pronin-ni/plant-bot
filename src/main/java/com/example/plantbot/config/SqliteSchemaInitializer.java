@@ -177,6 +177,9 @@ public class SqliteSchemaInitializer {
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_last_notified_unavailable_at", "photo_model_last_notified_unavailable_at TIMESTAMP");
     addGlobalSettingsColumnIfMissing(statement, columns, "text_model_check_interval_minutes", "text_model_check_interval_minutes INTEGER");
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_check_interval_minutes", "photo_model_check_interval_minutes INTEGER");
+    addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_enabled", "ai_text_cache_enabled BOOLEAN DEFAULT 1");
+    addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_ttl_days", "ai_text_cache_ttl_days INTEGER DEFAULT 7");
+    addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_last_cleanup_at", "ai_text_cache_last_cleanup_at TIMESTAMP");
   }
 
   private void addGlobalSettingsColumnIfMissing(Statement statement, Set<String> columns, String columnName, String ddl) throws Exception {

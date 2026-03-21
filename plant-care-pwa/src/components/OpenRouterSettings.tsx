@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Brain, CheckCircle2, Sparkles } from 'lucide-react';
+import { Brain, CheckCircle2, Sparkles, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { SettingsTutorial } from '@/components/SettingsTutorial';
 import {
+  clearAdminOpenRouterCacheScope,
   fetchAdminOpenRouterModels,
   fetchOpenRouterCatalog,
   runOpenRouterAvailabilityCheck,
@@ -25,6 +26,14 @@ const CHECK_INTERVAL_OPTIONS = [
   { value: 60, label: '60 минут' },
   { value: 180, label: '3 часа' },
   { value: 360, label: '6 часов' }
+];
+
+const AI_TEXT_CACHE_TTL_OPTIONS = [
+  { value: 1, label: '1 день' },
+  { value: 3, label: '3 дня' },
+  { value: 7, label: '7 дней' },
+  { value: 14, label: '14 дней' },
+  { value: 30, label: '30 дней' }
 ];
 
 function normalizeModelId(value: string | null | undefined): string {
@@ -175,10 +184,17 @@ export function OpenRouterSettings() {
   const [photoModel, setPhotoModel] = useState('');
   const [textCheckIntervalMinutes, setTextCheckIntervalMinutes] = useState(15);
   const [photoCheckIntervalMinutes, setPhotoCheckIntervalMinutes] = useState(15);
+  const [aiTextCacheEnabled, setAiTextCacheEnabled] = useState(true);
+  const [aiTextCacheTtlDays, setAiTextCacheTtlDays] = useState(7);
   const [savedTextModel, setSavedTextModel] = useState('');
   const [savedPhotoModel, setSavedPhotoModel] = useState('');
   const [savedTextCheckIntervalMinutes, setSavedTextCheckIntervalMinutes] = useState(15);
   const [savedPhotoCheckIntervalMinutes, setSavedPhotoCheckIntervalMinutes] = useState(15);
+  const [savedAiTextCacheEnabled, setSavedAiTextCacheEnabled] = useState(true);
+  const [savedAiTextCacheTtlDays, setSavedAiTextCacheTtlDays] = useState(7);
+  const [aiTextCacheEntryCount, setAiTextCacheEntryCount] = useState(0);
+  const [aiTextCacheLastCleanupAt, setAiTextCacheLastCleanupAt] = useState<string | null>(null);
+  const [clearingAiTextCache, setClearingAiTextCache] = useState<'all' | 'expired' | null>(null);
   const [textAvailabilityStatus, setTextAvailabilityStatus] = useState<string>('UNKNOWN');
   const [textLastCheckedAt, setTextLastCheckedAt] = useState<string | null>(null);
   const [textLastSuccessfulAt, setTextLastSuccessfulAt] = useState<string | null>(null);
@@ -224,6 +240,12 @@ export function OpenRouterSettings() {
       setSavedPhotoModel(nextPhoto);
       setSavedTextCheckIntervalMinutes(globalModels.textModelCheckIntervalMinutes ?? 15);
       setSavedPhotoCheckIntervalMinutes(globalModels.photoModelCheckIntervalMinutes ?? 15);
+      setAiTextCacheEnabled(globalModels.aiTextCacheEnabled ?? true);
+      setAiTextCacheTtlDays(globalModels.aiTextCacheTtlDays ?? 7);
+      setSavedAiTextCacheEnabled(globalModels.aiTextCacheEnabled ?? true);
+      setSavedAiTextCacheTtlDays(globalModels.aiTextCacheTtlDays ?? 7);
+      setAiTextCacheEntryCount(globalModels.aiTextCacheEntryCount ?? 0);
+      setAiTextCacheLastCleanupAt(globalModels.aiTextCacheLastCleanupAt ?? null);
       setTextAvailabilityStatus(globalModels.textModelAvailabilityStatus ?? 'UNKNOWN');
       setTextLastCheckedAt(globalModels.textModelLastCheckedAt ?? null);
       setTextLastSuccessfulAt(globalModels.textModelLastSuccessfulAt ?? null);
@@ -289,7 +311,9 @@ export function OpenRouterSettings() {
         textModel: nextRequestedText,
         photoModel: nextRequestedPhoto,
         textModelCheckIntervalMinutes: textCheckIntervalMinutes,
-        photoModelCheckIntervalMinutes: photoCheckIntervalMinutes
+        photoModelCheckIntervalMinutes: photoCheckIntervalMinutes,
+        aiTextCacheEnabled,
+        aiTextCacheTtlDays
       });
 
       const nextText = normalizeModelId(result.textModel) || recommendedTextModel;
@@ -302,6 +326,12 @@ export function OpenRouterSettings() {
       setSavedPhotoModel(nextPhoto);
       setSavedTextCheckIntervalMinutes(result.textModelCheckIntervalMinutes ?? 15);
       setSavedPhotoCheckIntervalMinutes(result.photoModelCheckIntervalMinutes ?? 15);
+      setAiTextCacheEnabled(result.aiTextCacheEnabled ?? true);
+      setAiTextCacheTtlDays(result.aiTextCacheTtlDays ?? 7);
+      setSavedAiTextCacheEnabled(result.aiTextCacheEnabled ?? true);
+      setSavedAiTextCacheTtlDays(result.aiTextCacheTtlDays ?? 7);
+      setAiTextCacheEntryCount(result.aiTextCacheEntryCount ?? 0);
+      setAiTextCacheLastCleanupAt(result.aiTextCacheLastCleanupAt ?? null);
       setTextAvailabilityStatus(result.textModelAvailabilityStatus ?? 'UNKNOWN');
       setTextLastCheckedAt(result.textModelLastCheckedAt ?? null);
       setTextLastSuccessfulAt(result.textModelLastSuccessfulAt ?? null);
@@ -409,7 +439,9 @@ export function OpenRouterSettings() {
     normalizeModelId(textModel) !== normalizeModelId(savedTextModel) ||
     normalizeModelId(photoModel) !== normalizeModelId(savedPhotoModel) ||
     textCheckIntervalMinutes !== savedTextCheckIntervalMinutes ||
-    photoCheckIntervalMinutes !== savedPhotoCheckIntervalMinutes;
+    photoCheckIntervalMinutes !== savedPhotoCheckIntervalMinutes ||
+    aiTextCacheEnabled !== savedAiTextCacheEnabled ||
+    aiTextCacheTtlDays !== savedAiTextCacheTtlDays;
 
   const formatSyncTime = (value: string | null | undefined) => {
     if (!value) {
@@ -420,6 +452,23 @@ export function OpenRouterSettings() {
       return '—';
     }
     return date.toLocaleString('ru-RU');
+  };
+
+  const handleAiTextCacheClear = async (scope: 'ai-text' | 'ai-text-expired') => {
+    setClearingAiTextCache(scope === 'ai-text' ? 'all' : 'expired');
+    setStatus(scope === 'ai-text' ? 'Очищаем весь AI text cache...' : 'Очищаем просроченный AI text cache...');
+    try {
+      const result = await clearAdminOpenRouterCacheScope(scope);
+      await load();
+      setStatus(result.message);
+      impactMedium();
+    } catch (error) {
+      console.error(error);
+      setStatus(scope === 'ai-text' ? 'Не удалось очистить AI text cache' : 'Не удалось очистить просроченный AI text cache');
+      hapticError();
+    } finally {
+      setClearingAiTextCache(null);
+    }
   };
 
   return (
@@ -531,6 +580,93 @@ export function OpenRouterSettings() {
               ))}
             </select>
           </label>
+        </div>
+      </div>
+
+      <div className="theme-surface-1 rounded-2xl border p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ios-text">AI text cache</p>
+            <p className="mt-1 text-[12px] text-ios-subtext">
+              Кэширует текстовые AI-ответы по пользователю, растению и типу сценария, чтобы сократить токены и ускорить ответы.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-[12px] text-ios-subtext">
+            <input
+              type="checkbox"
+              checked={aiTextCacheEnabled}
+              onChange={(event) => {
+                setAiTextCacheEnabled(event.target.checked);
+                impactLight();
+              }}
+              className="h-4 w-4 rounded border-ios-border/60 text-ios-accent"
+            />
+            Включён
+          </label>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">TTL текстового AI-кэша</span>
+            <select
+              value={aiTextCacheTtlDays}
+              onChange={(event) => {
+                setAiTextCacheTtlDays(Number(event.target.value));
+                impactLight();
+              }}
+              disabled={!aiTextCacheEnabled}
+              className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none"
+            >
+              {AI_TEXT_CACHE_TTL_OPTIONS.map((option) => (
+                <option key={`ai-cache-ttl-${option.value}`} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="theme-surface-subtle rounded-2xl border px-3 py-2 text-[12px] text-ios-subtext">
+            <p>Записей в кэше</p>
+            <p className="mt-1 text-base font-semibold text-ios-text">{aiTextCacheEntryCount}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
+            Статус: {aiTextCacheEnabled ? 'включён' : 'выключен'}
+          </span>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
+            TTL: {AI_TEXT_CACHE_TTL_OPTIONS.find((item) => item.value === aiTextCacheTtlDays)?.label ?? `${aiTextCacheTtlDays} дн.`}
+          </span>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
+            Последняя очистка: {formatSyncTime(aiTextCacheLastCleanupAt)}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 rounded-2xl"
+            disabled={clearingAiTextCache !== null}
+            onClick={() => void handleAiTextCacheClear('ai-text-expired')}
+          >
+            {clearingAiTextCache === 'expired' ? 'Очищаем...' : 'Очистить просроченный'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 rounded-2xl"
+            disabled={clearingAiTextCache !== null}
+            onClick={() => void handleAiTextCacheClear('ai-text')}
+          >
+            {clearingAiTextCache === 'all' ? (
+              'Очищаем...'
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <Trash2 className="h-4 w-4" />
+                Очистить весь AI cache
+              </span>
+            )}
+          </Button>
         </div>
       </div>
 

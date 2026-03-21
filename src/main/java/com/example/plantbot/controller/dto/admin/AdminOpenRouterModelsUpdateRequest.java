@@ -4,6 +4,8 @@ public record AdminOpenRouterModelsUpdateRequest(
     String textModel,
     String photoModel,
     Integer textModelCheckIntervalMinutes,
-    Integer photoModelCheckIntervalMinutes
+    Integer photoModelCheckIntervalMinutes,
+    Boolean aiTextCacheEnabled,
+    Integer aiTextCacheTtlDays
 ) {
 }

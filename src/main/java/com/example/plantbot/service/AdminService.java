@@ -57,6 +57,7 @@ public class AdminService {
   private final AuthIdentityRepository authIdentityRepository;
   private final AssistantChatHistoryRepository assistantChatHistoryRepository;
   private final WateringLogService wateringLogService;
+  private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
 
   public AdminOverviewResponse overview() {
     long totalUsers = userRepository.count();
@@ -276,6 +277,7 @@ public class AdminService {
       plant.setCategory(request.category());
     }
     Plant saved = plantRepository.save(plant);
+    aiTextCacheInvalidationService.invalidateForPlantMutation(saved.getUser(), saved, "admin_plant_update");
     return toPlantItem(saved);
   }
 

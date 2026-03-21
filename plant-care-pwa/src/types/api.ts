@@ -286,6 +286,10 @@ export interface AdminOpenRouterModelsDto {
   textModel?: string | null;
   photoModel?: string | null;
   hasApiKey: boolean;
+  aiTextCacheEnabled: boolean;
+  aiTextCacheTtlDays?: number | null;
+  aiTextCacheEntryCount: number;
+  aiTextCacheLastCleanupAt?: string | null;
   updatedAt?: string | null;
   textModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR' | null;
   textModelLastCheckedAt?: string | null;
@@ -502,6 +506,7 @@ export interface AdminScopedCacheClearDto {
   openRouterCareEntries: number;
   openRouterWateringEntries: number;
   openRouterChatEntries: number;
+  aiTextCacheEntries: number;
   userCacheEntries: number;
   message: string;
 }

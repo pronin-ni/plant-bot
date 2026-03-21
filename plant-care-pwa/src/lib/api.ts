@@ -1385,6 +1385,8 @@ export async function saveAdminOpenRouterModels(payload: {
   photoModel?: string | null;
   textModelCheckIntervalMinutes?: number | null;
   photoModelCheckIntervalMinutes?: number | null;
+  aiTextCacheEnabled?: boolean | null;
+  aiTextCacheTtlDays?: number | null;
 }): Promise<AdminOpenRouterModelsDto> {
   return apiFetch<AdminOpenRouterModelsDto>('/api/admin/openrouter/models', {
     method: 'PUT',
@@ -1499,7 +1501,7 @@ export async function clearAdminCache(): Promise<AdminCacheClearDto> {
   return apiFetch<AdminCacheClearDto>('/api/admin/clear-cache', { method: 'POST' });
 }
 
-export async function clearAdminCacheScope(scope: 'weather' | 'openrouter' | 'users'): Promise<AdminScopedCacheClearDto> {
+export async function clearAdminCacheScope(scope: 'weather' | 'openrouter' | 'users' | 'ai-text' | 'ai-text-expired'): Promise<AdminScopedCacheClearDto> {
   return apiFetch<AdminScopedCacheClearDto>(`/api/admin/clear-cache/${scope}`, { method: 'POST' });
 }
 

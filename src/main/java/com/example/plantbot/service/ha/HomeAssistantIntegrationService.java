@@ -17,6 +17,7 @@ import com.example.plantbot.repository.ha.HomeAssistantConnectionRepository;
 import com.example.plantbot.repository.ha.PlantAdjustmentLogRepository;
 import com.example.plantbot.repository.ha.PlantConditionSampleRepository;
 import com.example.plantbot.repository.ha.PlantHomeAssistantBindingRepository;
+import com.example.plantbot.service.AiTextCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class HomeAssistantIntegrationService {
   private final PlantAdjustmentLogRepository adjustmentLogRepository;
   private final HomeAssistantApiService haApiService;
   private final AesTokenCryptoService cryptoService;
+  private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
 
   public HomeAssistantConnection upsertConnection(User user, String baseUrl, String token, String instanceName, boolean connected) {
     HomeAssistantConnection connection = connectionRepository.findByUser(user).orElseGet(HomeAssistantConnection::new);
@@ -94,7 +96,9 @@ public class HomeAssistantIntegrationService {
     double maxAdj = maxAdjustmentFraction == null ? 0.35 : maxAdjustmentFraction;
     binding.setMaxAdjustmentFraction(Math.max(0.1, Math.min(0.35, maxAdj)));
     binding.setUpdatedAt(Instant.now());
-    return bindingRepository.save(binding);
+    PlantHomeAssistantBinding saved = bindingRepository.save(binding);
+    aiTextCacheInvalidationService.invalidateForPlantMutation(plant.getUser(), plant, "home_assistant_binding_update");
+    return saved;
   }
 
   public Optional<PlantHomeAssistantBinding> getBinding(Plant plant) {

@@ -1,10 +1,12 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.AiTextFeatureType;
 import com.example.plantbot.domain.OpenRouterCacheEntry;
 import com.example.plantbot.repository.OpenRouterCacheRepository;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantEnvironmentType;
+import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.SeedContainerType;
 import com.example.plantbot.domain.SeedStage;
@@ -32,6 +34,7 @@ import java.time.LocalDate;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +58,7 @@ public class OpenRouterPlantAdvisorService {
   private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final OpenRouterCacheRepository openRouterCacheRepository;
+  private final AiTextCacheService aiTextCacheService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
   private final PerformanceMetricsService performanceMetricsService;
@@ -181,14 +185,17 @@ public class OpenRouterPlantAdvisorService {
     }
 
     for (String modelToUse : resolveTextModelCandidates(user)) {
-      String cacheKey = buildCareCacheKey(modelToUse, plant, recommendedIntervalDays);
       if (!forceRefresh) {
-        Optional<PlantCareAdvice> cached = getCareAdviceCache(cacheKey);
-        if (cached != null) {
-          if (cached.isPresent()) {
-            return cached;
-          }
-          continue;
+        var cached = aiTextCacheService.find(
+            user == null ? 0L : user.getId(),
+            plant.getId(),
+            AiTextFeatureType.PLANT_CARE_ADVICE,
+            modelToUse,
+            buildCareCacheInput(plant, recommendedIntervalDays),
+            PlantCareAdvice.class
+        );
+        if (cached.hit()) {
+          return Optional.of(cached.payload());
         }
       }
 
@@ -198,13 +205,11 @@ public class OpenRouterPlantAdvisorService {
             Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
         ));
         if (body == null) {
-          putCareAdviceCache(cacheKey, Optional.empty());
           continue;
         }
 
         String content = extractContent(body);
         if (content.isEmpty()) {
-          putCareAdviceCache(cacheKey, Optional.empty());
           continue;
         }
 
@@ -245,12 +250,18 @@ public class OpenRouterPlantAdvisorService {
 
         String note = normalizeAdviceNote(advice.path("note").asText("").trim());
         PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + modelToUse);
-        putCareAdviceCache(cacheKey, Optional.of(result));
+        aiTextCacheService.put(
+            user == null ? 0L : user.getId(),
+            plant.getId(),
+            AiTextFeatureType.PLANT_CARE_ADVICE,
+            modelToUse,
+            buildCareCacheInput(plant, recommendedIntervalDays),
+            result
+        );
         log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
             plant.getName(), cycle, additives, soilType, soilComposition, result.source());
         return Optional.of(result);
       } catch (Exception ex) {
-        putCareAdviceCache(cacheKey, Optional.empty());
         log.warn("OpenRouter care advice failed for '{}'. model='{}': {}", plant.getName(), modelToUse, ex.getMessage());
       }
     }
@@ -314,6 +325,17 @@ public class OpenRouterPlantAdvisorService {
     }
 
     for (String modelToUse : resolveTextModelCandidates(user)) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          null,
+          AiTextFeatureType.WIZARD_WATERING_RECOMMENDATION,
+          modelToUse,
+          buildWizardRecommendationCacheInput(input),
+          WizardWateringRecommendation.class
+      );
+      if (cached.hit()) {
+        return Optional.of(cached.payload());
+      }
       try {
         JsonNode body = postMessages(apiKey, modelToUse, List.of(
             Map.of("role", "system", "content", wizardRecommendSystemPrompt()),
@@ -355,7 +377,7 @@ public class OpenRouterPlantAdvisorService {
         List<String> warnings = parseAdviceList(json.path("warnings"), 5);
         String profile = input.environmentType() == null ? PlantEnvironmentType.INDOOR.name() : input.environmentType().name();
 
-        return Optional.of(new WizardWateringRecommendation(
+        WizardWateringRecommendation result = new WizardWateringRecommendation(
             "ai",
             frequency,
             volumeMl,
@@ -363,7 +385,16 @@ public class OpenRouterPlantAdvisorService {
             reasoning,
             warnings,
             profile
-        ));
+        );
+        aiTextCacheService.put(
+            user == null ? 0L : user.getId(),
+            null,
+            AiTextFeatureType.WIZARD_WATERING_RECOMMENDATION,
+            modelToUse,
+            buildWizardRecommendationCacheInput(input),
+            result
+        );
+        return Optional.of(result);
       } catch (Exception ex) {
         log.warn("OpenRouter wizard recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
       }
@@ -379,6 +410,17 @@ public class OpenRouterPlantAdvisorService {
     }
 
     for (String modelToUse : resolveTextModelCandidates(user)) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          null,
+          AiTextFeatureType.SEED_RECOMMENDATION,
+          modelToUse,
+          buildSeedRecommendationCacheInput(input),
+          SeedCareRecommendation.class
+      );
+      if (cached.hit()) {
+        return Optional.of(cached.payload());
+      }
       try {
         JsonNode body = postMessages(apiKey, modelToUse, List.of(
             Map.of("role", "system", "content", seedRecommendSystemPrompt()),
@@ -411,7 +453,7 @@ public class OpenRouterPlantAdvisorService {
         List<String> reasoning = parseAdviceList(json.path("reasoning"), 5);
         List<String> warnings = parseAdviceList(json.path("warnings"), 5);
 
-        return Optional.of(new SeedCareRecommendation(
+        SeedCareRecommendation result = new SeedCareRecommendation(
             "AI",
             careMode,
             checkIntervalHours,
@@ -421,7 +463,16 @@ public class OpenRouterPlantAdvisorService {
             summary,
             reasoning,
             warnings
-        ));
+        );
+        aiTextCacheService.put(
+            user == null ? 0L : user.getId(),
+            null,
+            AiTextFeatureType.SEED_RECOMMENDATION,
+            modelToUse,
+            buildSeedRecommendationCacheInput(input),
+            result
+        );
+        return Optional.of(result);
       } catch (Exception ex) {
         log.warn("OpenRouter seed recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
       }
@@ -437,6 +488,17 @@ public class OpenRouterPlantAdvisorService {
     }
 
     for (String modelToUse : resolveTextModelCandidates(user)) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          null,
+          AiTextFeatureType.PLANT_SEARCH_SUGGESTIONS_AI,
+          modelToUse,
+          buildPlantSearchCacheInput(query, category),
+          PlantSearchSuggestions.class
+      );
+      if (cached.hit()) {
+        return Optional.of(cached.payload());
+      }
       try {
         JsonNode body = postMessages(apiKey, modelToUse, List.of(
             Map.of("role", "system", "content", plantSearchSystemPrompt()),
@@ -473,7 +535,16 @@ public class OpenRouterPlantAdvisorService {
         }
 
         if (!suggestions.isEmpty()) {
-          return Optional.of(new PlantSearchSuggestions("AI", suggestions));
+          PlantSearchSuggestions result = new PlantSearchSuggestions("AI", suggestions);
+          aiTextCacheService.put(
+              user == null ? 0L : user.getId(),
+              null,
+              AiTextFeatureType.PLANT_SEARCH_SUGGESTIONS_AI,
+              modelToUse,
+              buildPlantSearchCacheInput(query, category),
+              result
+          );
+          return Optional.of(result);
         }
       } catch (Exception ex) {
         log.warn("OpenRouter plant search failed for '{}'. model='{}': {}", preview(query), modelToUse, ex.getMessage());
@@ -537,6 +608,66 @@ public class OpenRouterPlantAdvisorService {
     }
 
     return Optional.empty();
+  }
+
+  private Map<String, Object> buildCareCacheInput(Plant plant, double recommendedIntervalDays) {
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put("plantId", plant.getId());
+    input.put("plantName", safeString(plant.getName()));
+    input.put("plantType", plant.getType() == null ? PlantType.DEFAULT.name() : plant.getType().name());
+    input.put("placement", plant.getPlacement() == null ? PlantPlacement.INDOOR.name() : plant.getPlacement().name());
+    input.put("category", plant.getCategory() == null ? "UNKNOWN" : plant.getCategory().name());
+    input.put("wateringProfile", plant.getWateringProfile() == null ? "UNKNOWN" : plant.getWateringProfile().name());
+    input.put("potVolumeLiters", plant.getPotVolumeLiters());
+    input.put("recommendedIntervalDays", Math.round(recommendedIntervalDays * 10.0) / 10.0);
+    return input;
+  }
+
+  private Map<String, Object> buildWizardRecommendationCacheInput(WizardRecommendInput input) {
+    Map<String, Object> cacheInput = new LinkedHashMap<>();
+    cacheInput.put("plantName", safeString(input.plantName()));
+    cacheInput.put("environmentType", input.environmentType() == null ? PlantEnvironmentType.INDOOR.name() : input.environmentType().name());
+    cacheInput.put("category", input.category() == null ? "UNKNOWN" : input.category().name());
+    cacheInput.put("plantType", input.plantType() == null ? PlantType.DEFAULT.name() : input.plantType().name());
+    cacheInput.put("baseIntervalDays", input.baseIntervalDays());
+    cacheInput.put("potVolumeLiters", input.potVolumeLiters());
+    cacheInput.put("outdoorAreaM2", input.outdoorAreaM2());
+    cacheInput.put("containerType", safeString(input.containerType()));
+    cacheInput.put("growthStage", safeString(input.growthStage()));
+    cacheInput.put("greenhouse", input.greenhouse());
+    cacheInput.put("soilType", safeString(input.soilType()));
+    cacheInput.put("sunExposure", safeString(input.sunExposure()));
+    cacheInput.put("region", safeString(input.region()));
+    cacheInput.put("weatherSummary", safeString(input.weatherSummary()));
+    cacheInput.put("mulched", input.mulched());
+    cacheInput.put("dripIrrigation", input.dripIrrigation());
+    return cacheInput;
+  }
+
+  private Map<String, Object> buildSeedRecommendationCacheInput(SeedRecommendInput input) {
+    Map<String, Object> cacheInput = new LinkedHashMap<>();
+    cacheInput.put("plantName", safeString(input.plantName()));
+    cacheInput.put("seedStage", input.seedStage() == null ? "UNKNOWN" : input.seedStage().name());
+    cacheInput.put("targetEnvironmentType", input.targetEnvironmentType() == null ? "UNKNOWN" : input.targetEnvironmentType().name());
+    cacheInput.put("seedContainerType", input.seedContainerType() == null ? "UNKNOWN" : input.seedContainerType().name());
+    cacheInput.put("seedSubstrateType", input.seedSubstrateType() == null ? "UNKNOWN" : input.seedSubstrateType().name());
+    cacheInput.put("sowingDate", input.sowingDate() == null ? "" : input.sowingDate().toString());
+    cacheInput.put("germinationTemperatureC", input.germinationTemperatureC());
+    cacheInput.put("underCover", input.underCover());
+    cacheInput.put("growLight", input.growLight());
+    cacheInput.put("region", safeString(input.region()));
+    return cacheInput;
+  }
+
+  private Map<String, Object> buildPlantSearchCacheInput(String query, PlantCategory category) {
+    Map<String, Object> cacheInput = new LinkedHashMap<>();
+    cacheInput.put("query", safeString(query));
+    cacheInput.put("category", category == null ? "UNKNOWN" : category.name());
+    return cacheInput;
+  }
+
+  private String safeString(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private List<Map<String, Object>> buildChatMessages(String question, String photoBase64) {
