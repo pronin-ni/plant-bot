@@ -31,7 +31,8 @@ public class WateringRecommendationService {
   private final HomeAssistantIntegrationService haIntegrationService;
 
   public WateringRecommendation recommend(Plant plant, User user) {
-    Optional<WeatherData> weather = weatherService.getCurrent(user.getCity(), user.getCityLat(), user.getCityLon());
+    String location = resolvePlantWeatherLocation(plant, user);
+    Optional<WeatherData> weather = weatherService.getCurrent(location, user.getCityLat(), user.getCityLon());
     double base = plant.getBaseIntervalDays();
     double seasonFactor = seasonFactor(LocalDate.now().getMonth());
     double weatherFactor = weather.map(this::weatherFactor).orElse(1.0);
@@ -48,8 +49,8 @@ public class WateringRecommendationService {
     }
 
     if (isOutdoor(plant)) {
-      double rain24 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 24);
-      double rain72 = weatherService.getAccumulatedRainMm(user.getCity(), user.getCityLat(), user.getCityLon(), 72);
+      double rain24 = weatherService.getAccumulatedRainMm(location, user.getCityLat(), user.getCityLon(), 24);
+      double rain72 = weatherService.getAccumulatedRainMm(location, user.getCityLat(), user.getCityLon(), 72);
       if (rain24 >= 8.0 || rain72 >= 16.0) {
         return new WateringRecommendation(Math.max(2.0, interval), safeNonZeroLiters(0.0, plant));
       }
@@ -117,7 +118,8 @@ public class WateringRecommendationService {
   }
 
   public LearningInfo learningInfo(Plant plant, User user) {
-    Optional<WeatherData> weather = weatherService.getCurrent(user.getCity(), user.getCityLat(), user.getCityLon());
+    String location = resolvePlantWeatherLocation(plant, user);
+    Optional<WeatherData> weather = weatherService.getCurrent(location, user.getCityLat(), user.getCityLon());
     double base = plant.getBaseIntervalDays();
     double seasonFactor = seasonFactor(LocalDate.now().getMonth());
     double weatherFactor = weather.map(this::weatherFactor).orElse(1.0);
@@ -259,6 +261,18 @@ public class WateringRecommendationService {
   private boolean isOutdoor(Plant plant) {
     PlantPlacement placement = plant.getPlacement();
     return placement == PlantPlacement.OUTDOOR;
+  }
+
+  private String resolvePlantWeatherLocation(Plant plant, User user) {
+    if (plant != null) {
+      if (plant.getCity() != null && !plant.getCity().isBlank()) {
+        return plant.getCity().trim();
+      }
+      if (plant.getRegion() != null && !plant.getRegion().isBlank()) {
+        return plant.getRegion().trim();
+      }
+    }
+    return user == null || user.getCity() == null ? null : user.getCity().trim();
   }
 
   private double clamp(double value, double min, double max) {

@@ -166,7 +166,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
         <Button
           type="button"
           size="sm"
-          className="h-10 rounded-full px-4 shadow-[0_10px_24px_rgba(52,199,89,0.18)]"
+          className="h-auto min-h-[40px] rounded-full px-4 py-2 text-center leading-tight shadow-[0_10px_24px_rgba(52,199,89,0.18)]"
           disabled={uploadMutation.isPending}
         >
           <Camera className="mr-1.5 h-4 w-4" />

@@ -12,6 +12,7 @@ import { MassWaterButton } from '@/components/MassWaterButton';
 import { ConditionsForecast } from '@/components/ConditionsForecast';
 import { useMotionGuard } from '@/lib/motion';
 import { parseDateOnly, startOfLocalDay, toLocalDateKey } from '@/lib/date';
+import type { CalendarEventDto, PlantDto } from '@/types/api';
 
 type CalendarActionFilter = 'all' | 'watering' | 'fertilizer' | 'repotting' | 'cutting';
 
@@ -105,6 +106,54 @@ function getUpcomingEventTone(diffDays: number): string {
   return 'theme-badge-success';
 }
 
+function mergeWateredPlant(plants: PlantDto[] | undefined, updatedPlant: PlantDto): PlantDto[] {
+  const items = plants ?? [];
+  return items.map((plant) => (plant.id === updatedPlant.id ? { ...plant, ...updatedPlant } : plant));
+}
+
+function updateCalendarAfterWatering(
+  events: CalendarEventDto[] | undefined,
+  updatedPlant: PlantDto
+): CalendarEventDto[] {
+  const items = (events ?? []).filter((event) => event.plantId !== updatedPlant.id);
+  if (!updatedPlant.nextWateringDate) {
+    return items;
+  }
+  return [
+    ...items,
+    {
+      date: updatedPlant.nextWateringDate.slice(0, 10),
+      plantId: updatedPlant.id,
+      plantName: updatedPlant.name
+    }
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+async function runWaterBatchWithConcurrency(plantIds: number[], limit: number) {
+  const queue = [...new Set(plantIds)];
+  const safeLimit = Math.max(1, Math.min(limit, queue.length || 1));
+  let successCount = 0;
+  let failedCount = 0;
+
+  let cursor = 0;
+  const workers = Array.from({ length: safeLimit }, async () => {
+    while (cursor < queue.length) {
+      const currentIndex = cursor;
+      cursor += 1;
+      const plantId = queue[currentIndex];
+      try {
+        await waterPlant(plantId);
+        successCount += 1;
+      } catch {
+        failedCount += 1;
+      }
+    }
+  });
+
+  await Promise.all(workers);
+  return { successCount, failedCount, total: queue.length };
+}
+
 export function CalendarPage() {
   const queryClient = useQueryClient();
   const openPlantDetail = useUiStore((s) => s.openPlantDetail);
@@ -123,9 +172,11 @@ export function CalendarPage() {
 
   const completeMutation = useMutation({
     mutationFn: (plantId: number) => waterPlant(plantId),
-    onSuccess: () => {
+    onSuccess: (updatedPlant) => {
       hapticSuccess();
       setWateringWavePulse((prev) => prev + 1);
+      queryClient.setQueryData<PlantDto[]>(['plants'], (current) => mergeWateredPlant(current, updatedPlant));
+      queryClient.setQueryData<CalendarEventDto[]>(['calendar'], (current) => updateCalendarAfterWatering(current, updatedPlant));
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
@@ -133,14 +184,8 @@ export function CalendarPage() {
   });
 
   const massCompleteMutation = useMutation({
-    mutationFn: async (plantIds: number[]) => {
-      const uniqueIds = Array.from(new Set(plantIds));
-      const results = await Promise.allSettled(uniqueIds.map((id) => waterPlant(id)));
-      const successCount = results.filter((item) => item.status === 'fulfilled').length;
-      const failedCount = results.length - successCount;
-      return { successCount, failedCount, total: results.length };
-    },
-    onSuccess: ({ successCount, failedCount }) => {
+    mutationFn: (plantIds: number[]) => runWaterBatchWithConcurrency(plantIds, 4),
+    onSuccess: async ({ successCount, failedCount }) => {
       if (successCount > 0) {
         hapticSuccess();
         setWateringWavePulse((prev) => prev + 1);
@@ -150,8 +195,8 @@ export function CalendarPage() {
       if (failedCount > 0) {
         impactLight();
       }
-      void queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      void queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
     onError: () => hapticError()
   });

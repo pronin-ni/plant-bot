@@ -118,7 +118,7 @@ export function PlantHero({
           <Button
             type="button"
             variant="secondary"
-            className="h-10 rounded-full border border-white/35 bg-black/25 px-3 text-xs text-white backdrop-blur-md hover:bg-black/35"
+            className="h-auto min-h-[40px] rounded-full border border-white/35 bg-black/25 px-3 py-2 text-center text-xs leading-tight text-white backdrop-blur-md hover:bg-black/35"
             disabled={photoUploading}
             onClick={() => {
               impactLight();

@@ -1,4 +1,5 @@
 import type {
+  AdminOpenRouterAvailabilityCheckDto,
   AdminOpenRouterModelsDto,
   OpenRouterModelsDto,
   OpenRouterRuntimeSettingsDto,
@@ -6,6 +7,7 @@ import type {
 } from '@/types/api';
 import {
   getAdminOpenRouterModels,
+  checkAdminOpenRouterAvailability,
   getOpenRouterModels,
   getOpenRouterRuntimeSettings,
   saveAdminOpenRouterModels,
@@ -25,8 +27,14 @@ export async function fetchAdminOpenRouterModels(): Promise<AdminOpenRouterModel
 export async function updateAdminOpenRouterModels(payload: {
   textModel?: string | null;
   photoModel?: string | null;
+  textModelCheckIntervalMinutes?: number | null;
+  photoModelCheckIntervalMinutes?: number | null;
 }): Promise<AdminOpenRouterModelsDto> {
   return saveAdminOpenRouterModels(payload);
+}
+
+export async function runOpenRouterAvailabilityCheck(type: 'text' | 'photo'): Promise<AdminOpenRouterAvailabilityCheckDto> {
+  return checkAdminOpenRouterAvailability(type);
 }
 
 export async function runOpenRouterTypedTest(type: 'text' | 'photo'): Promise<OpenRouterTypedTestDto> {

@@ -8,6 +8,7 @@ import { SettingsTutorial } from '@/components/SettingsTutorial';
 import {
   fetchAdminOpenRouterModels,
   fetchOpenRouterCatalog,
+  runOpenRouterAvailabilityCheck,
   runOpenRouterTypedTest,
   updateAdminOpenRouterModels,
   validateOpenRouterApiKey
@@ -16,6 +17,15 @@ import { error as hapticError, impactLight, impactMedium, impactHeavy } from '@/
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 import type { OpenRouterModelOption } from '@/types/api';
 
+const CHECK_INTERVAL_OPTIONS = [
+  { value: 0, label: 'Выключено' },
+  { value: 5, label: '5 минут' },
+  { value: 15, label: '15 минут' },
+  { value: 30, label: '30 минут' },
+  { value: 60, label: '60 минут' },
+  { value: 180, label: '3 часа' },
+  { value: 360, label: '6 часов' }
+];
 
 function normalizeModelId(value: string | null | undefined): string {
   if (!value) {
@@ -34,6 +44,81 @@ function normalizeModelId(value: string | null | undefined): string {
     cleaned = tokenized[0].trim();
   }
   return cleaned;
+}
+
+function statusTone(status?: string | null): string {
+  switch ((status ?? '').toUpperCase()) {
+    case 'AVAILABLE':
+      return 'theme-badge-success';
+    case 'UNAVAILABLE':
+    case 'ERROR':
+      return 'theme-badge-danger';
+    case 'UNKNOWN':
+    default:
+      return 'theme-badge-warning';
+  }
+}
+
+function statusLabel(status?: string | null): string {
+  switch ((status ?? '').toUpperCase()) {
+    case 'AVAILABLE':
+      return 'Доступна';
+    case 'UNAVAILABLE':
+      return 'Недоступна';
+    case 'ERROR':
+      return 'Ошибка проверки';
+    case 'UNKNOWN':
+    default:
+      return 'Не проверялась';
+  }
+}
+
+function intervalLabel(minutes?: number | null): string {
+  const found = CHECK_INTERVAL_OPTIONS.find((item) => item.value === (minutes ?? 15));
+  return found?.label ?? `${minutes} мин`;
+}
+
+function statusDescription(status?: string | null, errorMessage?: string | null): string {
+  const normalized = (status ?? '').toUpperCase();
+  if (normalized === 'AVAILABLE') {
+    return 'Модель отвечает корректно и может использоваться в рабочих сценариях.';
+  }
+  if (normalized === 'UNKNOWN') {
+    return 'Проверка ещё не выполнялась или статус пока не обновлён.';
+  }
+  const error = (errorMessage ?? '').trim();
+  if (!error) {
+    return normalized === 'UNAVAILABLE'
+      ? 'Модель сейчас недоступна. Проверьте настройки и при необходимости смените модель.'
+      : 'Проверка завершилась ошибкой. Попробуйте ещё раз позже.';
+  }
+  const lower = error.toLowerCase();
+  if (lower.includes('ключ') || lower.includes('401') || lower.includes('403')) {
+    return 'Похоже, проблема в OpenRouter API key или доступе к модели.';
+  }
+  if (lower.includes('лимит') || lower.includes('429')) {
+    return 'Похоже, достигнут лимит запросов OpenRouter. Это может быть временной ошибкой.';
+  }
+  if (lower.includes('сет') || lower.includes('network')) {
+    return 'Похоже, это сетевой сбой между приложением и OpenRouter.';
+  }
+  if (lower.includes('модел') || lower.includes('route') || lower.includes('endpoint')) {
+    return 'Похоже, выбранная модель больше недоступна у провайдера.';
+  }
+  return normalized === 'UNAVAILABLE'
+    ? 'Модель недоступна. Проверьте настройки и при необходимости смените модель.'
+    : 'Проверка завершилась ошибкой. Попробуйте повторить позже.';
+}
+
+function statusWarningTitle(status?: string | null): string | null {
+  const normalized = (status ?? '').toUpperCase();
+  if (normalized === 'UNAVAILABLE') {
+    return 'Модель недоступна';
+  }
+  if (normalized === 'ERROR') {
+    return 'Ошибка проверки';
+  }
+  return null;
 }
 
 function ensureOption(options: OpenRouterModelOption[], value: string, supportsImageToText: boolean): OpenRouterModelOption[] {
@@ -83,10 +168,25 @@ export function OpenRouterSettings() {
   const [validatingKey, setValidatingKey] = useState(false);
   const [successPulse, setSuccessPulse] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState<'text' | 'photo' | null>(null);
 
   const [allModels, setAllModels] = useState<OpenRouterModelOption[]>([]);
   const [textModel, setTextModel] = useState('');
   const [photoModel, setPhotoModel] = useState('');
+  const [textCheckIntervalMinutes, setTextCheckIntervalMinutes] = useState(15);
+  const [photoCheckIntervalMinutes, setPhotoCheckIntervalMinutes] = useState(15);
+  const [savedTextModel, setSavedTextModel] = useState('');
+  const [savedPhotoModel, setSavedPhotoModel] = useState('');
+  const [savedTextCheckIntervalMinutes, setSavedTextCheckIntervalMinutes] = useState(15);
+  const [savedPhotoCheckIntervalMinutes, setSavedPhotoCheckIntervalMinutes] = useState(15);
+  const [textAvailabilityStatus, setTextAvailabilityStatus] = useState<string>('UNKNOWN');
+  const [textLastCheckedAt, setTextLastCheckedAt] = useState<string | null>(null);
+  const [textLastSuccessfulAt, setTextLastSuccessfulAt] = useState<string | null>(null);
+  const [textLastErrorMessage, setTextLastErrorMessage] = useState<string | null>(null);
+  const [photoAvailabilityStatus, setPhotoAvailabilityStatus] = useState<string>('UNKNOWN');
+  const [photoLastCheckedAt, setPhotoLastCheckedAt] = useState<string | null>(null);
+  const [photoLastSuccessfulAt, setPhotoLastSuccessfulAt] = useState<string | null>(null);
+  const [photoLastErrorMessage, setPhotoLastErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -118,6 +218,20 @@ export function OpenRouterSettings() {
       const nextPhoto = normalizeModelId(globalModels.photoModel) || runtimeModels.photoModel || recommendedPhoto;
       setTextModel(nextText);
       setPhotoModel(nextPhoto);
+      setTextCheckIntervalMinutes(globalModels.textModelCheckIntervalMinutes ?? 15);
+      setPhotoCheckIntervalMinutes(globalModels.photoModelCheckIntervalMinutes ?? 15);
+      setSavedTextModel(nextText);
+      setSavedPhotoModel(nextPhoto);
+      setSavedTextCheckIntervalMinutes(globalModels.textModelCheckIntervalMinutes ?? 15);
+      setSavedPhotoCheckIntervalMinutes(globalModels.photoModelCheckIntervalMinutes ?? 15);
+      setTextAvailabilityStatus(globalModels.textModelAvailabilityStatus ?? 'UNKNOWN');
+      setTextLastCheckedAt(globalModels.textModelLastCheckedAt ?? null);
+      setTextLastSuccessfulAt(globalModels.textModelLastSuccessfulAt ?? null);
+      setTextLastErrorMessage(globalModels.textModelLastErrorMessage ?? null);
+      setPhotoAvailabilityStatus(globalModels.photoModelAvailabilityStatus ?? 'UNKNOWN');
+      setPhotoLastCheckedAt(globalModels.photoModelLastCheckedAt ?? null);
+      setPhotoLastSuccessfulAt(globalModels.photoModelLastSuccessfulAt ?? null);
+      setPhotoLastErrorMessage(globalModels.photoModelLastErrorMessage ?? null);
 
       runtimeModels.setModels({
         textModel: nextText,
@@ -173,13 +287,29 @@ export function OpenRouterSettings() {
 
       const result = await updateAdminOpenRouterModels({
         textModel: nextRequestedText,
-        photoModel: nextRequestedPhoto
+        photoModel: nextRequestedPhoto,
+        textModelCheckIntervalMinutes: textCheckIntervalMinutes,
+        photoModelCheckIntervalMinutes: photoCheckIntervalMinutes
       });
 
       const nextText = normalizeModelId(result.textModel) || recommendedTextModel;
       const nextPhoto = normalizeModelId(result.photoModel) || recommendedPhotoModel;
       setTextModel(nextText);
       setPhotoModel(nextPhoto);
+      setTextCheckIntervalMinutes(result.textModelCheckIntervalMinutes ?? 15);
+      setPhotoCheckIntervalMinutes(result.photoModelCheckIntervalMinutes ?? 15);
+      setSavedTextModel(nextText);
+      setSavedPhotoModel(nextPhoto);
+      setSavedTextCheckIntervalMinutes(result.textModelCheckIntervalMinutes ?? 15);
+      setSavedPhotoCheckIntervalMinutes(result.photoModelCheckIntervalMinutes ?? 15);
+      setTextAvailabilityStatus(result.textModelAvailabilityStatus ?? 'UNKNOWN');
+      setTextLastCheckedAt(result.textModelLastCheckedAt ?? null);
+      setTextLastSuccessfulAt(result.textModelLastSuccessfulAt ?? null);
+      setTextLastErrorMessage(result.textModelLastErrorMessage ?? null);
+      setPhotoAvailabilityStatus(result.photoModelAvailabilityStatus ?? 'UNKNOWN');
+      setPhotoLastCheckedAt(result.photoModelLastCheckedAt ?? null);
+      setPhotoLastSuccessfulAt(result.photoModelLastSuccessfulAt ?? null);
+      setPhotoLastErrorMessage(result.photoModelLastErrorMessage ?? null);
 
       runtimeModels.setModels({
         textModel: nextText,
@@ -254,9 +384,32 @@ export function OpenRouterSettings() {
     }
   };
 
+  const handleAvailabilityCheck = async (type: 'text' | 'photo') => {
+    setCheckingAvailability(type);
+    setStatus(type === 'text' ? 'Проверяем доступность text-модели...' : 'Проверяем доступность vision-модели...');
+    try {
+      const result = await runOpenRouterAvailabilityCheck(type);
+      await load();
+      setStatus(`${type === 'text' ? 'Text' : 'Vision'} check: ${result.message}`);
+      if (result.status === 'AVAILABLE') {
+        impactMedium();
+      } else {
+        hapticError();
+      }
+    } catch (error) {
+      console.error(error);
+      setStatus(`Не удалось выполнить проверку ${type === 'text' ? 'text' : 'vision'}-модели`);
+      hapticError();
+    } finally {
+      setCheckingAvailability(null);
+    }
+  };
+
   const hasUnsavedChanges =
-    normalizeModelId(textModel) !== normalizeModelId(runtimeModels.textModel) ||
-    normalizeModelId(photoModel) !== normalizeModelId(runtimeModels.photoModel);
+    normalizeModelId(textModel) !== normalizeModelId(savedTextModel) ||
+    normalizeModelId(photoModel) !== normalizeModelId(savedPhotoModel) ||
+    textCheckIntervalMinutes !== savedTextCheckIntervalMinutes ||
+    photoCheckIntervalMinutes !== savedPhotoCheckIntervalMinutes;
 
   const formatSyncTime = (value: string | null | undefined) => {
     if (!value) {
@@ -378,6 +531,115 @@ export function OpenRouterSettings() {
               ))}
             </select>
           </label>
+        </div>
+      </div>
+
+      <div className="theme-surface-1 rounded-2xl border p-3">
+        <p className="text-sm font-semibold text-ios-text">Мониторинг доступности моделей</p>
+        <p className="mt-1 text-[12px] text-ios-subtext">
+          Можно задать отдельный интервал проверки для text и vision моделей и вручную проверить их прямо сейчас.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="theme-surface-subtle rounded-2xl border p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-ios-text">Text model</p>
+                <p className="text-[12px] text-ios-subtext">{textModel || 'Не выбрана'}</p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(textAvailabilityStatus)}`}>
+                {statusLabel(textAvailabilityStatus)}
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-ios-subtext">
+              {statusDescription(textAvailabilityStatus, textLastErrorMessage)}
+            </p>
+            <div className="mt-3 space-y-2 text-[12px] text-ios-subtext">
+              <p>Интервал: {intervalLabel(textCheckIntervalMinutes)}</p>
+              <p>Последняя проверка: {formatSyncTime(textLastCheckedAt)}</p>
+              <p>Последний успех: {formatSyncTime(textLastSuccessfulAt)}</p>
+              {textLastErrorMessage ? <p className="theme-text-danger">Ошибка: {textLastErrorMessage}</p> : null}
+            </div>
+            {statusWarningTitle(textAvailabilityStatus) ? (
+              <div className="theme-surface-warning mt-3 rounded-2xl border p-3">
+                <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">
+                  {statusWarningTitle(textAvailabilityStatus)}
+                </p>
+                <p className="mt-1 text-sm text-ios-text">
+                  Проверьте ключ, доступность модели и при необходимости выберите другую text-модель в настройках ниже.
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 flex gap-2">
+              <select
+                value={textCheckIntervalMinutes}
+                onChange={(event) => setTextCheckIntervalMinutes(Number(event.target.value))}
+                className="theme-field h-11 flex-1 rounded-ios-button border px-3 text-sm outline-none"
+              >
+                {CHECK_INTERVAL_OPTIONS.map((option) => (
+                  <option key={`text-int-${option.value}`} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                className="h-11 rounded-2xl"
+                disabled={checkingAvailability !== null}
+                onClick={() => handleAvailabilityCheck('text')}
+              >
+                {checkingAvailability === 'text' ? 'Проверяем...' : 'Проверить сейчас'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="theme-surface-subtle rounded-2xl border p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-ios-text">Vision model</p>
+                <p className="text-[12px] text-ios-subtext">{photoModel || 'Не выбрана'}</p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone(photoAvailabilityStatus)}`}>
+                {statusLabel(photoAvailabilityStatus)}
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-ios-subtext">
+              {statusDescription(photoAvailabilityStatus, photoLastErrorMessage)}
+            </p>
+            <div className="mt-3 space-y-2 text-[12px] text-ios-subtext">
+              <p>Интервал: {intervalLabel(photoCheckIntervalMinutes)}</p>
+              <p>Последняя проверка: {formatSyncTime(photoLastCheckedAt)}</p>
+              <p>Последний успех: {formatSyncTime(photoLastSuccessfulAt)}</p>
+              {photoLastErrorMessage ? <p className="theme-text-danger">Ошибка: {photoLastErrorMessage}</p> : null}
+            </div>
+            {statusWarningTitle(photoAvailabilityStatus) ? (
+              <div className="theme-surface-warning mt-3 rounded-2xl border p-3">
+                <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">
+                  {statusWarningTitle(photoAvailabilityStatus)}
+                </p>
+                <p className="mt-1 text-sm text-ios-text">
+                  Проверьте ключ, поддержку vision и при необходимости выберите другую photo/vision-модель в настройках ниже.
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 flex gap-2">
+              <select
+                value={photoCheckIntervalMinutes}
+                onChange={(event) => setPhotoCheckIntervalMinutes(Number(event.target.value))}
+                className="theme-field h-11 flex-1 rounded-ios-button border px-3 text-sm outline-none"
+              >
+                {CHECK_INTERVAL_OPTIONS.map((option) => (
+                  <option key={`photo-int-${option.value}`} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                className="h-11 rounded-2xl"
+                disabled={checkingAvailability !== null}
+                onClick={() => handleAvailabilityCheck('photo')}
+              >
+                {checkingAvailability === 'photo' ? 'Проверяем...' : 'Проверить сейчас'}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 

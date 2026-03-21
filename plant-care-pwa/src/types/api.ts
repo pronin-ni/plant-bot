@@ -287,6 +287,27 @@ export interface AdminOpenRouterModelsDto {
   photoModel?: string | null;
   hasApiKey: boolean;
   updatedAt?: string | null;
+  textModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR' | null;
+  textModelLastCheckedAt?: string | null;
+  textModelLastSuccessfulAt?: string | null;
+  textModelLastErrorMessage?: string | null;
+  textModelLastNotifiedUnavailableAt?: string | null;
+  textModelCheckIntervalMinutes?: number | null;
+  photoModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR' | null;
+  photoModelLastCheckedAt?: string | null;
+  photoModelLastSuccessfulAt?: string | null;
+  photoModelLastErrorMessage?: string | null;
+  photoModelLastNotifiedUnavailableAt?: string | null;
+  photoModelCheckIntervalMinutes?: number | null;
+}
+
+export interface AdminOpenRouterAvailabilityCheckDto {
+  type: 'text' | 'photo';
+  model?: string | null;
+  status: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR';
+  message: string;
+  checkedAt?: string | null;
+  successfulAt?: string | null;
 }
 
 export interface OpenRouterRuntimeSettingsDto {
@@ -448,6 +469,19 @@ export interface PlantProfileSuggestionDto {
   intervalDays: number;
   type: string;
   source?: string | null;
+}
+
+export interface PlantAiSearchSuggestionDto {
+  name: string;
+  category: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
+  type: string;
+  hint?: string | null;
+}
+
+export interface PlantAiSearchResponseDto {
+  ok: boolean;
+  source: 'AI' | 'FALLBACK';
+  suggestions: PlantAiSearchSuggestionDto[];
 }
 
 export interface AdminCacheClearDto {

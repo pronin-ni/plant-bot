@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bot, Droplets, Leaf, Loader2, RefreshCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Bot, Droplets, Leaf, Loader2, RefreshCcw, Sprout, Trash2, Trees, Warehouse } from 'lucide-react';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
 import { Dialog } from '@/components/ui/dialog';
@@ -240,6 +240,8 @@ export function PlantDetailSheet() {
   const [migrationSoilType, setMigrationSoilType] = useState<'SANDY' | 'LOAMY' | 'CLAY'>('LOAMY');
   const [migrationSunExposure, setMigrationSunExposure] = useState<'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE'>('PARTIAL_SHADE');
   const [migrationAreaM2, setMigrationAreaM2] = useState('0.25');
+  const [migrationWizardOpen, setMigrationWizardOpen] = useState(false);
+  const [migrationWizardStep, setMigrationWizardStep] = useState(0);
 
   const plantQuery = useQuery({
     queryKey: ['plant', selectedPlantId],
@@ -345,6 +347,8 @@ export function PlantDetailSheet() {
       migrateSeedPlant(plantId, payload),
     onSuccess: async () => {
       hapticSuccess();
+      setMigrationWizardOpen(false);
+      setMigrationWizardStep(0);
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['calendar'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
@@ -403,6 +407,7 @@ export function PlantDetailSheet() {
     if (!current) {
       return;
     }
+    setMigrationWizardStep(0);
     setMigrationName(current.name);
     setMigrationInterval(String(Math.max(1, current.baseIntervalDays ?? current.recommendedIntervalDays ?? 4)));
     setMigrationWater(String(Math.max(50, current.preferredWaterMl ?? current.recommendedWaterMl ?? 220)));
@@ -505,6 +510,28 @@ export function PlantDetailSheet() {
                     plant={plant}
                     preview={migrationPreviewQuery.data ?? null}
                     loading={seedMigrationMutation.isPending}
+                    onOpenWizard={() => {
+                      setMigrationWizardStep(0);
+                      setMigrationWizardOpen(true);
+                    }}
+                  />
+
+                  <SeedMigrationWizard
+                    open={migrationWizardOpen}
+                    onOpenChange={(open) => {
+                      if (seedMigrationMutation.isPending) {
+                        return;
+                      }
+                      setMigrationWizardOpen(open);
+                      if (!open) {
+                        setMigrationWizardStep(0);
+                      }
+                    }}
+                    step={migrationWizardStep}
+                    onStepChange={setMigrationWizardStep}
+                    plant={plant}
+                    preview={migrationPreviewQuery.data ?? null}
+                    loading={seedMigrationMutation.isPending}
                     form={{
                       migrationName,
                       migrationInterval,
@@ -577,7 +604,6 @@ export function PlantDetailSheet() {
                       });
                     }}
                   />
-
                   <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
 
                   <DangerZoneSection
@@ -1103,10 +1129,65 @@ function SeedMigrationSection({
   plant,
   preview,
   loading,
+  onOpenWizard
+}: {
+  plant: PlantDto;
+  preview: {
+    allowed: boolean;
+    targetLabel: string;
+    message: string;
+  } | null;
+  loading: boolean;
+  onOpenWizard: () => void;
+}) {
+  const target = plant.targetEnvironmentType;
+  const canApply = Boolean(preview?.allowed && target && target !== 'SEED_START');
+
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+      <div>
+        <p className="text-sm font-semibold text-ios-text">Перевести в растение</p>
+        <p className="mt-1 text-xs text-ios-subtext">
+          {preview?.message ?? 'Когда всходы окрепнут, посев можно перевести в обычный режим растения.'}
+        </p>
+      </div>
+
+      <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-text">
+        Целевая категория: <b>{preview?.targetLabel ?? targetEnvironmentLabel(target)}</b>
+      </div>
+
+      <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-subtext">
+        Мастер перевода откроется отдельным шагом: сначала проверим цель, потом уточним параметры нового режима и только после этого применим миграцию.
+      </div>
+
+      <Button type="button" className="h-11 w-full rounded-2xl" disabled={!canApply || loading} onClick={onOpenWizard}>
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Переводим...
+          </span>
+        ) : 'Открыть мастер перевода'}
+      </Button>
+    </section>
+  );
+}
+
+function SeedMigrationWizard({
+  open,
+  onOpenChange,
+  step,
+  onStepChange,
+  plant,
+  preview,
+  loading,
   form,
   onChange,
   onApply
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  step: number;
+  onStepChange: (step: number) => void;
   plant: PlantDto;
   preview: {
     allowed: boolean;
@@ -1146,151 +1227,361 @@ function SeedMigrationSection({
 }) {
   const target = plant.targetEnvironmentType;
   const canApply = Boolean(preview?.allowed && target && target !== 'SEED_START');
+  const totalSteps = target === 'INDOOR' ? 2 : 3;
+  const atLastStep = step >= totalSteps - 1;
+  const hasTarget = Boolean(target && target !== 'SEED_START');
+  const targetAccent = (() => {
+    switch (target) {
+      case 'INDOOR':
+        return {
+          icon: Leaf,
+          eyebrow: 'Дом',
+          className: 'theme-badge-success'
+        };
+      case 'OUTDOOR_ORNAMENTAL':
+        return {
+          icon: Trees,
+          eyebrow: 'Декор',
+          className: 'theme-badge-info'
+        };
+      case 'OUTDOOR_GARDEN':
+        return {
+          icon: Warehouse,
+          eyebrow: 'Сад',
+          className: 'theme-badge-warning'
+        };
+      default:
+        return {
+          icon: Sprout,
+          eyebrow: 'Переход',
+          className: 'theme-surface-subtle'
+        };
+    }
+  })();
+  const targetSummary = (() => {
+    switch (target) {
+      case 'INDOOR':
+        return {
+          title: 'Домашний режим',
+          description: 'Фокус на ритме полива, объёме горшка и спокойном indoor-уходе без seed-логики.'
+        };
+      case 'OUTDOOR_ORNAMENTAL':
+        return {
+          title: 'Уличный декоративный режим',
+          description: 'Важно уточнить контейнер, свет и почву, чтобы после перевода рекомендации учитывали наружные условия.'
+        };
+      case 'OUTDOOR_GARDEN':
+        return {
+          title: 'Садовый режим',
+          description: 'После перевода начнут работать параметры культуры: стадия роста, площадь, почва и сезонные условия.'
+        };
+      default:
+        return {
+          title: 'Новая категория',
+          description: 'Подготовим короткий перевод из seed-flow в обычный режим растения.'
+        };
+    }
+  })();
+
+  const canProceed = (() => {
+    if (!hasTarget) {
+      return false;
+    }
+    if (step === 0) {
+      return Boolean(form.migrationName.trim()) && Number(form.migrationInterval) > 0 && Number(form.migrationWater) > 0;
+    }
+    if (step === 1 && target !== 'INDOOR') {
+      if (target === 'OUTDOOR_ORNAMENTAL') {
+        return Boolean(form.migrationContainerType) && Boolean(form.migrationSoilType) && Boolean(form.migrationSunExposure);
+      }
+      return Number(form.migrationAreaM2) > 0 && Boolean(form.migrationSoilType) && Boolean(form.migrationSunExposure);
+    }
+    return true;
+  })();
 
   return (
-    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
-      <div>
-        <p className="text-sm font-semibold text-ios-text">Перевести в растение</p>
-        <p className="mt-1 text-xs text-ios-subtext">
-          {preview?.message ?? 'Когда всходы окрепнут, посев можно перевести в обычный режим растения.'}
-        </p>
-      </div>
-
-      <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-text">
-        Целевая категория: <b>{preview?.targetLabel ?? targetEnvironmentLabel(target)}</b>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <input
-          value={form.migrationName}
-          onChange={(e) => onChange.setMigrationName(e.target.value)}
-          className="theme-field h-10 rounded-xl border px-3 text-sm"
-          placeholder="Название"
-        />
-        <input
-          type="number"
-          min={1}
-          max={60}
-          value={form.migrationInterval}
-          onChange={(e) => onChange.setMigrationInterval(e.target.value)}
-          className="theme-field h-10 rounded-xl border px-3 text-sm"
-          placeholder="Интервал"
-        />
-        <input
-          type="number"
-          min={50}
-          max={10000}
-          value={form.migrationWater}
-          onChange={(e) => onChange.setMigrationWater(e.target.value)}
-          className="theme-field h-10 rounded-xl border px-3 text-sm"
-          placeholder="Вода мл"
-        />
-        {(target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL') ? (
-          <input
-            type="number"
-            min={0.3}
-            step={0.1}
-            value={form.migrationPotVolume}
-            onChange={(e) => onChange.setMigrationPotVolume(e.target.value)}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-            placeholder="Объём л"
-          />
-        ) : (
-          <input
-            type="number"
-            min={0.05}
-            step={0.01}
-            value={form.migrationAreaM2}
-            onChange={(e) => onChange.setMigrationAreaM2(e.target.value)}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-            placeholder="Площадь м²"
-          />
-        )}
-      </div>
-
-      {target === 'OUTDOOR_ORNAMENTAL' ? (
-        <div className="grid grid-cols-3 gap-2">
-          <select
-            value={form.migrationContainerType}
-            onChange={(e) => onChange.setMigrationContainerType(e.target.value as 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND')}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-          >
-            <option value="POT">Кашпо</option>
-            <option value="CONTAINER">Контейнер</option>
-            <option value="FLOWERBED">Клумба</option>
-            <option value="OPEN_GROUND">Грунт</option>
-          </select>
-          <select
-            value={form.migrationSoilType}
-            onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-          >
-            <option value="LOAMY">Суглинистая</option>
-            <option value="SANDY">Песчаная</option>
-            <option value="CLAY">Глинистая</option>
-          </select>
-          <select
-            value={form.migrationSunExposure}
-            onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-          >
-            <option value="FULL_SUN">Солнце</option>
-            <option value="PARTIAL_SHADE">Полутень</option>
-            <option value="SHADE">Тень</option>
-          </select>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Мастер перевода в растение"
+      description="Небольшой укороченный flow: уточняем параметры нового режима и только потом завершаем миграцию."
+      className="md:w-[min(92vw,560px)]"
+    >
+      <div className="space-y-4">
+        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${targetAccent.className}`}>
+          <targetAccent.icon className="h-3.5 w-3.5" />
+          {targetAccent.eyebrow}
         </div>
-      ) : null}
 
-      {target === 'OUTDOOR_GARDEN' ? (
-        <>
-          <div className="grid grid-cols-3 gap-2">
-            <select
-              value={form.migrationGrowthStage}
-              onChange={(e) => onChange.setMigrationGrowthStage(e.target.value as 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST')}
-              className="theme-field h-10 rounded-xl border px-3 text-sm"
-            >
-              <option value="SEEDLING">Рассада</option>
-              <option value="VEGETATIVE">Вегетация</option>
-              <option value="FLOWERING">Цветение</option>
-              <option value="FRUITING">Плодоношение</option>
-              <option value="HARVEST">Перед сбором</option>
-            </select>
-            <select
-              value={form.migrationSoilType}
-              onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
-              className="theme-field h-10 rounded-xl border px-3 text-sm"
-            >
-              <option value="LOAMY">Суглинистая</option>
-              <option value="SANDY">Песчаная</option>
-              <option value="CLAY">Глинистая</option>
-            </select>
-            <select
-              value={form.migrationSunExposure}
-              onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
-              className="theme-field h-10 rounded-xl border px-3 text-sm"
-            >
-              <option value="FULL_SUN">Солнце</option>
-              <option value="PARTIAL_SHADE">Полутень</option>
-              <option value="SHADE">Тень</option>
-            </select>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">Шаг {Math.min(step + 1, totalSteps)} из {totalSteps}</p>
+              <p className="mt-1 text-sm font-semibold text-ios-text">
+                {step === 0
+                  ? 'База перевода'
+                  : step === 1 && target !== 'INDOOR'
+                    ? 'Условия новой категории'
+                    : 'Подтверждение'}
+              </p>
+            </div>
+            <div className="text-right text-xs text-ios-subtext">
+              <div>Из: {seedStageLabel(plant.seedStage)}</div>
+              <div>В: {preview?.targetLabel ?? targetEnvironmentLabel(target)}</div>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <ToggleChip label="Теплица" checked={form.migrationGreenhouse} onChange={onChange.setMigrationGreenhouse} />
-            <ToggleChip label="Мульча" checked={form.migrationMulched} onChange={onChange.setMigrationMulched} />
-            <ToggleChip label="Капля" checked={form.migrationDrip} onChange={onChange.setMigrationDrip} />
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {[
+              'База',
+              target === 'INDOOR' ? 'Подтверждение' : 'Условия',
+              target === 'INDOOR' ? 'Готово' : 'Подтверждение'
+            ].map((label, index) => {
+              const isActive = index === step;
+              const isDone = index < step;
+              const hidden = target === 'INDOOR' && index === 2;
+              if (hidden) {
+                return null;
+              }
+              return (
+                <div
+                  key={label}
+                  className={`rounded-2xl border px-3 py-2 text-center text-xs font-medium ${
+                    isActive
+                      ? 'theme-pill-active'
+                      : isDone
+                        ? 'theme-surface-subtle border-emerald-400/40 text-ios-text'
+                        : 'theme-surface-subtle text-ios-subtext'
+                  }`}
+                >
+                  {label}
+                </div>
+              );
+            })}
           </div>
-        </>
-      ) : null}
+        </div>
 
-      <Button type="button" className="h-11 w-full rounded-2xl" disabled={!canApply || loading} onClick={onApply}>
-        {loading ? (
-          <span className="inline-flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Переводим...
-          </span>
-        ) : 'Перевести в растение'}
-      </Button>
-    </section>
+        <div className="theme-surface-subtle rounded-2xl border p-3">
+          <div className="flex items-start gap-3">
+            <div className={`mt-0.5 rounded-2xl p-2 ${targetAccent.className}`}>
+              <targetAccent.icon className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">{targetSummary.title}</p>
+              <p className="mt-1 text-sm leading-5 text-ios-text">{targetSummary.description}</p>
+            </div>
+          </div>
+        </div>
+
+        {step === 0 ? (
+          <div className="space-y-3">
+            <div className="theme-surface-subtle rounded-2xl border p-3 text-sm leading-5 text-ios-text">
+              {preview?.message ?? 'Готовим перевод из режима проращивания в обычный plant-flow.'}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Название после перевода">
+                <input
+                  value={form.migrationName}
+                  onChange={(e) => onChange.setMigrationName(e.target.value)}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                  placeholder="Название"
+                />
+              </Field>
+              <Field label="Интервал полива (дней)">
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={form.migrationInterval}
+                  onChange={(e) => onChange.setMigrationInterval(e.target.value)}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                  placeholder="Интервал"
+                />
+              </Field>
+              <Field label="Объём полива (мл)">
+                <input
+                  type="number"
+                  min={50}
+                  max={10000}
+                  value={form.migrationWater}
+                  onChange={(e) => onChange.setMigrationWater(e.target.value)}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                  placeholder="Вода мл"
+                />
+              </Field>
+              {target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL' ? (
+                <Field label="Объём ёмкости (л)">
+                  <input
+                    type="number"
+                    min={0.3}
+                    step={0.1}
+                    value={form.migrationPotVolume}
+                    onChange={(e) => onChange.setMigrationPotVolume(e.target.value)}
+                    className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                    placeholder="Объём л"
+                  />
+                </Field>
+              ) : (
+                <Field label="Площадь посадки (м²)">
+                  <input
+                    type="number"
+                    min={0.05}
+                    step={0.01}
+                    value={form.migrationAreaM2}
+                    onChange={(e) => onChange.setMigrationAreaM2(e.target.value)}
+                    className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                    placeholder="Площадь м²"
+                  />
+                </Field>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {step === 1 && target === 'OUTDOOR_ORNAMENTAL' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Где растёт">
+                <select
+                  value={form.migrationContainerType}
+                  onChange={(e) => onChange.setMigrationContainerType(e.target.value as 'POT' | 'CONTAINER' | 'FLOWERBED' | 'OPEN_GROUND')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="POT">Кашпо</option>
+                  <option value="CONTAINER">Контейнер</option>
+                  <option value="FLOWERBED">Клумба</option>
+                  <option value="OPEN_GROUND">Грунт</option>
+                </select>
+              </Field>
+              <Field label="Почва">
+                <select
+                  value={form.migrationSoilType}
+                  onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="LOAMY">Суглинистая</option>
+                  <option value="SANDY">Песчаная</option>
+                  <option value="CLAY">Глинистая</option>
+                </select>
+              </Field>
+              <Field label="Освещение">
+                <select
+                  value={form.migrationSunExposure}
+                  onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="FULL_SUN">Солнце</option>
+                  <option value="PARTIAL_SHADE">Полутень</option>
+                  <option value="SHADE">Тень</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+        ) : null}
+
+        {step === 1 && target === 'OUTDOOR_GARDEN' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Стадия роста">
+                <select
+                  value={form.migrationGrowthStage}
+                  onChange={(e) => onChange.setMigrationGrowthStage(e.target.value as 'SEEDLING' | 'VEGETATIVE' | 'FLOWERING' | 'FRUITING' | 'HARVEST')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="SEEDLING">Рассада</option>
+                  <option value="VEGETATIVE">Вегетация</option>
+                  <option value="FLOWERING">Цветение</option>
+                  <option value="FRUITING">Плодоношение</option>
+                  <option value="HARVEST">Перед сбором</option>
+                </select>
+              </Field>
+              <Field label="Почва">
+                <select
+                  value={form.migrationSoilType}
+                  onChange={(e) => onChange.setMigrationSoilType(e.target.value as 'SANDY' | 'LOAMY' | 'CLAY')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="LOAMY">Суглинистая</option>
+                  <option value="SANDY">Песчаная</option>
+                  <option value="CLAY">Глинистая</option>
+                </select>
+              </Field>
+              <Field label="Освещение">
+                <select
+                  value={form.migrationSunExposure}
+                  onChange={(e) => onChange.setMigrationSunExposure(e.target.value as 'FULL_SUN' | 'PARTIAL_SHADE' | 'SHADE')}
+                  className="theme-field h-11 w-full rounded-xl border px-3 text-sm"
+                >
+                  <option value="FULL_SUN">Солнце</option>
+                  <option value="PARTIAL_SHADE">Полутень</option>
+                  <option value="SHADE">Тень</option>
+                </select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <ToggleChip label="Теплица" checked={form.migrationGreenhouse} onChange={onChange.setMigrationGreenhouse} />
+              <ToggleChip label="Мульча" checked={form.migrationMulched} onChange={onChange.setMigrationMulched} />
+              <ToggleChip label="Капля" checked={form.migrationDrip} onChange={onChange.setMigrationDrip} />
+            </div>
+          </div>
+        ) : null}
+
+        {(step === totalSteps - 1) || (target === 'INDOOR' && step === 1) ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <InfoChip label="Новое имя" value={form.migrationName || plant.name} />
+              <InfoChip label="Цель" value={preview?.targetLabel ?? targetEnvironmentLabel(target)} />
+              <InfoChip label="Интервал" value={`${Math.max(1, Number(form.migrationInterval) || 1)} дн.`} />
+              <InfoChip label="Объём" value={`${Math.max(50, Number(form.migrationWater) || 50)} мл`} />
+            </div>
+            <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-subtext">
+              <p className="leading-5">
+                После подтверждения seed-режим отключится, а карточка сразу перейдёт в обычную категорию растения с новым профилем ухода.
+              </p>
+              <p className="mt-2 leading-5">
+                Мы сохраняем имя, фото и накопленный контекст, чтобы переход ощущался как продолжение выращивания, а не как создание нового объекта с нуля.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-2 pt-1">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-11 flex-1"
+            disabled={loading}
+            onClick={() => {
+              if (step === 0) {
+                onOpenChange(false);
+                return;
+              }
+              onStepChange(Math.max(0, step - 1));
+            }}
+          >
+            {step === 0 ? 'Закрыть' : 'Назад'}
+          </Button>
+          {atLastStep ? (
+            <Button type="button" className="h-11 flex-1" disabled={!canApply || !canProceed || loading} onClick={onApply}>
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Переводим...
+                </span>
+              ) : 'Подтвердить перевод'}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="h-11 flex-1"
+              disabled={!canProceed}
+              onClick={() => onStepChange(Math.min(totalSteps - 1, step + 1))}
+            >
+              Далее
+            </Button>
+          )}
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -1311,6 +1602,36 @@ function ToggleChip({
     >
       {label}
     </button>
+  );
+}
+
+function Field({
+  label,
+  children
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-ios-subtext">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function InfoChip({
+  label,
+  value
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="theme-surface-subtle rounded-2xl border p-3">
+      <p className="text-xs text-ios-subtext">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-ios-text">{value}</p>
+    </div>
   );
 }
 
@@ -1345,7 +1666,7 @@ function AIAdviceCard({
             <p className="text-xs text-ios-subtext">Персональная рекомендация на сегодня</p>
           </div>
         </div>
-        <Button type="button" variant="ghost" className="h-11 rounded-xl px-3 text-xs" disabled={refreshing} onClick={onRefresh}>
+        <Button type="button" variant="ghost" className="h-auto min-h-[44px] rounded-xl px-3 py-2 text-center text-xs leading-tight" disabled={refreshing} onClick={onRefresh}>
           {refreshing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
           Обновить
         </Button>
@@ -1363,7 +1684,7 @@ function AIAdviceCard({
         <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
           <p className="theme-text-danger font-medium">Не удалось загрузить AI советы.</p>
           <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
-          <Button type="button" variant="secondary" className="mt-3 h-10 rounded-xl" onClick={onRefresh}>
+          <Button type="button" variant="secondary" className="mt-3 h-auto min-h-[40px] rounded-xl px-3 py-2 text-center leading-tight" onClick={onRefresh}>
             Повторить
           </Button>
         </div>
@@ -1459,7 +1780,7 @@ function WateringRecommendationCard({
             <SourceIcon className="h-3.5 w-3.5" />
             {sourceTone.shortLabel}
           </span>
-          <Button type="button" variant="ghost" className="h-11 rounded-xl px-3 text-xs" disabled={loading} onClick={onRefresh}>
+          <Button type="button" variant="ghost" className="h-auto min-h-[44px] rounded-xl px-3 py-2 text-center text-xs leading-tight" disabled={loading} onClick={onRefresh}>
             {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
             Обновить
           </Button>
@@ -1484,7 +1805,7 @@ function WateringRecommendationCard({
         <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
           <p className="theme-text-danger font-medium">Не удалось получить рекомендацию.</p>
           <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
-          <Button type="button" variant="secondary" className="mt-3 h-10 rounded-xl" onClick={onRefresh}>
+          <Button type="button" variant="secondary" className="mt-3 h-auto min-h-[40px] rounded-xl px-3 py-2 text-center leading-tight" onClick={onRefresh}>
             Повторить
           </Button>
         </div>

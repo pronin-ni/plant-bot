@@ -56,6 +56,9 @@ public class WateringRecommendationEngine {
         plant.getGrowthStage() == null ? null : plant.getGrowthStage().name(),
         plant.getGrowthStageV2(),
         plant.getGreenhouse(),
+        plant.getMulched(),
+        plant.getDripIrrigation(),
+        plant.getOutdoorAreaM2(),
         plant.getSoilType(),
         plant.getSunlightExposure(),
         null,
@@ -139,15 +142,15 @@ public class WateringRecommendationEngine {
   private Recommendation buildBaseProfile(PlantEnvironmentType env, WateringRecommendationPreviewRequest request) {
     int interval = switch (env) {
       case INDOOR -> clamp(defaultInt(request.baseIntervalDays(), 7), 2, 21);
-      case OUTDOOR_ORNAMENTAL -> clamp(defaultInt(request.baseIntervalDays(), 3), 1, 21);
-      case OUTDOOR_GARDEN -> clamp(defaultInt(request.baseIntervalDays(), request.greenhouse() != null && request.greenhouse() ? 3 : 2), 1, 21);
+      case OUTDOOR_ORNAMENTAL -> clamp(defaultInt(request.baseIntervalDays(), defaultOrnamentalInterval(request)), 1, 21);
+      case OUTDOOR_GARDEN -> clamp(defaultInt(request.baseIntervalDays(), defaultGardenInterval(request)), 1, 21);
       case SEED_START -> clamp(defaultInt(request.baseIntervalDays(), 1), 1, 7);
     };
 
     int waterMl = switch (env) {
       case INDOOR -> clamp((int) Math.round(Math.max(0.3, defaultDouble(request.potVolumeLiters(), 2.0)) * 130.0), 120, 2200);
-      case OUTDOOR_ORNAMENTAL -> clamp((int) Math.round(Math.max(0.5, defaultDouble(request.containerVolume(), 4.0)) * 170.0), 180, 3200);
-      case OUTDOOR_GARDEN -> request.greenhouse() != null && request.greenhouse() ? 450 : 600;
+      case OUTDOOR_ORNAMENTAL -> clamp(defaultOrnamentalWater(request), 180, 3200);
+      case OUTDOOR_GARDEN -> clamp(defaultGardenWater(request), 250, 6000);
       case SEED_START -> 80;
     };
 
@@ -158,12 +161,24 @@ public class WateringRecommendationEngine {
     if (request.baseIntervalDays() != null) {
       reasoning.add("Базовый интервал: " + request.baseIntervalDays() + " дн.");
     }
+    if (env == PlantEnvironmentType.OUTDOOR_ORNAMENTAL && request.containerType() != null) {
+      reasoning.add("Формат выращивания: " + request.containerType().name());
+    }
+    if (env == PlantEnvironmentType.OUTDOOR_GARDEN && request.outdoorAreaM2() != null) {
+      reasoning.add(String.format(java.util.Locale.ROOT, "Зона полива: %.2f м².", request.outdoorAreaM2()));
+    }
+    if (env == PlantEnvironmentType.OUTDOOR_GARDEN && Boolean.TRUE.equals(request.mulched())) {
+      reasoning.add("Мульча помогает дольше удерживать влагу.");
+    }
+    if (env == PlantEnvironmentType.OUTDOOR_GARDEN && Boolean.TRUE.equals(request.dripIrrigation())) {
+      reasoning.add("Капельный полив сглаживает пересыхание между поливами.");
+    }
     reasoning.addAll(seasonal.reasoning());
 
     String summary = switch (env) {
       case INDOOR -> "Базовый indoor-профиль рассчитан по объему горшка, типу размещения и сезонности.";
-      case OUTDOOR_ORNAMENTAL -> "Базовый outdoor ornamental-профиль рассчитан по контейнеру и сезонности.";
-      case OUTDOOR_GARDEN -> "Базовый garden-профиль рассчитан по культуре, стадии и сезонности.";
+      case OUTDOOR_ORNAMENTAL -> "Базовый outdoor ornamental-профиль рассчитан по формату выращивания, объёму, солнцу и сезонности.";
+      case OUTDOOR_GARDEN -> "Базовый garden-профиль рассчитан по стадии, зоне полива, укрытию и сезонности.";
       case SEED_START -> "Проращивание семян не использует стандартный предварительный расчёт полива. Используйте отдельный предварительный расчёт для семян.";
     };
 
@@ -370,9 +385,8 @@ public class WateringRecommendationEngine {
             categoryByEnvironment(env),
             PlantType.DEFAULT,
             defaultInt(request.baseIntervalDays(), env == PlantEnvironmentType.INDOOR ? 7 : 3),
-            request.potVolumeLiters(),
-            null,
-            null,
+            resolveWizardVolume(env, request),
+            request.outdoorAreaM2(),
             request.containerType() == null ? null : request.containerType().name(),
             request.growthStage(),
             request.greenhouse(),
@@ -380,8 +394,8 @@ public class WateringRecommendationEngine {
             resolveSunExposure(request),
             weatherContext.city(),
             weatherSummary,
-            null,
-            null
+            request.mulched(),
+            request.dripIrrigation()
         )
     );
 
@@ -577,6 +591,106 @@ public class WateringRecommendationEngine {
       return request.sunExposure();
     }
     return request.sunlightExposure() == null ? null : request.sunlightExposure().name();
+  }
+
+  private Double resolveWizardVolume(PlantEnvironmentType env, WateringRecommendationPreviewRequest request) {
+    if (env == PlantEnvironmentType.OUTDOOR_ORNAMENTAL) {
+      return request.containerVolume();
+    }
+    return request.potVolumeLiters();
+  }
+
+  private int defaultOrnamentalInterval(WateringRecommendationPreviewRequest request) {
+    int interval = 3;
+    if (request.containerType() != null) {
+      interval = switch (request.containerType()) {
+        case POT, CONTAINER -> 3;
+        case FLOWERBED -> 4;
+        case OPEN_GROUND -> 5;
+      };
+    }
+    if ("FULL_SUN".equalsIgnoreCase(request.sunExposure())) {
+      interval -= 1;
+    } else if ("SHADE".equalsIgnoreCase(request.sunExposure())) {
+      interval += 1;
+    }
+    if ("SANDY".equalsIgnoreCase(request.soilType())) {
+      interval -= 1;
+    } else if ("CLAY".equalsIgnoreCase(request.soilType())) {
+      interval += 1;
+    }
+    return clamp(interval, 1, 21);
+  }
+
+  private int defaultOrnamentalWater(WateringRecommendationPreviewRequest request) {
+    double base = request.containerType() == null ? 4.0 : switch (request.containerType()) {
+      case POT -> Math.max(0.5, defaultDouble(request.containerVolume(), 3.0));
+      case CONTAINER -> Math.max(1.0, defaultDouble(request.containerVolume(), 5.0));
+      case FLOWERBED -> 6.0;
+      case OPEN_GROUND -> 8.0;
+    };
+    double factor = 170.0;
+    if ("FULL_SUN".equalsIgnoreCase(request.sunExposure())) {
+      factor *= 1.08;
+    }
+    if ("SANDY".equalsIgnoreCase(request.soilType())) {
+      factor *= 1.08;
+    } else if ("CLAY".equalsIgnoreCase(request.soilType())) {
+      factor *= 0.94;
+    }
+    return (int) Math.round(base * factor);
+  }
+
+  private int defaultGardenInterval(WateringRecommendationPreviewRequest request) {
+    int interval = Boolean.TRUE.equals(request.greenhouse()) ? 3 : 2;
+    if ("HARVEST".equalsIgnoreCase(request.growthStage())) {
+      interval += 1;
+    }
+    if (Boolean.TRUE.equals(request.mulched())) {
+      interval += 1;
+    }
+    if (Boolean.TRUE.equals(request.dripIrrigation())) {
+      interval += 1;
+    }
+    if ("FULL_SUN".equalsIgnoreCase(request.sunExposure())) {
+      interval -= 1;
+    }
+    if ("SANDY".equalsIgnoreCase(request.soilType())) {
+      interval -= 1;
+    } else if ("CLAY".equalsIgnoreCase(request.soilType())) {
+      interval += 1;
+    }
+    return clamp(interval, 1, 21);
+  }
+
+  private int defaultGardenWater(WateringRecommendationPreviewRequest request) {
+    double area = Math.max(0.15, defaultDouble(request.outdoorAreaM2(), 0.5));
+    double litersPerM2 = 0.9;
+    if ("SEEDLING".equalsIgnoreCase(request.growthStage())) {
+      litersPerM2 = 0.6;
+    } else if ("FLOWERING".equalsIgnoreCase(request.growthStage())) {
+      litersPerM2 = 1.0;
+    } else if ("FRUITING".equalsIgnoreCase(request.growthStage())) {
+      litersPerM2 = 1.2;
+    }
+    if (Boolean.TRUE.equals(request.greenhouse())) {
+      litersPerM2 *= 0.9;
+    }
+    if (Boolean.TRUE.equals(request.mulched())) {
+      litersPerM2 *= 0.9;
+    }
+    if (Boolean.TRUE.equals(request.dripIrrigation())) {
+      litersPerM2 *= 0.92;
+    }
+    if ("FULL_SUN".equalsIgnoreCase(request.sunExposure())) {
+      litersPerM2 *= 1.08;
+    }
+    if ("SANDY".equalsIgnoreCase(request.soilType())) {
+      litersPerM2 *= 1.08;
+    } else if ("CLAY".equalsIgnoreCase(request.soilType())) {
+      litersPerM2 *= 0.94;
+    }
+    return (int) Math.round(area * litersPerM2 * 1000.0);
   }
 
   private PlantCategory categoryByEnvironment(PlantEnvironmentType environmentType) {

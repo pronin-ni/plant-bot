@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
@@ -17,6 +17,7 @@ import {
 import { PlantPhotoCapture } from '@/app/AddPlant/PlantPhotoCapture';
 import { Button } from '@/components/ui/button';
 import {
+  aiSearchPlants,
   apiFetch,
   createPlant,
   getWateringHaOptions,
@@ -42,6 +43,8 @@ import {
 import { useAuthStore, useUiStore } from '@/lib/store';
 import type {
   HaSensorDto,
+  PlantAiSearchResponseDto,
+  PlantAiSearchSuggestionDto,
   OpenRouterIdentifyResult,
   PlantDto,
   PlantPresetSuggestionDto,
@@ -99,6 +102,7 @@ interface SeedWizardRecommendation {
 
 interface WeatherContextPreviewDto {
   available: boolean;
+  fallbackUsed?: boolean;
   city?: string | null;
   region?: string | null;
   temperatureNowC?: number | null;
@@ -118,6 +122,26 @@ const STEPS: Array<{ key: WizardStep; title: string }> = [
   { key: 'ai', title: 'AI расчёт полива' },
   { key: 'review', title: 'Подтверждение' }
 ];
+
+function wizardStepTitle(step: WizardStep, environmentType: EnvironmentType): string {
+  if (environmentType !== 'SEED_START') {
+    return STEPS.find((item) => item.key === step)?.title ?? 'Шаг мастера';
+  }
+  switch (step) {
+    case 'environment':
+      return 'Тип растения';
+    case 'identify':
+      return 'Что проращиваем';
+    case 'conditions':
+      return 'Условия проращивания';
+    case 'ai':
+      return 'AI рекомендации для семян';
+    case 'review':
+      return 'Подтверждение';
+    default:
+      return 'Шаг мастера';
+  }
+}
 
 const ENVIRONMENT_META: Record<EnvironmentType, { title: string; subtitle: string; icon: typeof Sprout; category: PlantCategory }> = {
   INDOOR: {
@@ -235,12 +259,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function estimateDefaultWaterMl(environmentType: EnvironmentType, potVolumeLiters: number, heightCm: number) {
+function estimateDefaultWaterMl(environmentType: EnvironmentType, potVolumeLiters: number, careAreaM2: number) {
   if (environmentType === 'SEED_START') {
     return 80;
   }
   if (environmentType === 'OUTDOOR_GARDEN') {
-    return clamp(Math.round(Math.max(25, heightCm) * 10), 350, 4000);
+    return clamp(Math.round(Math.max(0.2, careAreaM2) * 900), 350, 4000);
   }
   if (environmentType === 'OUTDOOR_ORNAMENTAL') {
     return clamp(Math.round(Math.max(0.5, potVolumeLiters) * 170), 180, 3200);
@@ -264,6 +288,10 @@ function buildCycleDates(intervalDays: number) {
     next.setDate(start.getDate() + safeInterval * (index + 1));
     return next;
   });
+}
+
+function isOutdoorOrnamentalContainerMode(containerType: ContainerType): boolean {
+  return containerType === 'POT' || containerType === 'CONTAINER';
 }
 
 function buildFallbackRecommendation(environmentType: EnvironmentType, interval: number, waterMl: number): WizardRecommendation {
@@ -369,6 +397,79 @@ function sourceBadgeLabel(source: AppliedRecommendationSource): string {
   }
 }
 
+function categoryHintLabel(category: PlantCategory): string {
+  switch (category) {
+    case 'HOME':
+      return 'Домашнее';
+    case 'OUTDOOR_DECORATIVE':
+      return 'Декор';
+    case 'OUTDOOR_GARDEN':
+      return 'Сад';
+    case 'SEED_START':
+      return 'Семена';
+    default:
+      return category;
+  }
+}
+
+function containerTypeLabel(value: ContainerType): string {
+  switch (value) {
+    case 'POT':
+      return 'кашпо';
+    case 'CONTAINER':
+      return 'контейнер';
+    case 'FLOWERBED':
+      return 'грядка';
+    case 'OPEN_GROUND':
+      return 'открытый грунт';
+    default:
+      return value;
+  }
+}
+
+function soilTypeLabel(value: SoilType): string {
+  switch (value) {
+    case 'LOAMY':
+      return 'суглинистая почва';
+    case 'SANDY':
+      return 'песчаная почва';
+    case 'CLAY':
+      return 'глинистая почва';
+    default:
+      return value;
+  }
+}
+
+function sunExposureLabel(value: SunExposure): string {
+  switch (value) {
+    case 'FULL_SUN':
+      return 'полное солнце';
+    case 'PARTIAL_SHADE':
+      return 'полутень';
+    case 'SHADE':
+      return 'тень';
+    default:
+      return value;
+  }
+}
+
+function growthStageLabel(value: GrowthStage): string {
+  switch (value) {
+    case 'SEEDLING':
+      return 'рассада';
+    case 'VEGETATIVE':
+      return 'активный рост';
+    case 'FLOWERING':
+      return 'цветение';
+    case 'FRUITING':
+      return 'плодоношение';
+    case 'HARVEST':
+      return 'конец сезона';
+    default:
+      return value;
+  }
+}
+
 function normalizeHaContextMessage(message?: string | null, available?: boolean): string {
   const raw = message?.trim();
   if (!raw) {
@@ -408,8 +509,23 @@ function categoryLabel(value: PlantCategory): string {
   }
 }
 
+function categoryToEnvironment(category: PlantCategory): EnvironmentType {
+  switch (category) {
+    case 'OUTDOOR_DECORATIVE':
+      return 'OUTDOOR_ORNAMENTAL';
+    case 'OUTDOOR_GARDEN':
+      return 'OUTDOOR_GARDEN';
+    case 'SEED_START':
+      return 'SEED_START';
+    case 'HOME':
+    default:
+      return 'INDOOR';
+  }
+}
+
 export function WizardAddPlant() {
   const prefersReducedMotion = useReducedMotion();
+  const actionThrottleRef = useRef<Record<string, number>>({});
   const queryClient = useQueryClient();
   const openPlantDetail = useUiStore((s) => s.openPlantDetail);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -425,12 +541,15 @@ export function WizardAddPlant() {
   const [hints, setHints] = useState<string[]>([]);
   const [presets, setPresets] = useState<PlantPresetSuggestionDto[]>([]);
   const [lastSearchHadResults, setLastSearchHadResults] = useState(true);
+  const [aiSearchSuggestions, setAiSearchSuggestions] = useState<PlantAiSearchSuggestionDto[]>([]);
+  const [aiSearchSource, setAiSearchSource] = useState<PlantAiSearchResponseDto['source'] | null>(null);
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+  const [selectedAiSuggestion, setSelectedAiSuggestion] = useState<PlantAiSearchSuggestionDto | null>(null);
 
   const [plantType, setPlantType] = useState<PlantType>('DEFAULT');
   const [baseIntervalDays, setBaseIntervalDays] = useState('7');
   const [potVolumeLiters, setPotVolumeLiters] = useState('2');
-  const [heightCm, setHeightCm] = useState('45');
-  const [diameterCm, setDiameterCm] = useState('35');
+  const [wateringAreaM2, setWateringAreaM2] = useState('0.5');
   const [containerType, setContainerType] = useState<ContainerType>('POT');
   const [growthStage, setGrowthStage] = useState<GrowthStage>('VEGETATIVE');
   const [greenhouse, setGreenhouse] = useState(false);
@@ -462,6 +581,7 @@ export function WizardAddPlant() {
   const [latestRecommendationPreview, setLatestRecommendationPreview] = useState<WateringRecommendationPreviewDto | null>(null);
   const [latestSeedRecommendationPreview, setLatestSeedRecommendationPreview] = useState<SeedRecommendationPreviewDto | null>(null);
   const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(null);
+  const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null);
   const [appliedRecommendationSource, setAppliedRecommendationSource] = useState<AppliedRecommendationSource>('none');
   const [manualOverrideEnabled, setManualOverrideEnabled] = useState(false);
   const [manualIntervalInput, setManualIntervalInput] = useState('7');
@@ -474,20 +594,20 @@ export function WizardAddPlant() {
 
   const currentStep = STEPS[stepIndex]?.key ?? 'environment';
   const progress = ((stepIndex + 1) / STEPS.length) * 100;
+  const currentStepTitle = wizardStepTitle(currentStep, environmentType);
   const category = mapEnvironmentToCategory(environmentType);
 
   const intervalDaysNumber = clamp(Number(baseIntervalDays) || 7, 1, 60);
   const potLitersNumber = Math.max(0.2, Number(potVolumeLiters) || 2);
-  const heightNumber = Math.max(10, Number(heightCm) || 45);
-  const diameterNumber = Math.max(10, Number(diameterCm) || 35);
+  const wateringAreaM2Number = Math.max(0.05, Number(wateringAreaM2) || 0.5);
   const germinationTemperatureNumber = clamp(Number(germinationTemperatureC) || 23, 10, 35);
 
   useEffect(() => {
     if (aiState === 'idle') {
       setFinalIntervalDays(intervalDaysNumber);
-      setFinalWaterMl(estimateDefaultWaterMl(environmentType, potLitersNumber, heightNumber));
+      setFinalWaterMl(estimateDefaultWaterMl(environmentType, potLitersNumber, wateringAreaM2Number));
     }
-  }, [aiState, intervalDaysNumber, environmentType, potLitersNumber, heightNumber]);
+  }, [aiState, intervalDaysNumber, environmentType, potLitersNumber, wateringAreaM2Number]);
 
   useEffect(() => {
     if (environmentType === 'INDOOR') {
@@ -543,19 +663,35 @@ export function WizardAddPlant() {
 
   const searchMutation = useMutation({
     mutationFn: async (q: string) => {
-      const [localPlants, presetItems] = await Promise.all([
+      const [aiItems, localPlants, presetItems] = await Promise.all([
+        aiSearchPlants({ query: q, category }),
         searchPlants(q, category),
         searchPlantPresets(category, q, 12)
       ]);
-      return { localPlants, presetItems };
+      return { aiItems, localPlants, presetItems };
     },
-    onSuccess: ({ localPlants, presetItems }) => {
+    onMutate: () => {
+      setAiSearchError(null);
+      setAiSearchSuggestions([]);
+      setAiSearchSource(null);
+    },
+    onSuccess: ({ aiItems, localPlants, presetItems }) => {
       const merged = new Set<string>();
       localPlants.forEach((item) => merged.add(item.name));
       presetItems.forEach((item) => merged.add(item.name));
       setHints(Array.from(merged).slice(0, 8));
       setPresets(presetItems);
-      setLastSearchHadResults(merged.size > 0 || presetItems.length > 0);
+      setAiSearchSuggestions(aiItems.suggestions ?? []);
+      setAiSearchSource(aiItems.source ?? null);
+      setLastSearchHadResults(
+        merged.size > 0 || presetItems.length > 0 || (aiItems.suggestions?.length ?? 0) > 0
+      );
+    },
+    onError: (error) => {
+      setAiSearchSuggestions([]);
+      setAiSearchSource(null);
+      setAiSearchError(error instanceof Error ? error.message : 'Не удалось получить варианты от AI.');
+      setLastSearchHadResults(false);
     }
   });
 
@@ -572,12 +708,15 @@ export function WizardAddPlant() {
       baseIntervalDays: intervalDaysNumber,
       potVolumeLiters: environmentType === 'INDOOR' ? potLitersNumber : undefined,
       containerType: environmentType === 'INDOOR' ? undefined : containerType,
-      containerVolume: environmentType === 'OUTDOOR_ORNAMENTAL' && containerType !== 'OPEN_GROUND' ? potLitersNumber : undefined,
+      containerVolume: environmentType === 'OUTDOOR_ORNAMENTAL' && isOutdoorOrnamentalContainerMode(containerType) ? potLitersNumber : undefined,
       growthStage: environmentType === 'OUTDOOR_GARDEN' ? growthStage : undefined,
       greenhouse: environmentType === 'OUTDOOR_GARDEN' ? greenhouse : undefined,
       soilType,
       sunExposure,
       cropType: environmentType === 'OUTDOOR_GARDEN' ? name.trim() : undefined,
+      mulched: environmentType === 'OUTDOOR_GARDEN' ? mulched : undefined,
+      dripIrrigation: environmentType === 'OUTDOOR_GARDEN' ? dripIrrigation : undefined,
+      outdoorAreaM2: environmentType === 'OUTDOOR_GARDEN' ? wateringAreaM2Number : undefined,
       haRoomId: haRoomId || undefined,
       haRoomName: haRoomName || undefined,
       temperatureSensorEntityId: temperatureSensorEntityId || undefined,
@@ -715,8 +854,7 @@ export function WizardAddPlant() {
       body: JSON.stringify({
         plantName: name.trim(),
         environmentType,
-        city: region.trim() || undefined,
-        region: region.trim() || undefined
+        city: region.trim() || undefined
       })
     }),
     onSuccess: (result) => {
@@ -732,6 +870,16 @@ export function WizardAddPlant() {
       hapticError();
     }
   });
+
+  const shouldThrottleAction = (key: string, cooldownMs: number) => {
+    const now = Date.now();
+    const lastAt = actionThrottleRef.current[key] ?? 0;
+    if (now - lastAt < cooldownMs) {
+      return true;
+    }
+    actionThrottleRef.current[key] = now;
+    return false;
+  };
 
   const maybeEnablePushOnFirstPlant = async (hadPlantsBeforeCreate: boolean) => {
     if (hadPlantsBeforeCreate) {
@@ -766,6 +914,7 @@ export function WizardAddPlant() {
 
   const createMutation = useMutation({
     mutationFn: () => {
+      setCreateErrorMessage(null);
       if (environmentType === 'SEED_START') {
         return createPlant({
           name: name.trim(),
@@ -774,10 +923,16 @@ export function WizardAddPlant() {
           wateringProfile: environmentType,
           placement: 'INDOOR',
           type: 'DEFAULT',
+          city: region.trim() || null,
           region: region.trim() || null,
           potVolumeLiters: 1,
           baseIntervalDays: 1,
           preferredWaterMl: 80,
+          recommendationSource: null,
+          recommendationSummary: null,
+          recommendationReasoningJson: null,
+          recommendationWarningsJson: null,
+          confidenceScore: null,
           seedStage,
           targetEnvironmentType,
           seedContainerType,
@@ -800,9 +955,10 @@ export function WizardAddPlant() {
 
       const placement = environmentType === 'INDOOR' ? 'INDOOR' : 'OUTDOOR';
       const outdoorAreaM2 = environmentType === 'OUTDOOR_GARDEN'
-        ? Math.PI * Math.pow((diameterNumber / 100) / 2, 2)
+        ? wateringAreaM2Number
         : null;
-      const shouldUsePot = environmentType !== 'OUTDOOR_GARDEN' || containerType !== 'OPEN_GROUND';
+      const shouldUsePot = environmentType === 'INDOOR'
+        || (environmentType === 'OUTDOOR_ORNAMENTAL' && isOutdoorOrnamentalContainerMode(containerType));
 
       return createPlant({
         name: name.trim(),
@@ -810,19 +966,29 @@ export function WizardAddPlant() {
         environmentType,
         wateringProfile: environmentType,
         placement,
+        recommendationSource: mapAppliedSourceToBackend(appliedRecommendationSource),
+        recommendationSummary: aiRecommendation?.summary ?? null,
+        recommendationReasoningJson: JSON.stringify(aiRecommendation?.reasoning ?? []),
+        recommendationWarningsJson: JSON.stringify(aiRecommendation?.warnings ?? []),
+        confidenceScore: latestRecommendationPreview?.confidence ?? null,
         type: plantType,
+        city: region.trim() || null,
         region: region.trim() || null,
-        containerType: environmentType === 'INDOOR' ? 'POT' : containerType,
-        containerVolumeLiters: environmentType === 'OUTDOOR_GARDEN' && containerType === 'OPEN_GROUND'
-          ? null
-          : potLitersNumber,
+        containerType: environmentType === 'INDOOR'
+          ? 'POT'
+          : environmentType === 'OUTDOOR_GARDEN'
+            ? containerType
+            : containerType,
+        containerVolumeLiters: environmentType === 'OUTDOOR_ORNAMENTAL' && isOutdoorOrnamentalContainerMode(containerType)
+          ? potLitersNumber
+          : null,
         cropType: environmentType === 'OUTDOOR_GARDEN' ? name.trim() : null,
         growthStage: environmentType === 'OUTDOOR_GARDEN' ? growthStage : null,
         greenhouse: environmentType === 'OUTDOOR_GARDEN' ? greenhouse : null,
         dripIrrigation: environmentType === 'OUTDOOR_GARDEN' ? dripIrrigation : null,
         baseIntervalDays: finalIntervalDays,
         preferredWaterMl: finalWaterMl,
-        potVolumeLiters: shouldUsePot ? potLitersNumber : 1,
+        potVolumeLiters: environmentType === 'OUTDOOR_GARDEN' ? 1 : shouldUsePot ? potLitersNumber : 1,
         outdoorAreaM2,
         outdoorSoilType: placement === 'OUTDOOR' ? soilType : null,
         sunExposure: placement === 'OUTDOOR' ? sunExposure : null,
@@ -833,22 +999,7 @@ export function WizardAddPlant() {
     },
     onSuccess: async (createdPlant) => {
       const hadPlantsBeforeCreate = ((queryClient.getQueryData(['plants']) as PlantDto[] | undefined) ?? []).length > 0;
-      const backendSource = mapAppliedSourceToBackend(appliedRecommendationSource);
-      if (backendSource && environmentType !== 'SEED_START') {
-        try {
-          await apiFetch(`/api/watering/recommendation/${createdPlant.id}/apply`, {
-            method: 'POST',
-            body: JSON.stringify({
-            source: backendSource,
-            recommendedIntervalDays: finalIntervalDays,
-            recommendedWaterMl: finalWaterMl,
-            summary: aiRecommendation?.summary
-            })
-          });
-        } catch {
-          // Не блокируем создание растения, если пост-сохранение источника рекомендации не удалось.
-        }
-      }
+      setCreateErrorMessage(null);
       hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['calendar'] });
@@ -856,7 +1007,8 @@ export function WizardAddPlant() {
       setActiveTab('home');
       openPlantDetail(createdPlant.id);
     },
-    onError: () => {
+    onError: (error) => {
+      setCreateErrorMessage(error instanceof Error ? error.message : 'Не удалось создать растение.');
       hapticError();
     }
   });
@@ -866,14 +1018,13 @@ export function WizardAddPlant() {
     if (!q) {
       setHints([]);
       setPresets([]);
+      setAiSearchSuggestions([]);
+      setAiSearchSource(null);
+      setAiSearchError(null);
+      setSelectedAiSuggestion(null);
       setLastSearchHadResults(true);
       return;
     }
-
-    const timer = window.setTimeout(() => {
-      searchMutation.mutate(q);
-    }, 280);
-    return () => window.clearTimeout(timer);
   }, [searchQuery, category]);
 
   useEffect(() => {
@@ -928,10 +1079,10 @@ export function WizardAddPlant() {
         return potLitersNumber > 0 && intervalDaysNumber > 0;
       }
       if (environmentType === 'OUTDOOR_ORNAMENTAL') {
-        const needsVolume = containerType !== 'OPEN_GROUND';
+        const needsVolume = isOutdoorOrnamentalContainerMode(containerType);
         return intervalDaysNumber > 0 && (!needsVolume || potLitersNumber > 0);
       }
-      return intervalDaysNumber > 0 && heightNumber > 0 && diameterNumber > 0;
+      return intervalDaysNumber > 0 && wateringAreaM2Number > 0;
     }
     if (currentStep === 'ai') {
       return appliedRecommendationSource !== 'none';
@@ -946,13 +1097,23 @@ export function WizardAddPlant() {
     potLitersNumber,
     intervalDaysNumber,
     containerType,
-    heightNumber,
-    diameterNumber,
+    wateringAreaM2Number,
     appliedRecommendationSource
   ]);
 
+  const isRecommendationLoading = environmentType === 'SEED_START'
+    ? seedRecommendMutation.isPending
+    : aiRecommendMutation.isPending;
+  const isWizardActionBusy = createMutation.isPending
+    || searchMutation.isPending
+    || suggestProfileMutation.isPending
+    || aiRecommendMutation.isPending
+    || seedRecommendMutation.isPending
+    || haContextPreviewMutation.isPending
+    || weatherPreviewMutation.isPending;
+
   const goNext = () => {
-    if (!canGoNext) {
+    if (!canGoNext || createMutation.isPending) {
       return;
     }
     impactLight();
@@ -961,12 +1122,16 @@ export function WizardAddPlant() {
   };
 
   const goBack = () => {
+    if (createMutation.isPending) {
+      return;
+    }
     impactLight();
     setStepDirection(-1);
     setStepIndex((prev) => Math.max(prev - 1, 0));
   };
 
-  const nextStepTitle = STEPS[Math.min(stepIndex + 1, STEPS.length - 1)]?.title ?? STEPS[stepIndex].title;
+  const nextStepKey = STEPS[Math.min(stepIndex + 1, STEPS.length - 1)]?.key ?? currentStep;
+  const nextStepTitle = wizardStepTitle(nextStepKey, environmentType);
   const sectionBottomPadding = keyboardVisible
     ? `calc(env(safe-area-inset-bottom) + 10rem + ${keyboardInset}px)`
     : 'calc(env(safe-area-inset-bottom) + 7.5rem)';
@@ -985,7 +1150,7 @@ export function WizardAddPlant() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium tracking-wide text-ios-subtext">Шаг {stepIndex + 1} из {STEPS.length}</p>
-            <p className="mt-1 text-[clamp(1.2rem,4.9vw,1.5rem)] font-semibold leading-tight text-ios-text">{STEPS[stepIndex].title}</p>
+            <p className="mt-1 text-[clamp(1.2rem,4.9vw,1.5rem)] font-semibold leading-tight text-ios-text">{currentStepTitle}</p>
           </div>
           <span className="theme-surface-subtle rounded-full border px-2.5 py-1 text-[11px] text-ios-subtext">
             Далее: {nextStepTitle}
@@ -1039,6 +1204,7 @@ export function WizardAddPlant() {
                     onClick={() => {
                       selection();
                       setEnvironmentType(key);
+                      setSelectedAiSuggestion(null);
                       setAiState('idle');
                       setAiRecommendation(null);
                       setAppliedRecommendationSource('none');
@@ -1069,6 +1235,7 @@ export function WizardAddPlant() {
                     <input
                       value={searchQuery}
                       onChange={(event) => {
+                        setSelectedAiSuggestion(null);
                         setSearchQuery(event.target.value);
                         setName(event.target.value);
                       }}
@@ -1079,17 +1246,132 @@ export function WizardAddPlant() {
                   <Button
                     variant="secondary"
                     className="h-11"
-                    disabled={searchMutation.isPending}
-                    onClick={() => searchMutation.mutate(searchQuery.trim())}
+                    disabled={searchMutation.isPending || !searchQuery.trim()}
+                    onClick={() => {
+                      if (shouldThrottleAction('ai-search', 600)) {
+                        return;
+                      }
+                      searchMutation.mutate(searchQuery.trim());
+                    }}
                   >
                     {searchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Найти'}
                   </Button>
                 </div>
 
-                {searchQuery.trim() && !searchMutation.isPending && !lastSearchHadResults ? (
+                {searchMutation.isPending ? (
+                  <StatusCard
+                    tone="neutral"
+                    title="Ищем подходящие растения..."
+                    description="AI подбирает наиболее вероятные варианты и ограничивает список лучшими совпадениями."
+                  />
+                ) : null}
+
+                {!searchMutation.isPending && aiSearchSuggestions.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-ios-text">Варианты от поиска</p>
+                      <span className="theme-surface-subtle rounded-full border px-2.5 py-1 text-[11px] text-ios-subtext">
+                        {aiSearchSource === 'AI' ? 'AI' : 'Резервный список'}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {aiSearchSuggestions.slice(0, 10).map((item) => (
+                        <button
+                          key={`${item.category}:${item.name}:${item.hint ?? ''}`}
+                          type="button"
+                          className="theme-surface-2 w-full rounded-ios-button border p-3 text-left transition-colors hover:border-ios-accent/40"
+                          onClick={() => {
+                            selection();
+                            setSelectedAiSuggestion(item);
+                            setName(item.name);
+                            setSearchQuery(item.name);
+                            if (item.type && PLANT_TYPE_OPTIONS.some((option) => option.value === item.type)) {
+                              setPlantType(item.type as PlantType);
+                            }
+                            if (!suggestProfileMutation.isPending) {
+                              suggestProfileMutation.mutate(item.name);
+                            }
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-ios-text">{item.name}</p>
+                              {item.hint ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-ios-subtext">{item.hint}</p>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <span className="theme-surface-subtle rounded-full border px-2 py-0.5 text-[11px] text-ios-subtext">
+                                {categoryHintLabel(item.category)}
+                              </span>
+                              <span className="theme-surface-subtle rounded-full border px-2 py-0.5 text-[11px] text-ios-subtext">
+                                {normalizeRecommendationText(item.type)}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {!searchMutation.isPending && searchQuery.trim() && aiSearchError ? (
+                  <StatusCard
+                    tone="danger"
+                    title="Не удалось получить варианты"
+                    description="Проверьте сеть и попробуйте снова. Можно продолжить вручную или использовать фото-определение."
+                  />
+                ) : null}
+
+                {searchQuery.trim() && !searchMutation.isPending && !lastSearchHadResults && !aiSearchError ? (
                   <p className="theme-surface-2 mt-3 rounded-ios-button border p-3 text-sm text-ios-subtext">
-                    Ничего не найдено. Попробуйте другое название или используйте AI-определение по фото.
+                    Подходящие варианты не найдены. Попробуйте другое название или используйте AI-определение по фото.
                   </p>
+                ) : null}
+
+                {selectedAiSuggestion ? (
+                  <div className="theme-surface-2 mt-3 rounded-ios-button border p-3 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-ios-text">Выбран вариант: {selectedAiSuggestion.name}</p>
+                        <p className="mt-1 text-xs text-ios-subtext">
+                          {selectedAiSuggestion.hint?.trim() || 'Название подставлено в wizard и готово для следующего шага.'}
+                        </p>
+                      </div>
+                      <span className="theme-surface-subtle rounded-full border px-2 py-0.5 text-[11px] text-ios-subtext">
+                        {categoryHintLabel(selectedAiSuggestion.category)}
+                      </span>
+                    </div>
+
+                    {selectedAiSuggestion.category !== category ? (
+                      <div className="mt-3 space-y-2">
+                        <StatusCard
+                          tone="neutral"
+                          title={`AI относит вариант ближе к категории «${categoryHintLabel(selectedAiSuggestion.category)}»`}
+                          description={`Сейчас wizard остаётся в режиме «${categoryLabel(category)}». Можно продолжить как есть или вручную переключить flow.`}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="secondary"
+                            className="h-10"
+                            onClick={() => setSelectedAiSuggestion(null)}
+                          >
+                            Оставить текущий flow
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="h-10"
+                            onClick={() => {
+                              selection();
+                              setEnvironmentType(categoryToEnvironment(selectedAiSuggestion.category));
+                            }}
+                          >
+                            Переключить flow
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {presets.length ? (
@@ -1101,6 +1383,7 @@ export function WizardAddPlant() {
                         className="theme-surface-subtle rounded-full border px-3 py-1.5 text-xs"
                         onClick={() => {
                           selection();
+                          setSelectedAiSuggestion(null);
                           setName(item.name);
                           setSearchQuery(item.name);
                           suggestProfileMutation.mutate(item.name);
@@ -1121,6 +1404,7 @@ export function WizardAddPlant() {
                         className="rounded-full border border-ios-border/60 bg-transparent px-2.5 py-1 text-xs"
                         onClick={() => {
                           selection();
+                          setSelectedAiSuggestion(null);
                           setName(hint);
                           setSearchQuery(hint);
                         }}
@@ -1144,21 +1428,25 @@ export function WizardAddPlant() {
 
           {currentStep === 'conditions' ? (
             <div className="ios-blur-card space-y-4 p-4 sm:p-5">
-              <Field label="Базовый интервал полива (дней)">
-                <input
-                  type="number"
-                  min={1}
-                  value={baseIntervalDays}
-                  onChange={(event) => setBaseIntervalDays(event.target.value)}
-                  className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
-                />
-              </Field>
+              {environmentType !== 'SEED_START' ? (
+                <Field label="Базовый интервал полива (дней)">
+                  <input
+                    type="number"
+                    min={1}
+                    value={baseIntervalDays}
+                    onChange={(event) => setBaseIntervalDays(event.target.value)}
+                    className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                  />
+                </Field>
+              ) : null}
 
-              <Field label="Регион / город">
+              <Field label={environmentType === 'INDOOR' || environmentType === 'SEED_START' ? 'Регион / город' : 'Город / населённый пункт'}>
                 <input
                   value={region}
                   onChange={(event) => setRegion(event.target.value)}
-                  placeholder="Например: Санкт-Петербург"
+                  placeholder={environmentType === 'INDOOR' || environmentType === 'SEED_START'
+                    ? 'Например: Санкт-Петербург'
+                    : 'Например: Санкт-Петербург, Пушкин, Гатчина'}
                   className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                 />
               </Field>
@@ -1272,19 +1560,24 @@ export function WizardAddPlant() {
 
               {environmentType === 'OUTDOOR_ORNAMENTAL' ? (
                 <>
-                  <Field label="Где растёт">
+                  <div className="theme-surface-2 rounded-ios-button border p-3 text-sm text-ios-subtext">
+                    Декоративный outdoor-flow собирает только то, что влияет на пересыхание субстрата и режим ухода: формат выращивания, город, солнце, почву и базовый ритм полива.
+                  </div>
+
+                  <Field label="Формат выращивания">
                     <select
                       value={containerType}
                       onChange={(event) => setContainerType(event.target.value as ContainerType)}
                       className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
                     >
-                      {CONTAINER_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
+                      <option value="POT">Кашпо</option>
+                      <option value="CONTAINER">Контейнер</option>
+                      <option value="FLOWERBED">Клумба</option>
+                      <option value="OPEN_GROUND">Открытый грунт</option>
                     </select>
                   </Field>
 
-                  {containerType !== 'OPEN_GROUND' ? (
+                  {isOutdoorOrnamentalContainerMode(containerType) ? (
                     <Field label="Объём контейнера (л)">
                       <input
                         type="number"
@@ -1337,7 +1630,10 @@ export function WizardAddPlant() {
                         variant="secondary"
                         className="h-9"
                         disabled={weatherPreviewMutation.isPending || !name.trim()}
-                        onClick={() => weatherPreviewMutation.mutate()}
+                        onClick={() => {
+                          if (shouldThrottleAction('weather-preview', 1200)) return;
+                          weatherPreviewMutation.mutate();
+                        }}
                       >
                         {weatherPreviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Проверить'}
                       </Button>
@@ -1378,6 +1674,22 @@ export function WizardAddPlant() {
 
               {environmentType === 'OUTDOOR_GARDEN' ? (
                 <>
+                  <div className="theme-surface-2 rounded-ios-button border p-3 text-sm text-ios-subtext">
+                    Садовый flow собирает агрономические поля: где растёт культура, на какой стадии она сейчас, есть ли теплица, мульча, капельный полив и какая зона полива нужна растению.
+                  </div>
+
+                  <Field label="Где выращивается">
+                    <select
+                      value={containerType}
+                      onChange={(event) => setContainerType(event.target.value as ContainerType)}
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                    >
+                      <option value="OPEN_GROUND">Открытый грунт</option>
+                      <option value="FLOWERBED">Грядка</option>
+                      <option value="CONTAINER">Контейнерная грядка</option>
+                    </select>
+                  </Field>
+
                   <Field label="Стадия роста">
                     <select
                       value={growthStage}
@@ -1390,26 +1702,20 @@ export function WizardAddPlant() {
                     </select>
                   </Field>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Высота (см)">
-                      <input
-                        type="number"
-                        min={10}
-                        value={heightCm}
-                        onChange={(event) => setHeightCm(event.target.value)}
-                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
-                      />
-                    </Field>
-                    <Field label="Диаметр (см)">
-                      <input
-                        type="number"
-                        min={10}
-                        value={diameterCm}
-                        onChange={(event) => setDiameterCm(event.target.value)}
-                        className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
-                      />
-                    </Field>
-                  </div>
+                  <Field label="Зона полива / площадь ухода (м²)">
+                    <input
+                      type="number"
+                      min={0.05}
+                      step={0.05}
+                      value={wateringAreaM2}
+                      onChange={(event) => setWateringAreaM2(event.target.value)}
+                      className="theme-field h-11 w-full rounded-ios-button border px-3 text-base outline-none"
+                    />
+                  </Field>
+
+                  <p className="text-xs text-ios-subtext">
+                    Укажите примерную площадь, которую реально проливаете вокруг культуры. Это заменяет разрозненные поля высоты и диаметра.
+                  </p>
 
                   <ToggleRow label="Теплица" checked={greenhouse} onChange={setGreenhouse} />
                   <ToggleRow label="Мульча" checked={mulched} onChange={setMulched} />
@@ -1480,7 +1786,10 @@ export function WizardAddPlant() {
                     variant="secondary"
                     className="h-11 w-full"
                     disabled={!name.trim() || haContextPreviewMutation.isPending}
-                    onClick={() => haContextPreviewMutation.mutate()}
+                    onClick={() => {
+                      if (shouldThrottleAction('ha-preview', 1200)) return;
+                      haContextPreviewMutation.mutate();
+                    }}
                   >
                     {haContextPreviewMutation.isPending ? (
                       <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Проверяем HA контекст…</span>
@@ -1502,9 +1811,10 @@ export function WizardAddPlant() {
           {currentStep === 'ai' ? (
             <div className="ios-blur-card space-y-4 p-4 sm:p-5">
               <Button
-                className="h-12 w-full"
-                disabled={(environmentType === 'SEED_START' ? seedRecommendMutation.isPending : aiRecommendMutation.isPending) || !name.trim()}
+                className="h-auto min-h-[44px] w-full whitespace-normal break-words px-3 py-2 text-center leading-tight"
+                disabled={isRecommendationLoading || !name.trim()}
                 onClick={() => {
+                  if (shouldThrottleAction('ai-preview', 1200)) return;
                   if (environmentType === 'SEED_START') {
                     seedRecommendMutation.mutate();
                     return;
@@ -1595,7 +1905,7 @@ export function WizardAddPlant() {
                   />
                   <Button
                     variant="secondary"
-                    className="h-11 w-full"
+                    className="h-auto min-h-[44px] w-full whitespace-normal break-words px-3 py-2 text-center leading-tight"
                     onClick={() => {
                       if (environmentType === 'SEED_START') {
                         const fallback: SeedWizardRecommendation = {
@@ -1638,7 +1948,7 @@ export function WizardAddPlant() {
                       const fallback = buildFallbackRecommendation(
                         environmentType,
                         intervalDaysNumber,
-                        estimateDefaultWaterMl(environmentType, potLitersNumber, heightNumber)
+                        estimateDefaultWaterMl(environmentType, potLitersNumber, wateringAreaM2Number)
                       );
                       const fallbackCycle = buildCycleDates(fallback.recommendedIntervalDays).map((date) => date.toISOString().slice(0, 10));
                       setAiRecommendation(fallback);
@@ -1667,9 +1977,10 @@ export function WizardAddPlant() {
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant="secondary"
-                    className="h-11 w-full"
-                    disabled={(environmentType === 'SEED_START' ? seedRecommendMutation.isPending : aiRecommendMutation.isPending) || !name.trim()}
+                    className="h-auto min-h-[44px] w-full whitespace-normal break-words px-3 py-2 text-center leading-tight text-sm"
+                    disabled={isRecommendationLoading || !name.trim()}
                     onClick={() => {
+                      if (shouldThrottleAction('ai-preview-repeat', 1200)) return;
                       if (environmentType === 'SEED_START') {
                         seedRecommendMutation.mutate();
                         return;
@@ -1681,7 +1992,8 @@ export function WizardAddPlant() {
                   </Button>
                   <Button
                     variant="secondary"
-                    className="h-11 w-full"
+                    className="h-auto min-h-[44px] w-full whitespace-normal break-words px-3 py-2 text-center leading-tight text-sm"
+                    disabled={environmentType === 'SEED_START'}
                     onClick={() => {
                       if (environmentType === 'SEED_START') {
                         return;
@@ -1701,7 +2013,7 @@ export function WizardAddPlant() {
                   className="h-11 w-full"
                   onClick={() => {
                     setFinalIntervalDays(clamp(aiRecommendation.recommendedIntervalDays || intervalDaysNumber, 1, 60));
-                    setFinalWaterMl(clamp(aiRecommendation.recommendedWaterMl || estimateDefaultWaterMl(environmentType, potLitersNumber, heightNumber), 50, 10_000));
+                    setFinalWaterMl(clamp(aiRecommendation.recommendedWaterMl || estimateDefaultWaterMl(environmentType, potLitersNumber, wateringAreaM2Number), 50, 10_000));
                     const mappedSource = mapPreviewSourceToApplied(latestRecommendationPreview?.source);
                     if (mappedSource !== 'none') {
                       setAppliedRecommendationSource(mappedSource);
@@ -1776,7 +2088,9 @@ export function WizardAddPlant() {
                 tone="neutral"
                 title="Выбранный источник для следующего шага"
                 description={appliedRecommendationSource === 'none'
-                  ? 'Источник ещё не применён. Нажмите «Применить рекомендации» или «Применить вручную».'
+                  ? environmentType === 'SEED_START'
+                    ? 'Источник ещё не применён. Нажмите «Применить рекомендации», чтобы сохранить режим проращивания.'
+                    : 'Источник ещё не применён. Нажмите «Применить рекомендации» или «Применить вручную».'
                   : `Применён источник: ${sourceBadgeLabel(appliedRecommendationSource)}.`}
               />
             </div>
@@ -1843,6 +2157,32 @@ export function WizardAddPlant() {
                 </>
               ) : (
                 <>
+                  <div className="theme-surface-2 rounded-ios-button border p-3">
+                    <p className="text-sm font-medium text-ios-text">Outdoor summary</p>
+                    <p className="mt-1 text-xs text-ios-subtext">
+                      {outdoorReviewLead(environmentType, weatherContextPreview)}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <InfoChip label="Растение / культура" value={name || '—'} />
+                      <InfoChip label="Локация" value={region.trim() || 'Не указана'} />
+                      <InfoChip label="Источник" value={sourceBadgeLabel(appliedRecommendationSource)} />
+                      <InfoChip
+                        label="Ключевые условия"
+                        value={outdoorConditionSummary(environmentType, {
+                          containerType,
+                          soilType,
+                          sunExposure,
+                          growthStage,
+                          greenhouse,
+                          mulched,
+                          dripIrrigation,
+                          wateringAreaM2: wateringAreaM2Number,
+                          potLitersNumber
+                        })}
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Интервал (дней)">
                       <input
@@ -1869,13 +2209,11 @@ export function WizardAddPlant() {
 
                   <div className="theme-surface-2 rounded-ios-button border p-3">
                     <p className="text-sm font-medium">{aiRecommendation?.summary ?? 'Используется базовый расчёт.'}</p>
-                    {aiRecommendation?.reasoning?.length ? (
-                      <ul className="mt-2 space-y-1 text-xs text-ios-subtext">
-                        {aiRecommendation.reasoning.map((item, index) => (
-                          <li key={`${item}-${index}`}>• {normalizeRecommendationText(item)}</li>
-                        ))}
-                      </ul>
-                    ) : null}
+                    <p className="mt-1 text-xs text-ios-subtext">
+                      {environmentType === 'OUTDOOR_ORNAMENTAL'
+                        ? 'Фокус на формате выращивания, солнце, почве и погоде.'
+                        : 'Фокус на стадии роста, площади ухода, укрытии и погоде.'}
+                    </p>
                     {aiRecommendation?.warnings?.length ? (
                       <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">
                         {aiRecommendation.warnings.map((item, index) => (
@@ -1902,11 +2240,22 @@ export function WizardAddPlant() {
                 </>
               )}
 
+              {createErrorMessage ? (
+                <StatusCard
+                  tone="danger"
+                  title="Не удалось создать растение"
+                  description={createErrorMessage}
+                />
+              ) : null}
+
               <motion.div whileTap={{ scale: 0.985 }}>
                 <Button
                   className="h-12 w-full active:scale-[0.99] transition-transform"
                   disabled={createMutation.isPending || !name.trim()}
-                  onClick={() => createMutation.mutate()}
+                  onClick={() => {
+                    if (shouldThrottleAction('create-plant', 1500)) return;
+                    createMutation.mutate();
+                  }}
                 >
                   <Check className="mr-2 h-4 w-4" />
                   {createMutation.isPending ? 'Создаём растение...' : 'Добавить растение'}
@@ -1926,14 +2275,14 @@ export function WizardAddPlant() {
       >
         <div className="flex items-center gap-2">
         <motion.div whileTap={{ scale: 0.985 }} className="flex-1">
-        <Button variant="secondary" className="h-12 w-full text-base" disabled={stepIndex === 0} onClick={goBack}>
+        <Button variant="secondary" className="h-12 w-full text-base" disabled={stepIndex === 0 || isWizardActionBusy} onClick={goBack}>
           <ChevronLeft className="mr-1 h-4 w-4" />
           Назад
         </Button>
         </motion.div>
         {currentStep !== 'review' ? (
           <motion.div whileTap={{ scale: 0.985 }} className="flex-1">
-          <Button className="h-12 w-full text-base" disabled={!canGoNext} onClick={goNext}>
+          <Button className="h-12 w-full text-base" disabled={!canGoNext || isWizardActionBusy} onClick={goNext}>
             Далее
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
@@ -2034,6 +2383,97 @@ function SensorSelect({
   );
 }
 
+function recommendationSourceTone(source: WizardRecommendation['source']) {
+  switch (source) {
+    case 'ai':
+      return { label: 'AI', className: 'theme-badge-success' };
+    case 'hybrid':
+      return { label: 'AI + погода', className: 'theme-badge-info' };
+    case 'weather-adjusted':
+      return { label: 'С учётом погоды', className: 'theme-badge-info' };
+    case 'manual':
+      return { label: 'Вручную', className: 'theme-badge-warning' };
+    case 'base-profile':
+      return { label: 'Профиль растения', className: 'theme-surface-subtle text-ios-text' };
+    case 'fallback':
+    default:
+      return { label: 'Резервный режим', className: 'theme-badge-warning' };
+  }
+}
+
+function outdoorLeadSummary(environmentType: EnvironmentType): string {
+  switch (environmentType) {
+    case 'OUTDOOR_ORNAMENTAL':
+      return 'Декоративный outdoor-режим: важны формат выращивания, солнце, почва и погодный фон.';
+    case 'OUTDOOR_GARDEN':
+      return 'Garden-режим: учитываются стадия роста, укрытие, площадь ухода и агрономические модификаторы.';
+    default:
+      return 'Рекомендация собрана из текущих условий растения.';
+  }
+}
+
+function outdoorFactorSummary(
+  environmentType: EnvironmentType,
+  recommendation: WizardRecommendation,
+  weatherContext?: WeatherContextPreviewDto | null
+): string {
+  if (environmentType === 'OUTDOOR_ORNAMENTAL') {
+    return weatherContext?.available
+      ? `Фокус на формате выращивания и погоде: ${weatherContext.city || weatherContext.region || 'локация'} · ${weatherContext.temperatureNowC ?? '—'}°C · прогноз осадков ${weatherContext.precipitationForecastMm ?? '—'} мм.`
+      : 'Фокус на формате выращивания, солнце и почве; погодный слой сейчас не подтвердился.';
+  }
+  if (environmentType === 'OUTDOOR_GARDEN') {
+    return weatherContext?.available
+      ? `Фокус на стадии роста и погоде: ${weatherContext.city || weatherContext.region || 'локация'} · max ${weatherContext.maxTemperatureNext3DaysC ?? '—'}°C · прогноз осадков ${weatherContext.precipitationForecastMm ?? '—'} мм.`
+      : 'Фокус на стадии роста, площади ухода и агрономических условиях; погодный слой сейчас не подтвердился.';
+  }
+  return recommendation.summary;
+}
+
+function outdoorReviewLead(
+  environmentType: EnvironmentType,
+  weatherContext?: WeatherContextPreviewDto | null
+): string {
+  if (environmentType === 'OUTDOOR_ORNAMENTAL') {
+    return weatherContext?.available
+      ? 'Декоративный outdoor-сценарий: финальная рекомендация уже собрана с учётом наружных условий.'
+      : 'Декоративный outdoor-сценарий: итог опирается на формат выращивания, солнце и почву, без подтверждённого погодного слоя.';
+  }
+  if (environmentType === 'OUTDOOR_GARDEN') {
+    return weatherContext?.available
+      ? 'Садовый сценарий: итог учитывает культуру, стадию, площадь ухода и погодный контекст.'
+      : 'Садовый сценарий: итог опирается на агрономические параметры, но погодный слой сейчас не подтвердился.';
+  }
+  return 'Итоговая рекомендация готова к сохранению.';
+}
+
+function outdoorConditionSummary(
+  environmentType: EnvironmentType,
+  options: {
+    containerType: ContainerType;
+    soilType: SoilType;
+    sunExposure: SunExposure;
+    growthStage: GrowthStage;
+    greenhouse: boolean;
+    mulched: boolean;
+    dripIrrigation: boolean;
+    wateringAreaM2: number;
+    potLitersNumber: number;
+  }
+): string {
+  if (environmentType === 'OUTDOOR_ORNAMENTAL') {
+    const growingMode = options.containerType === 'POT'
+      ? `кашпо ${options.potLitersNumber.toFixed(1)} л`
+      : options.containerType === 'CONTAINER'
+        ? `контейнер ${options.potLitersNumber.toFixed(1)} л`
+        : options.containerType === 'FLOWERBED'
+          ? 'клумба'
+          : 'открытый грунт';
+    return `${growingMode} · ${environmentLabel('OUTDOOR_ORNAMENTAL')} · ${sunExposureLabel(options.sunExposure)} · ${soilTypeLabel(options.soilType)}`;
+  }
+  return `${growthStageLabel(options.growthStage)} · ${options.greenhouse ? 'теплица' : containerTypeLabel(options.containerType)} · ${sunExposureLabel(options.sunExposure)} · ${soilTypeLabel(options.soilType)} · зона ${options.wateringAreaM2.toFixed(2)} м²`;
+}
+
 function RecommendationCard({
   recommendation,
   sensorContext,
@@ -2056,12 +2496,12 @@ function RecommendationCard({
   weatherUsed?: boolean;
 }) {
   const isFallback = recommendation.source === 'fallback' || recommendation.source === 'base-profile';
-  const badge =
-    recommendation.source === 'ai' ? 'AI' :
-            recommendation.source === 'weather-adjusted' ? 'С учётом погоды' :
-              recommendation.source === 'hybrid' ? 'AI + погода' :
-                recommendation.source === 'manual' ? 'Вручную' :
-                  recommendation.source === 'base-profile' ? 'Профиль растения' : 'Резервный режим';
+  const sourceTone = recommendationSourceTone(recommendation.source);
+  const weatherLabel = weatherUsed
+    ? weatherContext?.fallbackUsed
+      ? 'fallback weather'
+      : 'погода учтена'
+    : 'без погодного слоя';
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -2074,34 +2514,45 @@ function RecommendationCard({
           : 'theme-banner-success'
       )}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">
-          {isFallback ? 'Резервные рекомендации' : 'Рекомендации'}
-        </p>
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
-            {badge}
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">
+            {environmentType === 'OUTDOOR_GARDEN' ? 'Garden recommendation' : environmentType === 'OUTDOOR_ORNAMENTAL' ? 'Outdoor ornamental recommendation' : 'Рекомендации'}
+          </p>
+          <p className="mt-1 text-xs text-ios-subtext">{outdoorLeadSummary(environmentType)}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', sourceTone.className)}>
+            {sourceTone.label}
           </span>
-          <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px]">
+          <span className="theme-surface-subtle rounded-full border px-2 py-0.5 text-[11px]">
             {environmentLabel(recommendation.profile)}
           </span>
         </div>
       </div>
-      <p className="text-sm">{recommendation.summary}</p>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-        <div className="theme-surface-subtle rounded-ios-button border p-2">
-          Интервал: <b>{recommendation.recommendedIntervalDays} дн.</b>
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="theme-surface-subtle rounded-ios-button border p-3">
+          <p className="text-ios-subtext">Рекомендованный интервал</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{recommendation.recommendedIntervalDays} дн.</p>
         </div>
-        <div className="theme-surface-subtle rounded-ios-button border p-2">
-          Объём: <b>{recommendation.recommendedWaterMl} мл</b>
+        <div className="theme-surface-subtle rounded-ios-button border p-3">
+          <p className="text-ios-subtext">Рекомендованный объём</p>
+          <p className="mt-1 text-base font-semibold text-ios-text">{recommendation.recommendedWaterMl} мл</p>
         </div>
       </div>
+
+      <div className="theme-surface-subtle mt-2 rounded-ios-button border p-3 text-sm">
+        <p className="font-medium text-ios-text">{recommendation.summary}</p>
+        <p className="mt-1 text-xs text-ios-subtext">{outdoorFactorSummary(environmentType, recommendation, weatherContext)}</p>
+      </div>
+
       <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
         <span className="theme-surface-subtle rounded-full border px-2 py-0.5">
           Уверенность: {confidence != null ? `${Math.round(confidence * 100)}%` : 'н/д'}
         </span>
         <span className="theme-surface-subtle rounded-full border px-2 py-0.5">
-          Погода: {weatherUsed ? 'учтена' : 'не основной фактор'}
+          Погода: {weatherLabel}
         </span>
       </div>
       {sensorContext?.available ? (
@@ -2125,7 +2576,9 @@ function RecommendationCard({
       <div className="theme-surface-subtle mt-2 rounded-ios-button border p-2 text-xs">
         Почему такой режим: {environmentType === 'INDOOR'
           ? 'учтены параметры горшка, тип растения, размещение и сезон.'
-          : 'учтены осадки, температура, влажность и тип почвы.'}
+          : environmentType === 'OUTDOOR_ORNAMENTAL'
+            ? 'учтены формат выращивания, солнце, почва и наружная погода.'
+            : 'учтены стадия роста, площадь ухода, укрытие, агрономические модификаторы и погода.'}
       </div>
       {recommendation.reasoning?.length ? (
         <ul className="mt-2 space-y-1 text-xs">

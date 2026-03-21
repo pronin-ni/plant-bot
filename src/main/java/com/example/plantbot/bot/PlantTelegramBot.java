@@ -8,6 +8,7 @@ import com.example.plantbot.service.LearningService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PlantService;
+import com.example.plantbot.service.RecommendationSnapshotService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
@@ -72,6 +73,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
   private final WeatherService weatherService;
   private final LearningService learningService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
+  private final RecommendationSnapshotService recommendationSnapshotService;
 
   @Value("${bot.token}")
   private String botToken;
@@ -786,7 +788,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     PlantType type = state.getType() == null ? PlantType.DEFAULT : state.getType();
     PlantPlacement placement = state.getPlacement() == null ? PlantPlacement.INDOOR : state.getPlacement();
     double potVolume = state.getPotVolume() == null ? 1.0 : state.getPotVolume();
-    Plant plant = plantService.addPlant(
+    Plant plant = plantService.buildPlant(
         user,
         state.getName(),
         potVolume,
@@ -803,6 +805,7 @@ public class PlantTelegramBot extends TelegramLongPollingBot {
     plant.setLookupSource(state.getLookupSource());
     plant.setLookupAt(Instant.now());
     plant = plantService.save(plant);
+    recommendationSnapshotService.saveInitialOnCreate(plant);
     state.reset();
     sendText(chatId, "✅ Растение \"" + plant.getName() + "\" добавлено.");
     log.info("Plant created: user={} plantId={} name='{}' interval={} placement={} pot={} area={} type={}",

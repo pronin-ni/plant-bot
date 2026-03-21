@@ -67,7 +67,7 @@ export function PlatformBottomNav() {
             >
               <Icon className="h-5 w-5 max-[359px]:h-[18px] max-[359px]:w-[18px]" />
             </motion.span>
-            <span className="relative z-10 mt-1 leading-none whitespace-nowrap max-[359px]:mt-0.5 max-[359px]:text-[9px]">
+            <span className="relative z-10 mt-1 leading-none whitespace-nowrap max-[359px]:mt-0.5 max-[359px]:text-[8px]">
               {tab.title}
             </span>
           </button>

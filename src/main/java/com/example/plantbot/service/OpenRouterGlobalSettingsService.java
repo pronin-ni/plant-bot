@@ -110,6 +110,18 @@ public class OpenRouterGlobalSettingsService {
       }
     }
 
+    if (request != null && request.textModelCheckIntervalMinutes() != null
+        && !Objects.equals(settings.getTextModelCheckIntervalMinutes(), request.textModelCheckIntervalMinutes())) {
+      settings.setTextModelCheckIntervalMinutes(normalizeCheckInterval(request.textModelCheckIntervalMinutes()));
+      changedFields.add("textModelCheckIntervalMinutes");
+    }
+
+    if (request != null && request.photoModelCheckIntervalMinutes() != null
+        && !Objects.equals(settings.getPhotoModelCheckIntervalMinutes(), request.photoModelCheckIntervalMinutes())) {
+      settings.setPhotoModelCheckIntervalMinutes(normalizeCheckInterval(request.photoModelCheckIntervalMinutes()));
+      changedFields.add("photoModelCheckIntervalMinutes");
+    }
+
     GlobalSettings saved = globalSettingsRepository.save(settings);
     ResolvedModels resolved = resolveModels(saved);
     return new ModelsUpdateResult(
@@ -198,6 +210,16 @@ public class OpenRouterGlobalSettingsService {
       cleaned = tokenized[0].trim();
     }
     return cleaned.isEmpty() ? null : cleaned;
+  }
+
+  private Integer normalizeCheckInterval(Integer minutes) {
+    if (minutes == null) {
+      return null;
+    }
+    if (minutes <= 0) {
+      return 0;
+    }
+    return Math.min(minutes, 24 * 60);
   }
 
   public record ResolvedModels(

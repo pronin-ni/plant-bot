@@ -29,11 +29,15 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,6 +57,7 @@ public class OpenRouterPlantAdvisorService {
   private final OpenRouterCacheRepository openRouterCacheRepository;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
+  private final PerformanceMetricsService performanceMetricsService;
 
   @Value("${openrouter.model:}")
   private String model;
@@ -89,6 +94,23 @@ public class OpenRouterPlantAdvisorService {
 
   @Value("${openrouter.cache-negative-ttl-seconds:90}")
   private int negativeCacheTtlSeconds;
+
+  @Value("${openrouter.resilience.max-concurrent-requests:8}")
+  private int maxConcurrentRequests;
+
+  @Value("${openrouter.resilience.acquire-timeout-ms:250}")
+  private long acquireTimeoutMs;
+
+  @Value("${openrouter.resilience.circuit-breaker-failure-threshold:5}")
+  private int circuitBreakerFailureThreshold;
+
+  @Value("${openrouter.resilience.circuit-breaker-open-seconds:90}")
+  private long circuitBreakerOpenSeconds;
+
+  private volatile Semaphore requestPermits;
+  private volatile int requestPermitCapacity = -1;
+  private final AtomicInteger consecutiveFailures = new AtomicInteger();
+  private volatile Instant blockedUntil;
 
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     return suggestIntervalDays(null, plantName);
@@ -408,6 +430,59 @@ public class OpenRouterPlantAdvisorService {
     return Optional.empty();
   }
 
+  public Optional<PlantSearchSuggestions> suggestPlantSearch(User user, String query, PlantCategory category) {
+    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
+    if (apiKey == null || apiKey.isBlank() || query == null || query.isBlank()) {
+      return Optional.empty();
+    }
+
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", plantSearchSystemPrompt()),
+            Map.of("role", "user", "content", plantSearchUserPrompt(query, category))
+        ));
+        if (body == null) {
+          continue;
+        }
+
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          continue;
+        }
+
+        JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
+        JsonNode items = json.path("suggestions");
+        if (!items.isArray()) {
+          continue;
+        }
+
+        List<PlantSearchSuggestion> suggestions = new ArrayList<>();
+        for (JsonNode item : items) {
+          String name = normalizeAdviceNote(item.path("name").asText(""));
+          if (name.isBlank()) {
+            continue;
+          }
+          PlantCategory parsedCategory = parsePlantCategory(item.path("category").asText(""), category);
+          PlantType parsedType = parsePlantType(item.path("type").asText(""));
+          String hint = normalizeAdviceNote(item.path("hint").asText(""));
+          suggestions.add(new PlantSearchSuggestion(name, parsedCategory, parsedType, hint));
+          if (suggestions.size() >= 10) {
+            break;
+          }
+        }
+
+        if (!suggestions.isEmpty()) {
+          return Optional.of(new PlantSearchSuggestions("AI", suggestions));
+        }
+      } catch (Exception ex) {
+        log.warn("OpenRouter plant search failed for '{}'. model='{}': {}", preview(query), modelToUse, ex.getMessage());
+      }
+    }
+
+    return Optional.empty();
+  }
+
   public Optional<ChatAnswer> answerGardeningQuestion(String question) {
     return answerGardeningQuestion(null, question, null);
   }
@@ -487,6 +562,15 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
+    if (isCircuitOpen()) {
+      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "short-circuited", 0);
+      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "circuit_open");
+      throw new IllegalStateException("OpenRouter temporarily disabled after repeated failures");
+    }
+
+    Semaphore permits = getRequestPermits();
+    boolean acquired = false;
+    long startedAt = System.nanoTime();
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(apiKey);
@@ -503,12 +587,81 @@ public class OpenRouterPlantAdvisorService {
         "messages", messages
     );
 
-    ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-        baseUrl,
-        new HttpEntity<>(request, headers),
-        JsonNode.class
-    );
-    return response.getBody();
+    try {
+      acquired = permits.tryAcquire(Math.max(1L, acquireTimeoutMs), TimeUnit.MILLISECONDS);
+      if (!acquired) {
+        performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "shed", System.nanoTime() - startedAt);
+        performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "shed_over_capacity");
+        throw new IllegalStateException("OpenRouter is overloaded, try again later");
+      }
+      ResponseEntity<JsonNode> response = restTemplate.postForEntity(
+          baseUrl,
+          new HttpEntity<>(request, headers),
+          JsonNode.class
+      );
+      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "success", System.nanoTime() - startedAt);
+      consecutiveFailures.set(0);
+      blockedUntil = null;
+      return response.getBody();
+    } catch (InterruptedException ex) {
+      Thread.currentThread().interrupt();
+      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "interrupted", System.nanoTime() - startedAt);
+      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "interrupted");
+      throw new IllegalStateException("OpenRouter request interrupted", ex);
+    } catch (Exception ex) {
+      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "error", System.nanoTime() - startedAt);
+      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", classifyOpenRouterFailure(ex));
+      registerFailure();
+      throw ex;
+    } finally {
+      if (acquired) {
+        permits.release();
+      }
+    }
+  }
+
+  private Semaphore getRequestPermits() {
+    Semaphore local = requestPermits;
+    int safeMax = Math.max(1, maxConcurrentRequests);
+    if (local == null || requestPermitCapacity != safeMax) {
+      synchronized (this) {
+        if (requestPermits == null || requestPermitCapacity != safeMax) {
+          requestPermits = new Semaphore(safeMax, true);
+          requestPermitCapacity = safeMax;
+        }
+        local = requestPermits;
+      }
+    }
+    return local;
+  }
+
+  private boolean isCircuitOpen() {
+    Instant until = blockedUntil;
+    return until != null && until.isAfter(Instant.now());
+  }
+
+  private void registerFailure() {
+    int failures = consecutiveFailures.incrementAndGet();
+    if (failures >= Math.max(1, circuitBreakerFailureThreshold)) {
+      blockedUntil = Instant.now().plus(Duration.ofSeconds(Math.max(5L, circuitBreakerOpenSeconds)));
+    }
+  }
+
+  private String classifyOpenRouterFailure(Exception ex) {
+    String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+    if (message.contains("429") || message.contains("too many requests")) {
+      return "rate_limit";
+    }
+    if (message.contains("401") || message.contains("403") || message.contains("unauthorized") || message.contains("forbidden")) {
+      return "auth";
+    }
+    if (message.contains("timeout") || message.contains("timed out") || message.contains("read timed out")) {
+      return "timeout";
+    }
+    if (message.contains("connection") || message.contains("i/o error") || message.contains("network")) {
+      return "network";
+    }
+    return ex.getClass().getSimpleName();
   }
 
   private String extractContent(JsonNode body) {
@@ -647,10 +800,48 @@ public class OpenRouterPlantAdvisorService {
     );
   }
 
+  private String plantSearchSystemPrompt() {
+    return """
+        Ты помощник по поиску растений.
+        Верни только JSON без markdown и текста вне JSON в формате:
+        {
+          "suggestions": [
+            {
+              "name": "Монстера",
+              "category": "HOME|OUTDOOR_DECORATIVE|OUTDOOR_GARDEN|SEED_START",
+              "type": "SUCCULENT|TROPICAL|FERN|CONIFER|DEFAULT",
+              "hint": "короткая подсказка на русском"
+            }
+          ]
+        }
+        Правила:
+        - максимум 10 вариантов
+        - варианты отсортированы от наиболее вероятного к менее вероятному
+        - не возвращай дубликаты
+        - hint короткий, до 80 символов
+        - category и type должны быть валидными enum значениями
+        - если уверенных вариантов нет, верни пустой массив suggestions
+        """;
+  }
+
+  private String plantSearchUserPrompt(String query, PlantCategory category) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Найди наиболее вероятные растения по запросу пользователя.\n");
+    builder.append("Запрос: ").append(query.trim()).append('\n');
+    if (category != null) {
+      builder.append("Предпочтительная категория wizard: ").append(category.name()).append('\n');
+    }
+    builder.append("Нужны короткие и практичные варианты для mobile UI. Верни только лучшие совпадения.");
+    return builder.toString();
+  }
+
 
   private String wizardRecommendSystemPrompt() {
     return """
         Ты эксперт по поливу растений в indoor/outdoor средах.
+        Для outdoor ornamental опирайся на формат выращивания, объём контейнера, солнце, почву и погодный контекст.
+        Для outdoor garden опирайся на культуру, стадию роста, теплицу/открытый грунт, мульчу, капельный полив, площадь ухода и погодный контекст.
+        Если каких-то факторов нет, не выдумывай их и не ссылайся на них в reasoning.
         Верни только JSON без markdown и текста вне JSON в формате:
         {
           "recommended_interval_days": 5,
@@ -664,6 +855,9 @@ public class OpenRouterPlantAdvisorService {
         - recommended_water_ml: целое число [50..10000]
         - reasoning: 2..5 коротких пунктов на русском
         - warnings: 0..3 коротких пунктов на русском
+        - summary должен коротко объяснять, почему режим именно такой
+        - outdoor garden: обязательно отражай влияние стадии, теплицы/укрытия, мульчи, капельного полива и площади ухода, если эти данные переданы
+        - outdoor ornamental: обязательно отражай влияние формата выращивания и солнца, если эти данные переданы
         - не возвращай пустые строки
         """;
   }
@@ -720,8 +914,9 @@ public class OpenRouterPlantAdvisorService {
       builder.append("Погода: ").append(input.weatherSummary()).append('\n');
     }
     if (input.region() != null && !input.region().isBlank()) {
-      builder.append("Город/регион: ").append(input.region()).append('\n');
+      builder.append("Город / населённый пункт: ").append(input.region()).append('\n');
     }
+    builder.append("Учитывай, что это декоративный сценарий ухода: важны пересыхание субстрата, формат выращивания, солнце и наружные условия.\n");
     builder.append("Верни конкретный интервал полива и объем воды.");
     return builder.toString();
   }
@@ -730,6 +925,9 @@ public class OpenRouterPlantAdvisorService {
     StringBuilder builder = new StringBuilder();
     builder.append("Рассчитай режим полива для садовой культуры.\n");
     builder.append("Культура: ").append(input.plantName().trim()).append('\n');
+    if (input.containerType() != null && !input.containerType().isBlank()) {
+      builder.append("Где выращивается: ").append(input.containerType()).append('\n');
+    }
     if (input.growthStage() != null && !input.growthStage().isBlank()) {
       builder.append("Стадия роста: ").append(input.growthStage()).append('\n');
     }
@@ -745,15 +943,19 @@ public class OpenRouterPlantAdvisorService {
     if (input.dripIrrigation() != null) {
       builder.append("Капельный полив: ").append(input.dripIrrigation() ? "да" : "нет").append('\n');
     }
+    if (input.outdoorAreaM2() != null && input.outdoorAreaM2() > 0) {
+      builder.append("Зона полива / площадь ухода: ").append(safeNum(input.outdoorAreaM2(), 2)).append(" м²\n");
+    }
     if (input.weatherSummary() != null && !input.weatherSummary().isBlank()) {
       builder.append("Погода: ").append(input.weatherSummary()).append('\n');
     }
     if (input.region() != null && !input.region().isBlank()) {
-      builder.append("Город/регион: ").append(input.region()).append('\n');
+      builder.append("Город / населённый пункт: ").append(input.region()).append('\n');
     }
     if (input.baseIntervalDays() != null && input.baseIntervalDays() > 0) {
       builder.append("Базовый интервал (пользователь): ").append(input.baseIntervalDays()).append(" дней\n");
     }
+    builder.append("Это агрономический сценарий: обязательно учти стадию роста, укрытие, мульчу, капельный полив и площадь ухода, если они указаны.\n");
     builder.append("Верни конкретный интервал полива и объем воды.");
     return builder.toString();
   }
@@ -865,6 +1067,17 @@ public class OpenRouterPlantAdvisorService {
       return PlantType.valueOf(value.trim().toUpperCase());
     } catch (Exception ignored) {
       return PlantType.DEFAULT;
+    }
+  }
+
+  private PlantCategory parsePlantCategory(String value, PlantCategory fallback) {
+    if (value == null || value.isBlank()) {
+      return fallback == null ? PlantCategory.HOME : fallback;
+    }
+    try {
+      return PlantCategory.valueOf(value.trim().toUpperCase());
+    } catch (Exception ignored) {
+      return fallback == null ? PlantCategory.HOME : fallback;
     }
   }
 
@@ -1199,8 +1412,7 @@ public class OpenRouterPlantAdvisorService {
                                      PlantType plantType,
                                      Integer baseIntervalDays,
                                      Double potVolumeLiters,
-                                     Double heightCm,
-                                     Double diameterCm,
+                                     Double outdoorAreaM2,
                                      String containerType,
                                      String growthStage,
                                      Boolean greenhouse,
@@ -1233,5 +1445,15 @@ public class OpenRouterPlantAdvisorService {
                                        String summary,
                                        List<String> reasoning,
                                        List<String> warnings) {
+  }
+
+  public record PlantSearchSuggestion(String name,
+                                      PlantCategory category,
+                                      PlantType type,
+                                      String hint) {
+  }
+
+  public record PlantSearchSuggestions(String source,
+                                       List<PlantSearchSuggestion> suggestions) {
   }
 }

@@ -8,7 +8,14 @@ import lombok.Setter;
 import java.time.Instant;
 
 @Entity
-@Table(name = "openrouter_cache")
+@Table(
+    name = "openrouter_cache",
+    indexes = {
+        @Index(name = "idx_openrouter_cache_namespace", columnList = "namespace"),
+        @Index(name = "idx_openrouter_cache_expires", columnList = "expires_at"),
+        @Index(name = "idx_openrouter_cache_updated", columnList = "updated_at")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

@@ -157,6 +157,11 @@ function sortPlants(plants: PlantDto[], mode: SortMode): PlantDto[] {
   return copy;
 }
 
+function mergeWateredPlant(plants: PlantDto[] | undefined, updatedPlant: PlantDto): PlantDto[] {
+  const items = plants ?? [];
+  return items.map((plant) => (plant.id === updatedPlant.id ? { ...plant, ...updatedPlant } : plant));
+}
+
 function filterByCategory(plants: PlantDto[], filter: PlantCategoryFilter): PlantDto[] {
   if (filter === 'ALL') {
     return plants;
@@ -309,8 +314,9 @@ export function PlantsList() {
 
   const waterMutation = useMutation({
     mutationFn: (plantId: number) => waterPlant(plantId),
-    onSuccess: () => {
+    onSuccess: (updatedPlant) => {
       hapticSuccess();
+      queryClient.setQueryData<PlantDto[]>(['plants'], (current) => mergeWateredPlant(current, updatedPlant));
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
     },
     onError: () => {
@@ -460,6 +466,7 @@ export function PlantsList() {
             <button
               type="button"
               className="theme-surface-subtle touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border text-ios-subtext transition-transform duration-150 active:scale-95"
+              disabled={plantsQuery.isFetching || weatherQuery.isFetching}
               onClick={() => {
                 impactLight();
                 void refreshAll();

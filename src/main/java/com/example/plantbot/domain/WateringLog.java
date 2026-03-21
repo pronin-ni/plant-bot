@@ -9,7 +9,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "watering_log")
+@Table(
+    name = "watering_log",
+    indexes = {
+        @Index(name = "idx_watering_log_plant_watered", columnList = "plant_id, watered_at"),
+        @Index(name = "idx_watering_log_created", columnList = "created_at")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

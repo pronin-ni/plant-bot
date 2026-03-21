@@ -8,7 +8,7 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/plantbot.db?busy_timeout=10000&journal_mode=WAL&synchronous=NORMAL}
     driver-class-name: org.sqlite.JDBC
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:1}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:4}
       minimum-idle: ${DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
   jpa:
@@ -18,6 +18,11 @@ spring:
       hibernate:
         dialect: org.hibernate.community.dialect.SQLiteDialect
         format_sql: false
+        generate_statistics: ${APP_DB_HIBERNATE_STATS:true}
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: ${APP_DB_SLOW_QUERY_MS:250}
     open-in-view: false
   mvc:
     pathmatch:
@@ -47,6 +52,14 @@ openrouter:
   cache-max-entries: ${OPENROUTER_CACHE_MAX_ENTRIES:5000}
   chat-fallback-enabled: ${OPENROUTER_CHAT_FALLBACK_ENABLED:true}
   backoff-minutes: 60
+  availability:
+    scheduler-delay-ms: ${OPENROUTER_AVAILABILITY_SCHEDULER_DELAY_MS:60000}
+    notification-cooldown-minutes: ${OPENROUTER_AVAILABILITY_NOTIFICATION_COOLDOWN_MINUTES:360}
+  resilience:
+    max-concurrent-requests: ${OPENROUTER_RESILIENCE_MAX_CONCURRENT_REQUESTS:8}
+    acquire-timeout-ms: ${OPENROUTER_RESILIENCE_ACQUIRE_TIMEOUT_MS:250}
+    circuit-breaker-failure-threshold: ${OPENROUTER_RESILIENCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD:5}
+    circuit-breaker-open-seconds: ${OPENROUTER_RESILIENCE_CIRCUIT_BREAKER_OPEN_SECONDS:90}
 
 openmeteo:
   enabled: ${OPENMETEO_ENABLED:true}
@@ -175,6 +188,8 @@ app:
     max-merge-candidates-per-run: ${APP_DICTIONARY_MAX_MERGE_CANDIDATES:50}
     merge-batch-size: ${APP_DICTIONARY_MERGE_BATCH_SIZE:20}
     merge-max-attempts: ${APP_DICTIONARY_MERGE_MAX_ATTEMPTS:30}
+  observability:
+    slow-request-ms: ${APP_OBSERVABILITY_SLOW_REQUEST_MS:800}
   dev-auth-enabled: ${APP_DEV_AUTH_ENABLED:false}
   dev-telegram-id: ${APP_DEV_TELEGRAM_ID:999000111}
   dev-username: ${APP_DEV_USERNAME:dev_user}
@@ -207,7 +222,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics,prometheus,threaddump
+  metrics:
+    distribution:
+      percentiles-histogram:
+        plantbot.http.server.requests: true
+        plantbot.external.calls: true
+        plantbot.scheduler.runs: true
 
 logging:
   level:

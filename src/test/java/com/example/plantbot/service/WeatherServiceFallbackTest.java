@@ -103,7 +103,7 @@ class WeatherServiceFallbackTest {
     properties.setCacheTtlMinutes(1);
     properties.setStaleFallbackEnabled(true);
     properties.setMaxStaleAgeMinutes(180);
-    return new WeatherService(mock(WeatherLocationService.class), properties, List.of(clients));
+    return new WeatherService(mock(WeatherLocationService.class), properties, List.of(clients), mock(PerformanceMetricsService.class));
   }
 
   private static WeatherData weather(double temp, double humidity, double precipitation) {

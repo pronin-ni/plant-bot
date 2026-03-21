@@ -8,6 +8,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -19,7 +20,13 @@ import lombok.Setter;
 import java.time.Instant;
 
 @Entity
-@Table(name = "recommendation_snapshots")
+@Table(
+    name = "recommendation_snapshots",
+    indexes = {
+        @Index(name = "idx_rec_snapshot_plant_created", columnList = "plant_id, created_at"),
+        @Index(name = "idx_rec_snapshot_created", columnList = "created_at")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

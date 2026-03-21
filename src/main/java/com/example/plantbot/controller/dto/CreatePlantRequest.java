@@ -7,6 +7,7 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.SeedContainerType;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.SeedSubstrateType;
@@ -19,12 +20,18 @@ public record CreatePlantRequest(String name,
                                  Double potVolumeLiters,
                                  Integer baseIntervalDays,
                                  Integer preferredWaterMl,
+                                 RecommendationSource recommendationSource,
+                                 String recommendationSummary,
+                                 String recommendationReasoningJson,
+                                 String recommendationWarningsJson,
+                                 Double confidenceScore,
                                  PlantType type,
                                  PlantPlacement placement,
                                  PlantCategory category,
                                  PlantEnvironmentType environmentType,
                                  // Временное поле совместимости, можно удалить после миграции клиентов.
                                  PlantEnvironmentType wateringProfile,
+                                 String city,
                                  String region,
                                  PlantContainerType containerType,
                                  Double containerVolumeLiters,

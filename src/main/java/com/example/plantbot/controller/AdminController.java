@@ -25,6 +25,7 @@ import com.example.plantbot.controller.dto.admin.AdminMagicLinkAuditItemResponse
 import com.example.plantbot.controller.dto.admin.AdminMonitoringResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequest;
+import com.example.plantbot.controller.dto.admin.AdminOpenRouterAvailabilityCheckResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
 import com.example.plantbot.domain.User;
@@ -33,6 +34,8 @@ import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
+import com.example.plantbot.service.OpenRouterModelAvailabilityCheckService;
+import com.example.plantbot.service.OpenRouterModelAvailabilityPersistenceService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.PlantCatalogService;
@@ -81,6 +84,8 @@ public class AdminController {
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
+  private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
+  private final OpenRouterModelAvailabilityPersistenceService openRouterModelAvailabilityPersistenceService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
   @Value("${app.admin.telegram-id:0}")
   private Long adminTelegramId;
@@ -205,7 +210,19 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         openRouterGlobalSettingsService.hasApiKey(settings),
-        settings.getUpdatedAt()
+        settings.getUpdatedAt(),
+        settings.getTextModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getTextModelAvailabilityStatus().name(),
+        settings.getTextModelLastCheckedAt(),
+        settings.getTextModelLastSuccessfulAt(),
+        settings.getTextModelLastErrorMessage(),
+        settings.getTextModelLastNotifiedUnavailableAt(),
+        settings.getTextModelCheckIntervalMinutes(),
+        settings.getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getPhotoModelAvailabilityStatus().name(),
+        settings.getPhotoModelLastCheckedAt(),
+        settings.getPhotoModelLastSuccessfulAt(),
+        settings.getPhotoModelLastErrorMessage(),
+        settings.getPhotoModelLastNotifiedUnavailableAt(),
+        settings.getPhotoModelCheckIntervalMinutes()
     );
   }
 
@@ -229,7 +246,55 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         result.hasApiKey(),
-        result.settings().getUpdatedAt()
+        result.settings().getUpdatedAt(),
+        result.settings().getTextModelAvailabilityStatus() == null ? "UNKNOWN" : result.settings().getTextModelAvailabilityStatus().name(),
+        result.settings().getTextModelLastCheckedAt(),
+        result.settings().getTextModelLastSuccessfulAt(),
+        result.settings().getTextModelLastErrorMessage(),
+        result.settings().getTextModelLastNotifiedUnavailableAt(),
+        result.settings().getTextModelCheckIntervalMinutes(),
+        result.settings().getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : result.settings().getPhotoModelAvailabilityStatus().name(),
+        result.settings().getPhotoModelLastCheckedAt(),
+        result.settings().getPhotoModelLastSuccessfulAt(),
+        result.settings().getPhotoModelLastErrorMessage(),
+        result.settings().getPhotoModelLastNotifiedUnavailableAt(),
+        result.settings().getPhotoModelCheckIntervalMinutes()
+    );
+  }
+
+  @PostMapping("/openrouter/check")
+  public AdminOpenRouterAvailabilityCheckResponse checkOpenRouterAvailability(
+      Authentication authentication,
+      @RequestParam(name = "type", defaultValue = "text") String type
+  ) {
+    requireAdmin(authentication);
+    String normalized = type == null ? "text" : type.trim().toLowerCase();
+    if (!"text".equals(normalized) && !"photo".equals(normalized)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "type должен быть text или photo");
+    }
+
+    if ("photo".equals(normalized)) {
+      var result = openRouterModelAvailabilityCheckService.checkCurrentVisionModel();
+      openRouterModelAvailabilityPersistenceService.savePhotoCheck(result);
+      return new AdminOpenRouterAvailabilityCheckResponse(
+          "photo",
+          result.model(),
+          result.status().name(),
+          result.message(),
+          result.checkedAt(),
+          result.successfulAt()
+      );
+    }
+
+    var result = openRouterModelAvailabilityCheckService.checkCurrentTextModel();
+    openRouterModelAvailabilityPersistenceService.saveTextCheck(result);
+    return new AdminOpenRouterAvailabilityCheckResponse(
+        "text",
+        result.model(),
+        result.status().name(),
+        result.message(),
+        result.checkedAt(),
+        result.successfulAt()
     );
   }
 

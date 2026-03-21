@@ -33,6 +33,9 @@ public record WateringRecommendationPreviewRequest(
     String growthStage,
     GrowthStage growthStageV2,
     Boolean greenhouse,
+    Boolean mulched,
+    Boolean dripIrrigation,
+    Double outdoorAreaM2,
     SoilType soilTypeV2,
     SunlightExposure sunlightExposure,
     // Optional HA context

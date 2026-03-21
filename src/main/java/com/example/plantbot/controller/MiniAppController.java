@@ -16,6 +16,9 @@ import com.example.plantbot.controller.dto.PlantLearningResponse;
 import com.example.plantbot.controller.dto.PlantPhotoRequest;
 import com.example.plantbot.controller.dto.PlantAiRecommendRequest;
 import com.example.plantbot.controller.dto.PlantAiRecommendResponse;
+import com.example.plantbot.controller.dto.PlantAiSearchRequest;
+import com.example.plantbot.controller.dto.PlantAiSearchResponse;
+import com.example.plantbot.controller.dto.PlantAiSearchSuggestionResponse;
 import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.PlantStatsResponse;
 import com.example.plantbot.controller.dto.OpenRouterRuntimeSettingsResponse;
@@ -36,9 +39,11 @@ import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
+import com.example.plantbot.service.PlantMutationService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.SeedLifecycleService;
+import com.example.plantbot.service.RecommendationSnapshotService;
 import com.example.plantbot.service.UserService;
 import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.WateringLogService;
@@ -82,6 +87,7 @@ import java.util.Iterator;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -102,6 +108,7 @@ public class MiniAppController {
   private final PlantRepository plantRepository;
   private final WateringRecommendationService wateringRecommendationService;
   private final WateringLogService wateringLogService;
+  private final PlantMutationService plantMutationService;
   private final UserService userService;
   private final UserRepository userRepository;
   private final AssistantChatHistoryService assistantChatHistoryService;
@@ -113,6 +120,7 @@ public class MiniAppController {
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
   private final WeatherService weatherService;
   private final SeedLifecycleService seedLifecycleService;
+  private final RecommendationSnapshotService recommendationSnapshotService;
   private final ObjectMapper objectMapper;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
@@ -146,7 +154,7 @@ public class MiniAppController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     return plantService.list(user).stream()
-        .map(plant -> toPlantResponse(plant, user))
+        .map(plant -> toPlantResponse(plant, user, true))
         .toList();
   }
 
@@ -158,7 +166,7 @@ public class MiniAppController {
   ) {
     User user = currentUserService.resolve(authentication, initData);
     Plant plant = requireOwnedPlant(user, plantId);
-    return toPlantResponse(plant, user);
+    return toPlantResponse(plant, user, false);
   }
 
   @GetMapping("/plants/search")
@@ -177,7 +185,7 @@ public class MiniAppController {
         ? plantRepository.findByUserAndNameContainingIgnoreCase(user, query)
         : plantRepository.findByUserAndCategoryAndNameContainingIgnoreCase(user, category, query);
     return plants.stream()
-        .map(plant -> toPlantResponse(plant, user))
+        .map(plant -> toPlantResponse(plant, user, true))
         .toList();
   }
 
@@ -197,6 +205,51 @@ public class MiniAppController {
     return plantPresetCatalogService.searchByCategory(effectiveCategory, q, safeLimit).stream()
         .map(name -> new PlantPresetSuggestionResponse(name, effectiveCategory, plantPresetCatalogService.isPopular(name)))
         .toList();
+  }
+
+  @PostMapping("/plants/ai-search")
+  public PlantAiSearchResponse aiSearchPlants(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @RequestBody PlantAiSearchRequest request
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    if (request == null || request.query() == null || request.query().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query обязателен");
+    }
+
+    String query = request.query().trim();
+    PlantCategory category = request.category();
+
+    var aiSuggestions = openRouterPlantAdvisorService.suggestPlantSearch(user, query, category);
+    if (aiSuggestions.isPresent()) {
+      return new PlantAiSearchResponse(
+          true,
+          aiSuggestions.get().source(),
+          aiSuggestions.get().suggestions().stream()
+              .limit(10)
+              .map(item -> new PlantAiSearchSuggestionResponse(
+                  item.name(),
+                  item.category(),
+                  item.type(),
+                  item.hint()
+              ))
+              .toList()
+      );
+    }
+
+    PlantCategory effectiveCategory = category == null ? PlantCategory.HOME : category;
+    List<PlantAiSearchSuggestionResponse> fallback = plantPresetCatalogService.searchByCategory(effectiveCategory, query, 10).stream()
+        .limit(10)
+        .map(name -> new PlantAiSearchSuggestionResponse(
+            name,
+            effectiveCategory,
+            PlantType.DEFAULT,
+            plantPresetCatalogService.isPopular(name) ? "Популярный вариант в этой категории" : "Резервный вариант из каталога"
+        ))
+        .toList();
+
+    return new PlantAiSearchResponse(true, "FALLBACK", fallback);
   }
 
   @PostMapping("/plants")
@@ -225,11 +278,16 @@ public class MiniAppController {
     PlantEnvironmentType environmentType = request.environmentType() != null
         ? request.environmentType()
         : request.wateringProfile();
+    String normalizedLocation = firstNonBlank(
+        request.city(),
+        request.region(),
+        user.getCity() == null ? null : user.getCity().trim()
+    );
     if (environmentType == PlantEnvironmentType.SEED_START && request.targetEnvironmentType() == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetEnvironmentType обязателен для режима проращивания");
     }
 
-    Plant plant = plantService.addPlant(
+    Plant plant = plantService.buildPlant(
         user,
         request.name().trim(),
         pot,
@@ -246,7 +304,8 @@ public class MiniAppController {
         request.preferredWaterMl(),
         environmentType
     );
-    plant.setRegion(request.region());
+    plant.setCity(normalizedLocation);
+    plant.setRegion(normalizedLocation);
     plant.setContainerType(request.containerType());
     plant.setContainerVolumeLiters(request.containerVolumeLiters());
     plant.setCropType(request.cropType());
@@ -254,8 +313,25 @@ public class MiniAppController {
     seedLifecycleService.applySeedCreateFields(plant, request);
     plant.setGreenhouse(request.greenhouse());
     plant.setDripIrrigation(request.dripIrrigation());
-    plantService.save(plant);
-    return toPlantResponse(plant, user);
+    if (request.recommendationSource() != null) {
+      plant.setManualWaterVolumeMl(request.preferredWaterMl());
+      plant.setRecommendedIntervalDays(baseInterval);
+      plant.setRecommendedWaterVolumeMl(request.preferredWaterMl());
+      plant.setRecommendationSource(request.recommendationSource());
+      plant.setRecommendationSummary(request.recommendationSummary());
+      plant.setRecommendationReasoningJson(request.recommendationReasoningJson());
+      plant.setRecommendationWarningsJson(request.recommendationWarningsJson());
+      plant.setConfidenceScore(request.confidenceScore());
+      plant.setGeneratedAt(Instant.now());
+      plant.setLastRecommendationSource(request.recommendationSource());
+      plant.setLastRecommendedIntervalDays(baseInterval);
+      plant.setLastRecommendedWaterMl(request.preferredWaterMl());
+      plant.setLastRecommendationSummary(request.recommendationSummary());
+      plant.setLastRecommendationUpdatedAt(Instant.now());
+    }
+    plant = plantService.save(plant);
+    recommendationSnapshotService.saveInitialOnCreate(plant);
+    return toPlantResponse(plant, user, false);
   }
 
   @PutMapping("/plants/{id}/water")
@@ -265,15 +341,11 @@ public class MiniAppController {
       @PathVariable("id") Long plantId
   ) {
     User user = currentUserService.resolve(authentication, initData);
-    Plant plant = requireOwnedPlant(user, plantId);
-
-    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
-    LocalDate today = LocalDate.now();
-    plant.setLastWateredDate(today);
-    plant.setLastReminderDate(null);
-    plantService.save(plant);
-    wateringLogService.addLog(plant, today, rec.intervalDays(), rec.waterLiters(), null, null);
-    return toPlantResponse(plant, user);
+    Plant updated = plantMutationService.markWatered(plantId, user.getId());
+    if (updated == null) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
+    }
+    return toPlantResponse(updated, user, false);
   }
 
   @PostMapping(value = "/plants/{id}/photo", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -519,8 +591,7 @@ public class MiniAppController {
             request.plantType() == null ? PlantType.DEFAULT : request.plantType(),
             baseInterval,
             request.potVolumeLiters(),
-            request.heightCm(),
-            request.diameterCm(),
+            request.diameterCm() == null ? null : Math.PI * Math.pow((request.diameterCm() / 100.0) / 2.0, 2),
             request.containerType(),
             request.growthStage(),
             request.greenhouse(),
@@ -691,10 +762,16 @@ public class MiniAppController {
   }
 
   private PlantResponse toPlantResponse(Plant plant, User user) {
+    return toPlantResponse(plant, user, false);
+  }
+
+  private PlantResponse toPlantResponse(Plant plant, User user, boolean lightweight) {
     if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
       user = userService.save(user);
     }
-    WateringRecommendation rec = wateringRecommendationService.recommendQuick(plant, user);
+    WateringRecommendation rec = lightweight
+        ? wateringRecommendationService.recommendQuick(plant)
+        : wateringRecommendationService.recommendQuick(plant, user);
     int interval = plant.getRecommendedIntervalDays() == null
         ? Math.max(1, (int) Math.floor(rec.intervalDays()))
         : Math.max(1, plant.getRecommendedIntervalDays());

@@ -47,6 +47,7 @@ import type {
   AchievementsDto,
   OpenRouterModelsDto,
   AdminOpenRouterModelsDto,
+  AdminOpenRouterAvailabilityCheckDto,
   OpenRouterRuntimeSettingsDto,
   OpenRouterTypedTestDto,
   ChatAskResponse,
@@ -62,6 +63,7 @@ import type {
   AdminStatsDto,
   AssistantHistoryItemDto,
   PlantProfileSuggestionDto,
+  PlantAiSearchResponseDto,
   AdminCacheClearDto,
   AdminScopedCacheClearDto,
   AdminBackupItemDto,
@@ -105,6 +107,9 @@ import type {
 const API_BASE_URL = getApiBaseUrl();
 const AUTH_TOKEN_KEY = 'plant-pwa-jwt';
 const CACHE_PREFIX = 'api:cache:';
+const DEFAULT_GET_TIMEOUT_MS = 12_000;
+const DEFAULT_MUTATION_TIMEOUT_MS = 15_000;
+const DEFAULT_AI_TIMEOUT_MS = 25_000;
 
 let syncInFlight: Promise<void> | null = null;
 let syncInitialized = false;
@@ -172,6 +177,80 @@ function isQueueableMutation(method: string, path: string): boolean {
     return true;
   }
   return false;
+}
+
+function resolveRequestTimeoutMs(method: string, path: string): number {
+  const pathname = extractPathname(path);
+  if (pathname.includes('/openrouter') || pathname.includes('/assistant') || pathname.includes('/plant/identify-openrouter')) {
+    return DEFAULT_AI_TIMEOUT_MS;
+  }
+  if (pathname.includes('/watering/recommendation/preview') || pathname.includes('/seeds/recommendation/preview') || pathname.includes('/plants/ai-search')) {
+    return DEFAULT_AI_TIMEOUT_MS;
+  }
+  return method === 'GET' ? DEFAULT_GET_TIMEOUT_MS : DEFAULT_MUTATION_TIMEOUT_MS;
+}
+
+function buildTimedRequestInit(path: string, requestInit: RequestInit): { requestInit: RequestInit; cleanup: () => void } {
+  const controller = new AbortController();
+  const timeoutMs = resolveRequestTimeoutMs((requestInit.method ?? 'GET').toUpperCase(), path);
+  const existingSignal = requestInit.signal;
+  let abortedByExternalSignal = false;
+
+  const relayAbort = () => {
+    abortedByExternalSignal = true;
+    controller.abort();
+  };
+
+  if (existingSignal) {
+    if (existingSignal.aborted) {
+      relayAbort();
+    } else {
+      existingSignal.addEventListener('abort', relayAbort, { once: true });
+    }
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    if (!controller.signal.aborted) {
+      controller.abort(new DOMException('Request timed out', 'TimeoutError'));
+    }
+  }, timeoutMs);
+
+  return {
+    requestInit: {
+      ...requestInit,
+      signal: controller.signal
+    },
+    cleanup: () => {
+      window.clearTimeout(timeoutId);
+      if (existingSignal) {
+        existingSignal.removeEventListener('abort', relayAbort);
+      }
+      if (abortedByExternalSignal && !controller.signal.aborted) {
+        controller.abort();
+      }
+    }
+  };
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.name === 'AbortError' || error.name === 'TimeoutError' || /aborted|timed out|timeout/i.test(error.message);
+}
+
+function timeoutErrorMessage(path: string): string {
+  const pathname = extractPathname(path);
+  if (pathname.includes('/watering/recommendation/preview') || pathname.includes('/seeds/recommendation/preview')) {
+    return 'Расчёт занял слишком много времени. Попробуйте ещё раз или используйте резервный режим.';
+  }
+  if (pathname.includes('/plants/ai-search') || pathname.includes('/assistant') || pathname.includes('/openrouter')) {
+    return 'AI сейчас отвечает слишком долго. Попробуйте ещё раз чуть позже.';
+  }
+  if (pathname.includes('/weather')) {
+    return 'Погодный сервис отвечает слишком долго. Попробуйте обновить чуть позже.';
+  }
+  return 'Сервер отвечает слишком долго. Попробуйте ещё раз.';
 }
 
 async function updatePendingMutationsCounter() {
@@ -271,6 +350,23 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
     return suggestDemoPlantProfile(query.get('name') ?? '') as T;
   }
 
+  if (method === 'POST' && pathname === '/api/plants/ai-search') {
+    const body = init.body ? (JSON.parse(String(init.body)) as { query?: string; category?: PlantDto['category'] }) : {};
+    const category = body.category ?? 'HOME';
+    const q = body.query?.trim() ?? '';
+    const suggestions = searchDemoPresets(category, q, 10).slice(0, 10).map((item) => ({
+      name: item.name,
+      category: item.category,
+      type: 'DEFAULT',
+      hint: item.popular ? 'Популярный вариант в этой категории' : 'Резервный вариант из каталога'
+    }));
+    return {
+      ok: true,
+      source: 'FALLBACK',
+      suggestions
+    } as T;
+  }
+
   if (method === 'GET' && pathname === '/api/calendar') {
     const calendar = createDemoCalendar(plants);
     await cacheSet(cacheKey('/api/calendar'), calendar);
@@ -342,7 +438,29 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
   }
 
   if (method === 'PUT' && /^\/api\/plants\/\d+\/water$/.test(pathname)) {
-    return buildOfflineFallback<T>(pathname, { ...init, method });
+    const match = pathname.match(/^\/api\/plants\/(\d+)\/water$/);
+    const plantId = match ? Number(match[1]) : null;
+    if (!plantId) {
+      return null;
+    }
+    const plant = plants.find((item) => item.id === plantId);
+    if (!plant) {
+      return null;
+    }
+    const now = new Date();
+    const interval = Math.max(1, plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7);
+    const next = new Date(now);
+    next.setDate(next.getDate() + interval);
+    const updatedPlant: PlantDto = {
+      ...plant,
+      lastWateredDate: now.toISOString(),
+      nextWateringDate: next.toISOString()
+    };
+    const updatedPlants = plants.map((item) => (item.id === plantId ? updatedPlant : item));
+    writeDemoPlants(updatedPlants);
+    await cacheSet(cacheKey('/api/plants'), updatedPlants);
+    await cacheSet(cacheKey('/api/calendar'), createDemoCalendar(updatedPlants));
+    return updatedPlant as T;
   }
 
   if (method === 'POST' && pathname === '/api/assistant/chat') {
@@ -616,8 +734,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (method === 'GET') {
+    const timed = buildTimedRequestInit(path, requestInit);
     try {
-      const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
+      const response = await fetch(`${API_BASE_URL}${path}`, timed.requestInit);
       if (!response.ok) {
         throw new ApiError(response.status, await parseErrorMessage(response));
       }
@@ -637,7 +756,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       if (error instanceof ApiError) {
         throw error;
       }
+      if (isAbortLikeError(error)) {
+        throw new ApiError(0, timeoutErrorMessage(path));
+      }
       throw new ApiError(0, 'Нет сети и нет кеша для этого запроса');
+    } finally {
+      timed.cleanup();
     }
   }
 
@@ -659,8 +783,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(0, 'Операция сохранена и будет отправлена при восстановлении сети');
   }
 
+  const timed = buildTimedRequestInit(path, requestInit);
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
+    const response = await fetch(`${API_BASE_URL}${path}`, timed.requestInit);
     if (!response.ok) {
       throw new ApiError(response.status, await parseErrorMessage(response));
     }
@@ -690,7 +815,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     if (error instanceof ApiError) {
       throw error;
     }
+    if (isAbortLikeError(error)) {
+      throw new ApiError(0, timeoutErrorMessage(path));
+    }
     throw new ApiError(0, 'Ошибка сети');
+  } finally {
+    timed.cleanup();
   }
 }
 
@@ -717,11 +847,24 @@ async function pwaAuthFetch<T>(path: string, init: RequestInit = {}): Promise<T>
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
-  if (!response.ok) {
-    throw new ApiError(response.status, await parseErrorMessage(response));
+  const timed = buildTimedRequestInit(path, requestInit);
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, timed.requestInit);
+    if (!response.ok) {
+      throw new ApiError(response.status, await parseErrorMessage(response));
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    if (isAbortLikeError(error)) {
+      throw new ApiError(0, timeoutErrorMessage(path));
+    }
+    throw new ApiError(0, 'Ошибка сети');
+  } finally {
+    timed.cleanup();
   }
-  return (await response.json()) as T;
 }
 
 export async function validateTelegramAuth(): Promise<AuthValidationResponse> {
@@ -974,6 +1117,9 @@ export async function previewWateringRecommendation(payload: {
   cropType?: string;
   growthStage?: string;
   greenhouse?: boolean;
+  mulched?: boolean;
+  dripIrrigation?: boolean;
+  outdoorAreaM2?: number;
   haRoomId?: string;
   haRoomName?: string;
   temperatureSensorEntityId?: string;
@@ -1231,10 +1377,18 @@ export async function getAdminOpenRouterModels(): Promise<AdminOpenRouterModelsD
 export async function saveAdminOpenRouterModels(payload: {
   textModel?: string | null;
   photoModel?: string | null;
+  textModelCheckIntervalMinutes?: number | null;
+  photoModelCheckIntervalMinutes?: number | null;
 }): Promise<AdminOpenRouterModelsDto> {
   return apiFetch<AdminOpenRouterModelsDto>('/api/admin/openrouter/models', {
     method: 'PUT',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function checkAdminOpenRouterAvailability(type: 'text' | 'photo'): Promise<AdminOpenRouterAvailabilityCheckDto> {
+  return apiFetch<AdminOpenRouterAvailabilityCheckDto>(`/api/admin/openrouter/check?type=${encodeURIComponent(type)}`, {
+    method: 'POST'
   });
 }
 
@@ -1374,4 +1528,14 @@ export async function getAdminActivityLogs(limit = 50): Promise<AdminActivityLog
 export async function suggestPlantProfile(name: string): Promise<PlantProfileSuggestionDto> {
   const params = new URLSearchParams({ name });
   return apiFetch<PlantProfileSuggestionDto>(`/api/plants/suggest-profile?${params.toString()}`, { method: 'GET' });
+}
+
+export async function aiSearchPlants(payload: {
+  query: string;
+  category?: 'HOME' | 'OUTDOOR_DECORATIVE' | 'OUTDOOR_GARDEN' | 'SEED_START';
+}): Promise<PlantAiSearchResponseDto> {
+  return apiFetch<PlantAiSearchResponseDto>('/api/plants/ai-search', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }

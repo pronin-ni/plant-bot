@@ -57,25 +57,35 @@ public class UserService {
   }
 
   public User getOrCreateByTelegramData(Long telegramId, String username, String firstName, String lastName) {
+    boolean[] changed = {false};
     User user = userRepository.findByTelegramId(telegramId).orElseGet(() -> {
       User created = new User();
       created.setTelegramId(telegramId);
+      changed[0] = true;
       return created;
     });
-    if (username != null) {
+    if (username != null && !username.equals(user.getUsername())) {
       user.setUsername(username);
+      changed[0] = true;
     }
-    if (firstName != null) {
+    if (firstName != null && !firstName.equals(user.getFirstName())) {
       user.setFirstName(firstName);
+      changed[0] = true;
     }
-    if (lastName != null) {
+    if (lastName != null && !lastName.equals(user.getLastName())) {
       user.setLastName(lastName);
+      changed[0] = true;
     }
     if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
       user.setCalendarToken(UUID.randomUUID().toString());
+      changed[0] = true;
     }
+    Set<UserRole> beforeRoles = user.getRoles() == null ? Set.of() : Set.copyOf(user.getRoles());
     ensureDefaults(user);
-    return userRepository.save(user);
+    if (!beforeRoles.equals(user.getRoles())) {
+      changed[0] = true;
+    }
+    return changed[0] ? userRepository.save(user) : user;
   }
 
   private void ensureDefaults(User user) {

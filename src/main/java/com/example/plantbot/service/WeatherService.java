@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
@@ -28,9 +29,12 @@ public class WeatherService {
   private final WeatherLocationService weatherLocationService;
   private final WeatherProperties weatherProperties;
   private final List<WeatherProviderClient> providerClients;
+  private final PerformanceMetricsService performanceMetricsService;
 
   private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
   private final Map<String, List<RainSample>> rainHistory = new ConcurrentHashMap<>();
+  private final Map<String, ReentrantLock> fetchLocks = new ConcurrentHashMap<>();
+  private final Map<WeatherProvider, ProviderFailureState> providerFailureState = new ConcurrentHashMap<>();
 
   public Optional<WeatherData> getCurrent(String city, Double lat, Double lon) {
     return getCurrent(city, lat, lon, null);
@@ -51,9 +55,11 @@ public class WeatherService {
   }
 
   public WeatherFetchResult fetchWeather(String city, Double lat, Double lon, int days, WeatherProvider requestedProvider) {
+    long totalStartedAt = System.nanoTime();
     int safeDays = Math.max(1, Math.min(days, 7));
     ProviderPlan plan = resolvePlan(requestedProvider);
     if (!hasLocation(city, lat, lon)) {
+      performanceMetricsService.recordExternalCall("weather", "fetch", "no-location", "skipped", System.nanoTime() - totalStartedAt);
       return new WeatherFetchResult(
           false,
           false,
@@ -85,81 +91,125 @@ public class WeatherService {
       );
     }
 
-    WeatherProvider usedProvider = null;
-    WeatherData current = null;
-    List<WeatherForecastDay> forecast = List.of();
-    boolean fallbackUsed = false;
-    boolean hadPrimaryFailure = false;
-
-    for (int i = 0; i < plan.providers().size(); i++) {
-      WeatherProvider provider = plan.providers().get(i);
-      WeatherProviderClient client = providerClient(provider);
-      if (client == null || !client.isEnabled()) {
-        continue;
-      }
-
-      Optional<WeatherData> currentCandidate = client.getCurrent(city, lat, lon);
-      List<WeatherForecastDay> forecastCandidate = client.getForecast(city, lat, lon, safeDays);
-      if (currentCandidate.isPresent() || !forecastCandidate.isEmpty()) {
-        usedProvider = provider;
-        current = currentCandidate.orElse(null);
-        forecast = forecastCandidate;
-        fallbackUsed = i > 0 || hadPrimaryFailure;
-        storeWeather(key, provider, current, forecast, now);
-        log.info("Weather fetch success city='{}' provider={} fallbackUsed={} staleFallback=false current={} forecastDays={}",
-            city, provider, fallbackUsed, current != null, forecast.size());
+    ReentrantLock lock = fetchLocks.computeIfAbsent(key, ignored -> new ReentrantLock());
+    lock.lock();
+    try {
+      CachedWeather cachedAfterLock = cache.get(key);
+      Instant currentNow = Instant.now();
+      if (cachedAfterLock != null && cachedAfterLock.expiresAt().isAfter(currentNow)) {
         return new WeatherFetchResult(
             true,
             false,
-            fallbackUsed,
             false,
-            provider,
+            false,
+            cachedAfterLock.providerUsed(),
             plan.primary(),
-            current,
-            forecast,
-            now,
-            fallbackUsed ? "provider-fallback" : "provider-success"
+            cachedAfterLock.current(),
+            cachedAfterLock.forecast(),
+            cachedAfterLock.observedAt(),
+            "fresh-cache-after-lock"
         );
       }
 
-      if (i == 0) {
-        hadPrimaryFailure = true;
+      WeatherProvider usedProvider = null;
+      WeatherData current = null;
+      List<WeatherForecastDay> forecast = List.of();
+      boolean fallbackUsed = false;
+      boolean hadPrimaryFailure = false;
+
+      for (int i = 0; i < plan.providers().size(); i++) {
+        WeatherProvider provider = plan.providers().get(i);
+        WeatherProviderClient client = providerClient(provider);
+        if (client == null || !client.isEnabled()) {
+          continue;
+        }
+        if (isProviderCoolingDown(provider, currentNow)) {
+          performanceMetricsService.incrementExternalFailure("weather", "provider_fetch", provider.name().toLowerCase(Locale.ROOT) + "_cooldown");
+          hadPrimaryFailure = hadPrimaryFailure || i == 0;
+          continue;
+        }
+
+        long providerStartedAt = System.nanoTime();
+        Optional<WeatherData> currentCandidate = client.getCurrent(city, lat, lon);
+        List<WeatherForecastDay> forecastCandidate = client.getForecast(city, lat, lon, safeDays);
+        if (currentCandidate.isPresent() || !forecastCandidate.isEmpty()) {
+          performanceMetricsService.recordExternalCall("weather", "provider_fetch", provider.name(), "success", System.nanoTime() - providerStartedAt);
+          markProviderSuccess(provider);
+          usedProvider = provider;
+          current = currentCandidate.orElse(null);
+          forecast = forecastCandidate;
+          fallbackUsed = i > 0 || hadPrimaryFailure;
+          storeWeather(key, provider, current, forecast, currentNow);
+          log.info("Weather fetch success city='{}' provider={} fallbackUsed={} staleFallback=false current={} forecastDays={}",
+              city, provider, fallbackUsed, current != null, forecast.size());
+          return new WeatherFetchResult(
+              true,
+              false,
+              fallbackUsed,
+              false,
+              provider,
+              plan.primary(),
+              current,
+              forecast,
+              currentNow,
+              fallbackUsed ? "provider-fallback" : "provider-success"
+          );
+        }
+
+        performanceMetricsService.recordExternalCall("weather", "provider_fetch", provider.name(), "empty", System.nanoTime() - providerStartedAt);
+        performanceMetricsService.incrementExternalFailure("weather", "provider_fetch", provider.name().toLowerCase(Locale.ROOT) + "_empty");
+        markProviderFailure(provider);
+
+        if (i == 0) {
+          hadPrimaryFailure = true;
+        }
+        log.warn("Weather fetch failed for city='{}' provider={} -> trying next fallback", city, provider);
       }
-      log.warn("Weather fetch failed for city='{}' provider={} -> trying next fallback", city, provider);
-    }
 
-    if (weatherProperties.isStaleFallbackEnabled() && cached != null && cached.observedAt().plusSeconds(Math.max(1, weatherProperties.getMaxStaleAgeMinutes()) * 60L).isAfter(now)) {
-      log.warn("Weather fetch stale fallback city='{}' provider={} ageMinutes={}",
-          city, cached.providerUsed(),
-          Math.max(0, (now.getEpochSecond() - cached.observedAt().getEpochSecond()) / 60));
+      if (weatherProperties.isStaleFallbackEnabled() && cached != null && cached.observedAt().plusSeconds(Math.max(1, weatherProperties.getMaxStaleAgeMinutes()) * 60L).isAfter(currentNow)) {
+        performanceMetricsService.recordExternalCall("weather", "fetch", plan.primary().name(), "stale-cache-fallback", System.nanoTime() - totalStartedAt);
+        log.warn("Weather fetch stale fallback city='{}' provider={} ageMinutes={}",
+            city, cached.providerUsed(),
+            Math.max(0, (currentNow.getEpochSecond() - cached.observedAt().getEpochSecond()) / 60));
+        return new WeatherFetchResult(
+            true,
+            true,
+            true,
+            true,
+            cached.providerUsed(),
+            plan.primary(),
+            cached.current(),
+            cached.forecast(),
+            cached.observedAt(),
+            "stale-cache-fallback"
+        );
+      }
+
+      log.error("Weather fetch degraded city='{}' primary={} providersTried={} no fresh or stale fallback available",
+          city, plan.primary(), plan.providers());
+      performanceMetricsService.recordExternalCall("weather", "fetch", plan.primary().name(), "degraded", System.nanoTime() - totalStartedAt);
+      performanceMetricsService.incrementExternalFailure("weather", "fetch", "degraded");
       return new WeatherFetchResult(
+          false,
           true,
-          true,
-          true,
-          true,
-          cached.providerUsed(),
+          plan.providers().size() > 1,
+          false,
+          null,
           plan.primary(),
-          cached.current(),
-          cached.forecast(),
-          cached.observedAt(),
-          "stale-cache-fallback"
+          null,
+          List.of(),
+          currentNow,
+          "degraded-no-weather"
       );
+    } finally {
+      try {
+        if (!lock.hasQueuedThreads()) {
+          fetchLocks.remove(key, lock);
+        }
+      } finally {
+        lock.unlock();
+      }
     }
-
-    log.error("Weather fetch degraded city='{}' primary={} providersTried={} no fresh or stale fallback available",
-        city, plan.primary(), plan.providers());
-    return new WeatherFetchResult(
-        false,
-        true,
-        plan.providers().size() > 1,
-        false,
-        null,
-        plan.primary(),
-        null,
-        List.of(),
-        now,
-        "degraded-no-weather"
-    );
   }
 
   public double getAccumulatedRainMm(String city, Double lat, Double lon, int hours) {
@@ -299,6 +349,24 @@ public class WeatherService {
     enforceRainHistoryLimit();
   }
 
+  private boolean isProviderCoolingDown(WeatherProvider provider, Instant now) {
+    ProviderFailureState state = providerFailureState.get(provider);
+    return state != null && state.blockedUntil() != null && state.blockedUntil().isAfter(now);
+  }
+
+  private void markProviderSuccess(WeatherProvider provider) {
+    providerFailureState.remove(provider);
+  }
+
+  private void markProviderFailure(WeatherProvider provider) {
+    ProviderFailureState current = providerFailureState.get(provider);
+    int failures = current == null ? 1 : current.consecutiveFailures() + 1;
+    Instant blockedUntil = failures >= 3
+        ? Instant.now().plusSeconds(Math.min(300, 30L * failures))
+        : null;
+    providerFailureState.put(provider, new ProviderFailureState(failures, blockedUntil));
+  }
+
   private void pruneRainHistory(String key) {
     List<RainSample> samples = rainHistory.get(key);
     if (samples == null) {
@@ -359,5 +427,8 @@ public class WeatherService {
   }
 
   private record RainSample(Instant at, double mmPerHour) {
+  }
+
+  private record ProviderFailureState(int consecutiveFailures, Instant blockedUntil) {
   }
 }

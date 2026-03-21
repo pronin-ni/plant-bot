@@ -33,11 +33,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class WebPushNotificationService {
+  private static final Semaphore SEND_PERMITS = new Semaphore(4, true);
+
   private final WebPushSubscriptionRepository subscriptionRepository;
   private final ObjectMapper objectMapper;
 
@@ -229,12 +233,22 @@ public class WebPushNotificationService {
 
   private List<EndpointDeliveryResult> sendPayload(List<WebPushSubscription> subscriptions, String payloadJson) {
     List<EndpointDeliveryResult> results = new java.util.ArrayList<>();
+    PushService pushService;
+    try {
+      pushService = buildPushService();
+    } catch (GeneralSecurityException | JoseException ex) {
+      String reason = trimReason(ex.getClass().getSimpleName() + ": " + ex.getMessage());
+      for (WebPushSubscription sub : subscriptions) {
+        results.add(new EndpointDeliveryResult(maskEndpoint(sub.getEndpoint()), false, 0, reason));
+      }
+      return results;
+    }
     for (WebPushSubscription sub : subscriptions) {
       log.info("WebPush send attempt: userId={} subscriptionId={} endpoint={}",
           sub.getUser() != null ? sub.getUser().getId() : null,
           sub.getId(),
           maskEndpoint(sub.getEndpoint()));
-      results.add(sendToSubscription(sub, payloadJson));
+      results.add(sendToSubscription(pushService, sub, payloadJson));
     }
     return results;
   }
@@ -249,10 +263,14 @@ public class WebPushNotificationService {
     return delivered;
   }
 
-  private EndpointDeliveryResult sendToSubscription(WebPushSubscription subscription, String payloadJson) {
+  private EndpointDeliveryResult sendToSubscription(PushService pushService, WebPushSubscription subscription, String payloadJson) {
     String maskedEndpoint = maskEndpoint(subscription.getEndpoint());
+    boolean acquired = false;
     try {
-      PushService pushService = buildPushService();
+      acquired = SEND_PERMITS.tryAcquire(250, TimeUnit.MILLISECONDS);
+      if (!acquired) {
+        return new EndpointDeliveryResult(maskedEndpoint, false, 0, "Web Push send queue is busy");
+      }
       Notification notification = new Notification(
           subscription.getEndpoint(),
           Utils.loadPublicKey(normalizeBase64Url(subscription.getP256dh())),
@@ -293,6 +311,10 @@ public class WebPushNotificationService {
       subscription.setLastFailureReason(reason);
       subscriptionRepository.save(subscription);
       return new EndpointDeliveryResult(maskedEndpoint, false, 0, reason);
+    } finally {
+      if (acquired) {
+        SEND_PERMITS.release();
+      }
     }
   }
 

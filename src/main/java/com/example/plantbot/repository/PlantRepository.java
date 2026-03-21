@@ -11,9 +11,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface PlantRepository extends JpaRepository<Plant, Long> {
   List<Plant> findByUser(User user);
+
+  Optional<Plant> findByIdAndUserId(Long id, Long userId);
 
   List<Plant> findByUserAndNameContainingIgnoreCase(User user, String name);
 

@@ -19,7 +19,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PlantService {
   private final PlantRepository plantRepository;
-  private final RecommendationSnapshotService recommendationSnapshotService;
 
   // Backward-compatible overload для существующего бота/старого UI.
 
@@ -134,6 +133,72 @@ public class PlantService {
                         Boolean winterDormancyEnabled,
                         Integer preferredWaterMl,
                         PlantEnvironmentType wateringProfile) {
+    Plant plant = buildPlant(
+        user,
+        name,
+        potVolumeLiters,
+        baseIntervalDays,
+        type,
+        placement,
+        category,
+        outdoorAreaM2,
+        outdoorSoilType,
+        sunExposure,
+        mulched,
+        perennial,
+        winterDormancyEnabled,
+        preferredWaterMl,
+        wateringProfile
+    );
+    return plantRepository.save(plant);
+  }
+
+  public Plant buildPlant(User user,
+                          String name,
+                          double potVolumeLiters,
+                          int baseIntervalDays,
+                          PlantType type,
+                          PlantPlacement placement,
+                          Double outdoorAreaM2,
+                          OutdoorSoilType outdoorSoilType,
+                          SunExposure sunExposure,
+                          Boolean mulched,
+                          Boolean perennial,
+                          Boolean winterDormancyEnabled) {
+    return buildPlant(
+        user,
+        name,
+        potVolumeLiters,
+        baseIntervalDays,
+        type,
+        placement,
+        null,
+        outdoorAreaM2,
+        outdoorSoilType,
+        sunExposure,
+        mulched,
+        perennial,
+        winterDormancyEnabled,
+        null,
+        null
+    );
+  }
+
+  public Plant buildPlant(User user,
+                        String name,
+                        double potVolumeLiters,
+                        int baseIntervalDays,
+                        PlantType type,
+                        PlantPlacement placement,
+                        PlantCategory category,
+                        Double outdoorAreaM2,
+                        OutdoorSoilType outdoorSoilType,
+                        SunExposure sunExposure,
+                        Boolean mulched,
+                        Boolean perennial,
+                        Boolean winterDormancyEnabled,
+                        Integer preferredWaterMl,
+                        PlantEnvironmentType wateringProfile) {
     Plant plant = new Plant();
     plant.setUser(user);
     plant.setName(name);
@@ -157,9 +222,7 @@ public class PlantService {
     plant.setPreferredWaterMl(preferredWaterMl);
     plant.setLastWateredDate(LocalDate.now());
     plant.setType(type == null ? PlantType.DEFAULT : type);
-    Plant saved = plantRepository.save(plant);
-    recommendationSnapshotService.saveInitialOnCreate(saved);
-    return saved;
+    return plant;
   }
 
   public List<Plant> list(User user) {
@@ -176,6 +239,13 @@ public class PlantService {
 
   public Plant getById(Long id) {
     return plantRepository.findById(id).orElse(null);
+  }
+
+  public Plant getByIdAndUserId(Long id, Long userId) {
+    if (id == null || userId == null) {
+      return null;
+    }
+    return plantRepository.findByIdAndUserId(id, userId).orElse(null);
   }
 
   public void delete(Plant plant) {
