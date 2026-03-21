@@ -14,6 +14,21 @@ interface PlantDetailPageProps extends PropsWithChildren {
   mainWatering?: ReactNode;
   explainability?: ReactNode;
   secondary?: ReactNode;
+  mainSection?: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+  };
+  explainabilitySection?: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+  };
+  secondarySection?: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+  };
 }
 
 function SectionBlock({
@@ -58,6 +73,9 @@ export function PlantDetailPage({
   mainWatering,
   explainability,
   secondary,
+  mainSection,
+  explainabilitySection,
+  secondarySection,
   children
 }: PlantDetailPageProps) {
   return (
@@ -83,9 +101,9 @@ export function PlantDetailPage({
       >
         {mainWatering ? (
           <SectionBlock
-            eyebrow="Главное"
-            title="Полив и следующий шаг"
-            subtitle="Сначала то, что нужно сделать сейчас."
+            eyebrow={mainSection?.eyebrow ?? 'Главное'}
+            title={mainSection?.title ?? 'Полив и следующий шаг'}
+            subtitle={mainSection?.subtitle ?? 'Сначала то, что нужно сделать сейчас.'}
           >
             {mainWatering}
           </SectionBlock>
@@ -93,9 +111,9 @@ export function PlantDetailPage({
 
         {explainability ? (
           <SectionBlock
-            eyebrow="Пояснение"
-            title="Почему такой режим"
-            subtitle="Краткая логика рекомендации без перегруза."
+            eyebrow={explainabilitySection?.eyebrow ?? 'Пояснение'}
+            title={explainabilitySection?.title ?? 'Почему такой режим'}
+            subtitle={explainabilitySection?.subtitle ?? 'Краткая логика рекомендации без перегруза.'}
           >
             {explainability}
           </SectionBlock>
@@ -103,9 +121,9 @@ export function PlantDetailPage({
 
         {secondary ? (
           <SectionBlock
-            eyebrow="Дополнительно"
-            title="Рост, диагностика и настройки"
-            subtitle="Вторичные инструменты и более редкие действия."
+            eyebrow={secondarySection?.eyebrow ?? 'Дополнительно'}
+            title={secondarySection?.title ?? 'Рост, диагностика и настройки'}
+            subtitle={secondarySection?.subtitle ?? 'Вторичные инструменты и более редкие действия.'}
           >
             {secondary}
           </SectionBlock>

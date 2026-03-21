@@ -8,6 +8,8 @@ import { Dialog } from '@/components/ui/dialog';
 import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
 import { LeafDiagnosis } from '@/components/LeafDiagnosis';
+import { SeedStageActionsCard } from '@/components/seed/SeedStageActionsCard';
+import { seedActionLabel } from '@/components/seed/seedStageUi';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
@@ -93,6 +95,41 @@ function normalizeAdviceText(data?: PlantCareAdviceDto | null): string | null {
   }
 
   return null;
+}
+
+function updatePlantCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  plantId: number,
+  updater: (plant: PlantDto) => PlantDto
+) {
+  queryClient.setQueryData<PlantDto | null>(['plant', plantId], (current) => {
+    if (!current) {
+      return current;
+    }
+    return updater(current);
+  });
+  queryClient.setQueryData<PlantDto[]>(['plants'], (current) => {
+    if (!current) {
+      return current;
+    }
+    return current.map((item) => (item.id === plantId ? updater(item) : item));
+  });
+}
+
+function appendSeedActionEntry(plant: PlantDto, action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT') {
+  const timestamp = new Date().toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  const nextActions = [`${timestamp} | ${seedActionLabel(action)}`, ...(plant.seedActions ?? [])].slice(0, 20);
+  return {
+    ...plant,
+    seedActions: nextActions,
+    underCover: action === 'REMOVE_COVER' ? false : plant.underCover,
+    growLight: action === 'MOVE_TO_LIGHT' ? true : plant.growLight
+  };
 }
 
 function recommendationBadge(source?: string | null): string {
@@ -322,24 +359,56 @@ export function PlantDetailSheet() {
   const seedStageMutation = useMutation({
     mutationFn: ({ plantId, seedStage }: { plantId: number; seedStage: NonNullable<PlantDto['seedStage']> }) =>
       updateSeedStage(plantId, seedStage),
+    onMutate: async ({ plantId, seedStage }) => {
+      await queryClient.cancelQueries({ queryKey: ['plant', plantId] });
+      await queryClient.cancelQueries({ queryKey: ['plants'] });
+      const previousPlant = queryClient.getQueryData<PlantDto>(['plant', plantId]);
+      const previousPlants = queryClient.getQueryData<PlantDto[]>(['plants']);
+      updatePlantCaches(queryClient, plantId, (plant) => ({ ...plant, seedStage }));
+      return { previousPlant, previousPlants, plantId };
+    },
     onSuccess: async () => {
       hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       await queryClient.invalidateQueries({ queryKey: ['seed-migration-preview', selectedPlantId] });
     },
-    onError: () => hapticError()
+    onError: (_error, _variables, context) => {
+      if (context?.previousPlant) {
+        queryClient.setQueryData(['plant', context.plantId], context.previousPlant);
+      }
+      if (context?.previousPlants) {
+        queryClient.setQueryData(['plants'], context.previousPlants);
+      }
+      hapticError();
+    }
   });
 
   const seedActionMutation = useMutation({
     mutationFn: ({ plantId, action }: { plantId: number; action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT' }) =>
       recordSeedCareAction(plantId, action),
+    onMutate: async ({ plantId, action }) => {
+      await queryClient.cancelQueries({ queryKey: ['plant', plantId] });
+      await queryClient.cancelQueries({ queryKey: ['plants'] });
+      const previousPlant = queryClient.getQueryData<PlantDto>(['plant', plantId]);
+      const previousPlants = queryClient.getQueryData<PlantDto[]>(['plants']);
+      updatePlantCaches(queryClient, plantId, (plant) => appendSeedActionEntry(plant, action));
+      return { previousPlant, previousPlants, plantId };
+    },
     onSuccess: async () => {
       hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
     },
-    onError: () => hapticError()
+    onError: (_error, _variables, context) => {
+      if (context?.previousPlant) {
+        queryClient.setQueryData(['plant', context.plantId], context.previousPlant);
+      }
+      if (context?.previousPlants) {
+        queryClient.setQueryData(['plants'], context.previousPlants);
+      }
+      hapticError();
+    }
   });
 
   const seedMigrationMutation = useMutation({
@@ -439,9 +508,41 @@ export function PlantDetailSheet() {
             previewDataUrl={previewDataUrl}
             photoUploading={photoMutation.isPending}
             wateringPulse={wateringPulse}
+            mainSection={isSeedPlant ? {
+              eyebrow: 'Сейчас',
+              title: 'Стадия и действия',
+              subtitle: 'Сначала самый понятный следующий шаг на текущем этапе.'
+            } : undefined}
+            explainabilitySection={isSeedPlant ? {
+              eyebrow: 'Контекст',
+              title: 'Что происходит сейчас',
+              subtitle: 'Коротко о текущем режиме проращивания и рекомендациях.'
+            } : undefined}
+            secondarySection={isSeedPlant ? {
+              eyebrow: 'Дополнительно',
+              title: 'Рост, фото и переход',
+              subtitle: 'История, камера роста и переход в обычное растение.'
+            } : undefined}
             mainWatering={
               isSeedPlant ? (
-                <SeedStatusBlock plant={plant} />
+                <SeedStageActionsCard
+                  plant={plant}
+                  loading={seedStageMutation.isPending || seedActionMutation.isPending}
+                  migrationAllowed={Boolean(migrationPreviewQuery.data?.allowed && plant.targetEnvironmentType && plant.targetEnvironmentType !== 'SEED_START')}
+                  recentActions={plant.seedActions ?? []}
+                  onStageChange={(nextStage) => {
+                    if (!selectedPlantId) return;
+                    seedStageMutation.mutate({ plantId: selectedPlantId, seedStage: nextStage });
+                  }}
+                  onMigrate={() => {
+                    setMigrationWizardStep(0);
+                    setMigrationWizardOpen(true);
+                  }}
+                  onAction={(action) => {
+                    if (!selectedPlantId) return;
+                    seedActionMutation.mutate({ plantId: selectedPlantId, action });
+                  }}
+                />
               ) : (
                 <WaterStatusBlock
                   plant={plant}
@@ -460,7 +561,10 @@ export function PlantDetailSheet() {
             }
             explainability={
               isSeedPlant ? (
-                <SeedRecommendationSection plant={plant} />
+                <div className="space-y-4">
+                  <SeedStatusBlock plant={plant} />
+                  <SeedRecommendationSection plant={plant} />
+                </div>
               ) : (
                 <WateringRecommendationCard
                   plant={plant}
@@ -491,30 +595,17 @@ export function PlantDetailSheet() {
             secondary={
               isSeedPlant ? (
                 <div className="space-y-4">
-                  <SeedLifecycleSection
-                    plant={plant}
-                    migrationPreview={migrationPreviewQuery.data ?? null}
-                    stageLoading={seedStageMutation.isPending}
-                    actionLoading={seedActionMutation.isPending}
-                    onStageChange={(nextStage) => {
-                      if (!selectedPlantId) return;
-                      seedStageMutation.mutate({ plantId: selectedPlantId, seedStage: nextStage });
-                    }}
-                    onAction={(action) => {
-                      if (!selectedPlantId) return;
-                      seedActionMutation.mutate({ plantId: selectedPlantId, action });
-                    }}
-                  />
-
-                  <SeedMigrationSection
-                    plant={plant}
-                    preview={migrationPreviewQuery.data ?? null}
-                    loading={seedMigrationMutation.isPending}
-                    onOpenWizard={() => {
-                      setMigrationWizardStep(0);
-                      setMigrationWizardOpen(true);
-                    }}
-                  />
+                  {plant.seedStage !== 'READY_TO_TRANSPLANT' ? (
+                    <SeedMigrationSection
+                      plant={plant}
+                      preview={migrationPreviewQuery.data ?? null}
+                      loading={seedMigrationMutation.isPending}
+                      onOpenWizard={() => {
+                        setMigrationWizardStep(0);
+                        setMigrationWizardOpen(true);
+                      }}
+                    />
+                  ) : null}
 
                   <SeedMigrationWizard
                     open={migrationWizardOpen}
