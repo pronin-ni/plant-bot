@@ -10,6 +10,7 @@ import com.example.plantbot.domain.AuthProviderType;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.auth.PwaAuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -37,6 +38,14 @@ public class PwaAuthController {
   public PwaAuthResponse telegramLogin(@RequestBody(required = false) PwaAuthTelegramRequest request) {
     String initData = request == null ? null : request.initData();
     return pwaAuthService.loginWithTelegram(initData);
+  }
+
+  @PostMapping("/dev-local")
+  public PwaAuthResponse localDevLogin(HttpServletRequest request) {
+    if (!isLocalRequest(request)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Маршрут недоступен");
+    }
+    return pwaAuthService.loginWithLocalDevUser();
   }
 
   @PostMapping("/telegram-widget")
@@ -75,5 +84,18 @@ public class PwaAuthController {
     } catch (Exception ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Неподдерживаемый provider: " + raw);
     }
+  }
+
+  private boolean isLocalRequest(HttpServletRequest request) {
+    if (request == null) {
+      return false;
+    }
+    String remoteAddr = request.getRemoteAddr();
+    if (remoteAddr == null || remoteAddr.isBlank()) {
+      return false;
+    }
+    return "127.0.0.1".equals(remoteAddr)
+        || "0:0:0:0:0:0:0:1".equals(remoteAddr)
+        || "::1".equals(remoteAddr);
   }
 }

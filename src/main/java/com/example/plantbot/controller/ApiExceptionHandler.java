@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -40,6 +41,21 @@ public class ApiExceptionHandler {
     }
     return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of(
         "message", ex.getMessage() == null ? "Некорректная операция" : ex.getMessage(),
+        "status", HttpStatus.BAD_REQUEST.value()
+    ));
+  }
+
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ResponseEntity<?> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
+    if (!acceptsJson(request)) {
+      return ResponseEntity.badRequest().build();
+    }
+    Throwable root = ex.getMostSpecificCause();
+    String message = root != null && root.getMessage() != null && !root.getMessage().isBlank()
+        ? root.getMessage()
+        : "Некорректный JSON или несовместимые значения полей";
+    return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of(
+        "message", message,
         "status", HttpStatus.BAD_REQUEST.value()
     ));
   }

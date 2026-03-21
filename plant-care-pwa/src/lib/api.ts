@@ -884,6 +884,12 @@ export async function pwaLoginTelegram(initData: string): Promise<PwaAuthDto> {
   });
 }
 
+export async function pwaLoginLocalDev(): Promise<PwaAuthDto> {
+  return pwaAuthFetch<PwaAuthDto>('/api/pwa/auth/dev-local', {
+    method: 'POST'
+  });
+}
+
 export async function pwaLoginTelegramWidget(payload: PwaTelegramWidgetPayloadDto): Promise<PwaAuthDto> {
   return pwaAuthFetch<PwaAuthDto>('/api/pwa/auth/telegram-widget', {
     method: 'POST',

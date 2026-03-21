@@ -51,9 +51,27 @@ public class PwaAuthService {
   @Value("${telegram.auth.max-age-seconds:86400}")
   private long telegramAuthMaxAgeSeconds;
 
+  @Value("${app.dev-auth-enabled:false}")
+  private boolean devAuthEnabled;
+
+  @Value("${app.dev-telegram-id:999000111}")
+  private long devTelegramId;
+
+  @Value("${app.dev-username:dev_user}")
+  private String devUsername;
+
   @Transactional
   public PwaAuthResponse loginWithTelegram(String initData) {
     User user = telegramInitDataService.validateAndResolveUser(initData);
+    return finalizeTelegramLogin(user);
+  }
+
+  @Transactional
+  public PwaAuthResponse loginWithLocalDevUser() {
+    if (!devAuthEnabled) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Маршрут недоступен");
+    }
+    User user = userService.getOrCreateByTelegramData(devTelegramId, devUsername, "Local", "Dev");
     return finalizeTelegramLogin(user);
   }
 

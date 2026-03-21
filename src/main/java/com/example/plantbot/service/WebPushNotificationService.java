@@ -80,6 +80,16 @@ public class WebPushNotificationService {
       throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Некорректная push-подписка");
     }
 
+    try {
+      Utils.loadPublicKey(normalizeBase64Url(request.keys().p256dh()));
+      decodeAuthSecret(request.keys().auth());
+    } catch (IllegalArgumentException | GeneralSecurityException ex) {
+      throw new ResponseStatusException(
+          org.springframework.http.HttpStatus.BAD_REQUEST,
+          "Некорректные ключи push-подписки"
+      );
+    }
+
     WebPushSubscription subscription = subscriptionRepository.findByEndpoint(request.endpoint())
         .orElseGet(WebPushSubscription::new);
     subscription.setUser(user);
@@ -297,7 +307,7 @@ public class WebPushNotificationService {
       subscription.setLastFailureReason(reason);
       subscriptionRepository.save(subscription);
       return new EndpointDeliveryResult(maskedEndpoint, false, status, reason);
-    } catch (GeneralSecurityException | JoseException | IOException | ExecutionException ex) {
+    } catch (GeneralSecurityException | JoseException | IOException | ExecutionException | IllegalArgumentException ex) {
       String reason = trimReason(ex.getClass().getSimpleName() + ": " + ex.getMessage());
       log.warn("WebPush send failed for endpoint={}: {}", maskedEndpoint, reason);
       subscription.setLastFailureAt(Instant.now());

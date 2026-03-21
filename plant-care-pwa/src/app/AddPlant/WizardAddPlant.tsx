@@ -621,6 +621,29 @@ export function WizardAddPlant() {
   }, [finalIntervalDays, finalWaterMl]);
 
   useEffect(() => {
+    if (environmentType === 'SEED_START' || !aiRecommendation) {
+      return;
+    }
+    if (manualOverrideEnabled || appliedRecommendationSource !== 'none') {
+      return;
+    }
+    setFinalIntervalDays(clamp(aiRecommendation.recommendedIntervalDays || intervalDaysNumber, 1, 60));
+    setFinalWaterMl(clamp(
+      aiRecommendation.recommendedWaterMl || estimateDefaultWaterMl(environmentType, potLitersNumber, wateringAreaM2Number),
+      50,
+      10_000
+    ));
+  }, [
+    aiRecommendation,
+    appliedRecommendationSource,
+    environmentType,
+    intervalDaysNumber,
+    manualOverrideEnabled,
+    potLitersNumber,
+    wateringAreaM2Number
+  ]);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) {
       return;
     }

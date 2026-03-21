@@ -370,6 +370,8 @@ export function SettingsPage() {
     setActiveTab('home');
     await queryClient.cancelQueries();
     queryClient.clear();
+    const logoutTarget = new URL(import.meta.env.BASE_URL || '/', window.location.origin);
+    window.location.replace(logoutTarget.toString());
   };
 
   return (

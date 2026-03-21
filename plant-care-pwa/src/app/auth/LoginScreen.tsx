@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
-import { Leaf, MoonStar, SunMedium } from 'lucide-react';
+import { Leaf, Loader2, MoonStar, SunMedium } from 'lucide-react';
 
 import { AnimatedBackground } from '@/components/login/AnimatedBackground';
 import { AuthProvidersList } from '@/components/auth/AuthProvidersList';
@@ -11,10 +11,10 @@ import { GuestModeButton } from '@/components/GuestModeButton';
 import { PrivacyNote } from '@/components/PrivacyNote';
 import { QuickTip } from '@/components/QuickTip';
 import { authProviders, type AuthProviderId } from '@/lib/auth/authProviders';
-import { ApiError } from '@/lib/api';
+import { ApiError, pwaLoginLocalDev } from '@/lib/api';
 import { cacheSet } from '@/lib/indexeddb';
 import { pwaLoginTelegram, pwaLoginTelegramWidget, pwaRequestEmailMagicLink, pwaVerifyEmailMagicLink } from '@/lib/api';
-import { isTestAuditMode } from '@/lib/runtime';
+import { isLocalhostRuntime, isTestAuditMode } from '@/lib/runtime';
 import {
   error as hapticError,
   impactLight,
@@ -272,6 +272,7 @@ export function LoginScreen() {
   const telegramBotUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'plant_at_home_bot';
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const testAuditMode = isTestAuditMode();
+  const showLocalDevLogin = isLocalhostRuntime();
 
   const scheduleAuthSuccess = (payload: AuthSuccessPayload, subtitle: string) => {
     if (successTimerRef.current) {
@@ -347,6 +348,27 @@ export function LoginScreen() {
     },
     onError: (error) => {
       setLoginError(mapTelegramAuthError(error));
+      hapticError();
+    }
+  });
+
+  const localDevLoginMutation = useMutation({
+    mutationFn: pwaLoginLocalDev,
+    onSuccess: (session) => {
+      scheduleAuthSuccess({
+        isAuthorized: true,
+        accessToken: session.accessToken,
+        telegramUserId: session.user.telegramId,
+        username: session.user.username,
+        firstName: session.user.firstName,
+        email: session.user.email,
+        roles: session.user.roles,
+        isAdmin: session.user.roles.includes('ROLE_ADMIN')
+      }, 'Локальная тестовая сессия готова');
+      setLoginError(null);
+    },
+    onError: (error) => {
+      setLoginError(error instanceof Error ? error.message : 'Не удалось выполнить локальный вход.');
       hapticError();
     }
   });
@@ -564,19 +586,39 @@ export function LoginScreen() {
         className="theme-surface-1 rounded-[28px] border p-4"
       >
         {!showTelegramWidget ? (
-          <AuthProvidersList
-            loadingProvider={activeProvider}
-            disabledAll={isOffline || isMagicLinkVerifying}
-            onLogin={(providerId) => {
-              if (isOffline) {
-                setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
-                hapticWarning();
-                return;
-              }
-              impactLight();
-              loginMutation.mutate(providerId);
-            }}
-          />
+          <>
+            <AuthProvidersList
+              loadingProvider={activeProvider}
+              disabledAll={isOffline || isMagicLinkVerifying || localDevLoginMutation.isPending}
+              onLogin={(providerId) => {
+                if (isOffline) {
+                  setLoginError('Нет подключения к сети. Войдите позже или используйте демо-режим.');
+                  hapticWarning();
+                  return;
+                }
+                impactLight();
+                loginMutation.mutate(providerId);
+              }}
+            />
+            {showLocalDevLogin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginError(null);
+                  impactLight();
+                  localDevLoginMutation.mutate();
+                }}
+                disabled={isOffline || isMagicLinkVerifying || loginMutation.isPending || localDevLoginMutation.isPending}
+                className="theme-surface-subtle mt-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition active:scale-[0.99] disabled:opacity-60"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-ios-text">Локальный тестовый вход</div>
+                  <div className="mt-0.5 text-xs text-ios-subtext">Только для localhost и локального backend</div>
+                </div>
+                {localDevLoginMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin text-ios-subtext" /> : null}
+              </button>
+            ) : null}
+          </>
         ) : null}
 
         <AnimatePresence initial={false}>
