@@ -16,9 +16,15 @@ import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.SeedContainerType;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.SeedSubstrateType;
+import com.example.plantbot.domain.SoilType;
 import com.example.plantbot.domain.SunExposure;
+import com.example.plantbot.domain.SunlightExposure;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.domain.WeatherConfidence;
+import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.domain.WateringProfileType;
+import com.example.plantbot.service.OutdoorWeatherContextService;
+import com.example.plantbot.service.dto.NormalizedWeatherContext;
 import com.example.plantbot.service.recommendation.model.LocationSource;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationFlowType;
@@ -27,18 +33,28 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RecommendationContextMapperTest {
 
   private final RecommendationContextMapperSupport support = new RecommendationContextMapperSupport();
-  private final PreviewRecommendationContextMapper previewMapper = new PreviewRecommendationContextMapper(support);
-  private final PlantRecommendationContextMapper plantMapper = new PlantRecommendationContextMapper(support);
-  private final SeedRecommendationContextMapper seedMapper = new SeedRecommendationContextMapper(support);
+  private final OutdoorWeatherContextService outdoorWeatherContextService = mock(OutdoorWeatherContextService.class);
+  private final WeatherContextAdapter weatherContextAdapter = new WeatherContextAdapter();
+  private final LocationContextResolver locationResolver = new LocationContextResolver();
+  private final WeatherContextResolver weatherResolver = new WeatherContextResolver(outdoorWeatherContextService, weatherContextAdapter);
+  private final PreviewRecommendationContextMapper previewMapper = new PreviewRecommendationContextMapper(support, locationResolver, weatherResolver);
+  private final PlantRecommendationContextMapper plantMapper = new PlantRecommendationContextMapper(support, locationResolver, weatherResolver);
+  private final SeedRecommendationContextMapper seedMapper = new SeedRecommendationContextMapper(support, locationResolver, weatherResolver);
 
   @Test
   void previewMapperMapsOutdoorFieldsIntoUnifiedContext() {
+    stubNormalizedWeather();
     User user = new User();
     user.setId(42L);
     user.setCity("Moscow");
@@ -68,8 +84,8 @@ class RecommendationContextMapperTest {
         true,
         true,
         2.5,
-        null,
-        null,
+        SoilType.LOAMY,
+        SunlightExposure.HIGH,
         "ha-room-1",
         "Terrace",
         "sensor.temp",
@@ -93,11 +109,20 @@ class RecommendationContextMapperTest {
     assertEquals(PlantContainerType.CONTAINER, context.containerType());
     assertEquals(12.0, context.containerVolumeLiters());
     assertEquals(2.5, context.outdoorAreaM2());
+    assertEquals(OutdoorSoilType.LOAMY, context.outdoorSoilType());
+    assertEquals(SunExposure.FULL_SUN, context.sunExposure());
     assertFalse(Boolean.TRUE.equals(context.greenhouse()));
     assertTrue(Boolean.TRUE.equals(context.mulched()));
     assertTrue(Boolean.TRUE.equals(context.dripIrrigation()));
+    assertInstanceOf(PreviewSensorSelectionContext.class, context.sensorContext());
+    PreviewSensorSelectionContext sensorSelection = (PreviewSensorSelectionContext) context.sensorContext();
+    assertEquals("ha-room-1", sensorSelection.haRoomId());
+    assertEquals("sensor.soil", sensorSelection.soilMoistureSensorEntityId());
     assertEquals("Moscow", context.locationContext().displayName());
     assertEquals(LocationSource.REQUEST_EXPLICIT, context.locationContext().locationSource());
+    assertNotNull(context.weatherContext());
+    assertTrue(context.weatherContext().available());
+    assertEquals("OPEN_METEO", context.weatherContext().providerUsed());
     assertEquals(RecommendationExecutionMode.HYBRID, context.mode());
     assertTrue(context.allowAI());
     assertTrue(context.allowWeather());
@@ -108,6 +133,7 @@ class RecommendationContextMapperTest {
 
   @Test
   void plantMapperMapsExistingPlantAndManualOverrideState() {
+    stubNormalizedWeather();
     User user = new User();
     user.setId(7L);
     user.setCity("Kazan");
@@ -170,10 +196,14 @@ class RecommendationContextMapperTest {
     assertEquals("tomato", context.cropType());
     assertEquals(LocationSource.PLANT_EXPLICIT, context.locationContext().locationSource());
     assertEquals("Kazan", context.locationContext().displayName());
+    assertNotNull(context.weatherContext());
+    assertTrue(context.weatherContext().available());
+    assertEquals("OPEN_METEO", context.weatherContext().providerUsed());
   }
 
   @Test
   void seedMapperMapsSeedSpecificFieldsIntoSeedContext() {
+    stubNormalizedWeather();
     User user = new User();
     user.setId(100L);
     user.setCity("Saint Petersburg");
@@ -206,6 +236,8 @@ class RecommendationContextMapperTest {
     assertFalse(Boolean.TRUE.equals(context.growLight()));
     assertEquals(LocationSource.REQUEST_EXPLICIT, context.locationContext().locationSource());
     assertEquals("Leningrad oblast", context.locationContext().displayName());
+    assertNotNull(context.weatherContext());
+    assertTrue(context.weatherContext().available());
     assertFalse(context.allowWeather());
     assertFalse(context.allowSensors());
     assertFalse(context.allowLearning());
@@ -240,5 +272,60 @@ class RecommendationContextMapperTest {
     assertNull(context.regionLabel());
     assertNull(context.lat());
     assertNull(context.lon());
+  }
+
+  @Test
+  void weatherResolverReturnsUnavailableContextWhenLocationMissing() {
+    var context = weatherResolver.resolve(null, null, RecommendationFlowType.PREVIEW);
+
+    assertFalse(context.available());
+    assertTrue(context.degraded());
+    assertEquals(List.of("Локация не задана, погодный контекст недоступен."), context.warnings());
+  }
+
+  @Test
+  void weatherResolverMapsNormalizedWeatherIntoUnifiedWeatherContext() {
+    stubNormalizedWeather();
+    User user = new User();
+    user.setCity("Moscow");
+
+    var location = locationResolver.resolveUserDefault(user);
+    var context = weatherResolver.resolve(user, location, RecommendationFlowType.RUNTIME);
+
+    assertTrue(context.available());
+    assertFalse(context.degraded());
+    assertFalse(context.fallbackUsed());
+    assertEquals("OPEN_METEO", context.providerUsed());
+    assertEquals("Moscow", context.locationDisplayName());
+    assertEquals(24.5, context.temperatureNowC());
+    assertEquals(61.0, context.humidityNowPercent());
+    assertEquals(2.0, context.precipitationLast24hMm());
+    assertEquals(7.5, context.precipitationForecastNext72hMm());
+    assertEquals(29.0, context.maxTemperatureNext3DaysC());
+    assertEquals(3.4, context.windNowMs());
+    assertEquals("HIGH", context.confidence());
+    assertEquals(List.of("Weather warning"), context.warnings());
+  }
+
+  private void stubNormalizedWeather() {
+    when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class))).thenReturn(
+        new NormalizedWeatherContext(
+            true,
+            false,
+            false,
+            false,
+            WeatherProvider.OPEN_METEO,
+            "Moscow",
+            "Moscow region",
+            24.5,
+            61.0,
+            2.0,
+            7.5,
+            29.0,
+            3.4,
+            WeatherConfidence.HIGH,
+            List.of("Weather warning")
+        )
+    );
   }
 }

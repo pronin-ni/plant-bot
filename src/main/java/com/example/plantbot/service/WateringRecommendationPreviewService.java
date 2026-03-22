@@ -8,6 +8,10 @@ import com.example.plantbot.controller.dto.WeatherContextPreviewResponse;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationContextMapper;
+import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationResponseAdapter;
+import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -23,10 +27,24 @@ public class WateringRecommendationPreviewService {
   private final OutdoorWeatherContextService outdoorWeatherContextService;
   private final RecommendationSnapshotService recommendationSnapshotService;
   private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
+  private final PreviewRecommendationContextMapper previewRecommendationContextMapper;
+  private final RecommendationFacade recommendationFacade;
+  private final PreviewRecommendationResponseAdapter previewRecommendationResponseAdapter;
   private final ObjectMapper objectMapper;
 
   public WateringRecommendationResponse preview(User user, WateringRecommendationPreviewRequest request) {
-    return recommendationEngine.recommendPreview(user, request);
+    RecommendationRequestContext context = buildPreviewContext(user, request);
+    if (context.flowType() == null) {
+      throw new IllegalStateException("Preview recommendation context must have flowType");
+    }
+    return previewRecommendationResponseAdapter.adapt(
+        recommendationFacade.preview(context),
+        context
+    );
+  }
+
+  RecommendationRequestContext buildPreviewContext(User user, WateringRecommendationPreviewRequest request) {
+    return previewRecommendationContextMapper.map(user, request);
   }
 
   public WateringRecommendationResponse refreshForExistingPlant(User user, Plant plant) {

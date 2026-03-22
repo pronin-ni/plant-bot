@@ -10,12 +10,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class PlantRecommendationContextMapper {
   private final RecommendationContextMapperSupport support;
+  private final LocationContextResolver locationContextResolver;
+  private final WeatherContextResolver weatherContextResolver;
 
-  public PlantRecommendationContextMapper(RecommendationContextMapperSupport support) {
+  public PlantRecommendationContextMapper(
+      RecommendationContextMapperSupport support,
+      LocationContextResolver locationContextResolver,
+      WeatherContextResolver weatherContextResolver
+  ) {
     this.support = support;
+    this.locationContextResolver = locationContextResolver;
+    this.weatherContextResolver = weatherContextResolver;
   }
 
   public RecommendationRequestContext map(Plant plant, User user, RecommendationFlowType flowType, RecommendationExecutionMode mode) {
+    var locationContext = locationContextResolver.resolveForPlant(user, plant);
     return new RecommendationRequestContext(
         user == null ? null : user.getId(),
         plant == null ? null : plant.getId(),
@@ -53,14 +62,14 @@ public class PlantRecommendationContextMapper {
         plant == null ? null : plant.getUnderCover(),
         plant == null ? null : plant.getGrowLight(),
         plant == null ? null : plant.getGerminationTemperatureC(),
-        support.buildPlantLocationContext(user, plant == null ? null : plant.getCity(), plant == null ? null : plant.getRegion()),
-        null,
+        locationContext,
+        weatherContextResolver.resolve(user, locationContext, flowType),
         null,
         null,
         null,
         mode,
-        true,
-        true,
+        mode != RecommendationExecutionMode.MANUAL,
+        mode != RecommendationExecutionMode.HEURISTIC && mode != RecommendationExecutionMode.BASE_PROFILE,
         true,
         true,
         false

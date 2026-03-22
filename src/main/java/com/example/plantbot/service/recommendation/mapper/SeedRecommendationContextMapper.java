@@ -14,12 +14,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class SeedRecommendationContextMapper {
   private final RecommendationContextMapperSupport support;
+  private final LocationContextResolver locationContextResolver;
+  private final WeatherContextResolver weatherContextResolver;
 
-  public SeedRecommendationContextMapper(RecommendationContextMapperSupport support) {
+  public SeedRecommendationContextMapper(
+      RecommendationContextMapperSupport support,
+      LocationContextResolver locationContextResolver,
+      WeatherContextResolver weatherContextResolver
+  ) {
     this.support = support;
+    this.locationContextResolver = locationContextResolver;
+    this.weatherContextResolver = weatherContextResolver;
   }
 
   public RecommendationRequestContext map(User user, SeedRecommendationPreviewRequest request) {
+    var locationContext = locationContextResolver.resolveForSeedPreview(user, request);
     return new RecommendationRequestContext(
         user == null ? null : user.getId(),
         null,
@@ -57,8 +66,8 @@ public class SeedRecommendationContextMapper {
         request == null ? null : request.underCover(),
         request == null ? null : request.growLight(),
         request == null ? null : request.germinationTemperatureC(),
-        support.buildRequestLocationContext(user, null, request == null ? null : request.region()),
-        null,
+        locationContext,
+        weatherContextResolver.resolve(user, locationContext, RecommendationFlowType.PREVIEW),
         null,
         null,
         null,
