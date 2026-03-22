@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -28,12 +27,12 @@ public interface AiTextCacheEntryRepository extends JpaRepository<AiTextCacheEnt
   List<AiTextCacheEntry> findTop200ByInvalidatedAtIsNullOrderByLastAccessedAtAsc();
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   @Query("delete from AiTextCacheEntry e where e.expiresAt < :cutoff or e.invalidatedAt is not null")
   int deleteExpiredOrInvalidated(@Param("cutoff") Instant cutoff);
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   @Query("""
       update AiTextCacheEntry e
          set e.invalidatedAt = :invalidatedAt
@@ -48,7 +47,7 @@ public interface AiTextCacheEntryRepository extends JpaRepository<AiTextCacheEnt
   );
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   @Query("""
       update AiTextCacheEntry e
          set e.invalidatedAt = :invalidatedAt
@@ -65,7 +64,7 @@ public interface AiTextCacheEntryRepository extends JpaRepository<AiTextCacheEnt
   );
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   @Query("""
       update AiTextCacheEntry e
          set e.invalidatedAt = :invalidatedAt

@@ -1,0 +1,68 @@
+package com.example.plantbot.service.recommendation.model;
+
+import com.example.plantbot.domain.OutdoorSoilType;
+import com.example.plantbot.domain.PlantCategory;
+import com.example.plantbot.domain.PlantContainerType;
+import com.example.plantbot.domain.PlantEnvironmentType;
+import com.example.plantbot.domain.PlantGrowthStage;
+import com.example.plantbot.domain.PlantPlacement;
+import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.SeedContainerType;
+import com.example.plantbot.domain.SeedStage;
+import com.example.plantbot.domain.SeedSubstrateType;
+import com.example.plantbot.domain.SunExposure;
+
+import java.time.Instant;
+import java.time.LocalDate;
+
+public record RecommendationRequestContext(
+    Long userId,
+    Long plantId,
+    RecommendationFlowType flowType,
+    String plantName,
+    PlantCategory category,
+    PlantEnvironmentType environmentType,
+    PlantPlacement placement,
+    PlantType plantType,
+    String wateringProfileType,
+    Integer baseIntervalDays,
+    Integer preferredWaterMl,
+    Integer recommendedIntervalDays,
+    Integer recommendedWaterVolumeMl,
+    Integer manualWaterVolumeMl,
+    RecommendationSource recommendationSource,
+    Instant recommendationGeneratedAt,
+    boolean manualOverrideActive,
+    Double potVolumeLiters,
+    PlantContainerType containerType,
+    Double containerVolumeLiters,
+    Double outdoorAreaM2,
+    OutdoorSoilType outdoorSoilType,
+    SunExposure sunExposure,
+    Boolean greenhouse,
+    Boolean mulched,
+    Boolean dripIrrigation,
+    PlantGrowthStage growthStage,
+    String cropType,
+    SeedStage seedStage,
+    PlantEnvironmentType targetEnvironmentType,
+    SeedContainerType seedContainerType,
+    SeedSubstrateType seedSubstrateType,
+    LocalDate sowingDate,
+    Boolean underCover,
+    Boolean growLight,
+    Double germinationTemperatureC,
+    LocationContext locationContext,
+    WeatherContext weatherContext,
+    Object sensorContext,
+    Object seasonContext,
+    Object learningContext,
+    RecommendationExecutionMode mode,
+    boolean allowAI,
+    boolean allowWeather,
+    boolean allowSensors,
+    boolean allowLearning,
+    boolean allowPersistence
+) {
+}
