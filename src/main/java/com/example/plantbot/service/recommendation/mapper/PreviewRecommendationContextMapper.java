@@ -61,6 +61,8 @@ public class PreviewRecommendationContextMapper {
         toSunExposure(request),
         request == null ? null : request.greenhouse(),
         request == null ? null : request.mulched(),
+        null,
+        null,
         request == null ? null : request.dripIrrigation(),
         toPlantGrowthStage(request),
         request == null ? null : request.cropType(),

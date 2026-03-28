@@ -21,17 +21,24 @@ import com.example.plantbot.service.AiTextCacheInvalidationService;
 import com.example.plantbot.service.OutdoorWeatherContextService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.RecommendationSnapshotService;
+import com.example.plantbot.service.SeedRecommendationService;
 import com.example.plantbot.service.WateringRecommendationEngine;
 import com.example.plantbot.service.WateringRecommendationPreviewService;
+import com.example.plantbot.service.context.OptionalSensorContextService;
 import com.example.plantbot.service.dto.NormalizedWeatherContext;
 import com.example.plantbot.service.recommendation.facade.DefaultRecommendationFacade;
 import com.example.plantbot.service.recommendation.mapper.LocationContextResolver;
+import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationResponseAdapter;
 import com.example.plantbot.service.recommendation.mapper.RecommendationContextMapperSupport;
 import com.example.plantbot.service.recommendation.mapper.RecommendationResultMapper;
 import com.example.plantbot.service.recommendation.mapper.WeatherContextAdapter;
 import com.example.plantbot.service.recommendation.mapper.WeatherContextResolver;
+import com.example.plantbot.service.recommendation.persistence.RecommendationExplainabilityPersistenceMapper;
+import com.example.plantbot.service.recommendation.runtime.LegacyRuntimeRecommendationDelegate;
+import com.example.plantbot.service.recommendation.persistence.DefaultRecommendationPersistencePolicy;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationFactor;
 import com.example.plantbot.service.recommendation.model.RecommendationResult;
@@ -68,11 +75,18 @@ class PreviewFacadeFlowTest {
   private RecommendationSnapshotService recommendationSnapshotService;
   @Mock
   private AiTextCacheInvalidationService aiTextCacheInvalidationService;
+  @Mock
+  private OptionalSensorContextService optionalSensorContextService;
+  @Mock
+  private LegacyRuntimeRecommendationDelegate legacyRuntimeRecommendationDelegate;
+  @Mock
+  private SeedRecommendationService seedRecommendationService;
 
   private DefaultRecommendationFacade facade;
   private WateringRecommendationPreviewService previewService;
   private PreviewRecommendationResponseAdapter responseAdapter;
   private PreviewRecommendationContextMapper previewMapper;
+  private PlantRecommendationContextMapper plantMapper;
 
   @BeforeEach
   void setUp() {
@@ -80,7 +94,8 @@ class PreviewFacadeFlowTest {
     LocationContextResolver locationContextResolver = new LocationContextResolver();
     WeatherContextResolver weatherContextResolver = new WeatherContextResolver(outdoorWeatherContextService, new WeatherContextAdapter());
     previewMapper = new PreviewRecommendationContextMapper(support, locationContextResolver, weatherContextResolver);
-    facade = new DefaultRecommendationFacade(engine, new RecommendationResultMapper());
+    plantMapper = new PlantRecommendationContextMapper(support, locationContextResolver, weatherContextResolver);
+    facade = new DefaultRecommendationFacade(engine, seedRecommendationService, new RecommendationResultMapper(), legacyRuntimeRecommendationDelegate);
     responseAdapter = new PreviewRecommendationResponseAdapter();
     previewService = new WateringRecommendationPreviewService(
         engine,
@@ -88,9 +103,14 @@ class PreviewFacadeFlowTest {
         outdoorWeatherContextService,
         recommendationSnapshotService,
         aiTextCacheInvalidationService,
+        optionalSensorContextService,
         previewMapper,
+        plantMapper,
         facade,
         responseAdapter,
+        new RecommendationExplainabilityPersistenceMapper(new ObjectMapper()),
+        new DefaultRecommendationPersistencePolicy(),
+        new RecommendationPersistencePlanApplier(),
         new ObjectMapper()
     );
 

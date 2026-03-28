@@ -166,8 +166,8 @@ export function QuickWaterButton({
         size="sm"
         className={`h-11 w-full rounded-2xl shadow-[0_8px_24px_hsl(var(--primary)/0.18)] android:rounded-[16px] ${
           disabled
-            ? 'border-[hsl(var(--border)/0.72)] bg-[hsl(var(--secondary)/0.9)] text-[hsl(var(--foreground)/0.72)] shadow-none hover:bg-[hsl(var(--secondary)/0.9)]'
-            : 'border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--primary)/0.24)]'
+            ? 'border-[hsl(var(--border)/0.72)] bg-[hsl(var(--secondary)/0.9)] text-[hsl(var(--foreground)/0.72)] shadow-none hover:scale-[1.02] active:scale-[0.98]'
+            : 'border-[hsl(var(--primary)/0.3)] bg-[hsl(var(--primary)/0.16)] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--primary)/0.24)] hover:scale-[1.02] active:scale-[0.97]'
         }`}
         disabled={disabled || isLoading || isRunning}
         onClick={handleClick}

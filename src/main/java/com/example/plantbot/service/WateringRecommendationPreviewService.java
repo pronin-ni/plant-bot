@@ -8,9 +8,18 @@ import com.example.plantbot.controller.dto.WeatherContextPreviewResponse;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.context.OptionalSensorContextService;
+import com.example.plantbot.controller.dto.WateringSensorContextDto;
+import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationResponseAdapter;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceCommand;
+import com.example.plantbot.service.recommendation.persistence.RecommendationExplainabilityPersistenceMapper;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceFlow;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlan;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePolicy;
 import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,9 +36,14 @@ public class WateringRecommendationPreviewService {
   private final OutdoorWeatherContextService outdoorWeatherContextService;
   private final RecommendationSnapshotService recommendationSnapshotService;
   private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
+  private final OptionalSensorContextService optionalSensorContextService;
   private final PreviewRecommendationContextMapper previewRecommendationContextMapper;
+  private final PlantRecommendationContextMapper plantRecommendationContextMapper;
   private final RecommendationFacade recommendationFacade;
   private final PreviewRecommendationResponseAdapter previewRecommendationResponseAdapter;
+  private final RecommendationExplainabilityPersistenceMapper explainabilityPersistenceMapper;
+  private final RecommendationPersistencePolicy recommendationPersistencePolicy;
+  private final RecommendationPersistencePlanApplier recommendationPersistencePlanApplier;
   private final ObjectMapper objectMapper;
 
   public WateringRecommendationResponse preview(User user, WateringRecommendationPreviewRequest request) {
@@ -48,12 +62,22 @@ public class WateringRecommendationPreviewService {
   }
 
   public WateringRecommendationResponse refreshForExistingPlant(User user, Plant plant) {
-    WateringRecommendationResponse response = recommendationEngine.recommendForExistingPlant(user, plant);
-    applyRecommendationToPlant(plant, response);
+    RecommendationRequestContext context = buildRefreshContext(user, plant);
+    var result = recommendationFacade.runtime(context);
+    WateringRecommendationResponse response = previewRecommendationResponseAdapter.adaptForRefresh(
+        result,
+        context
+    );
+    applyRecommendationToPlant(plant, response, explainabilityPersistenceMapper.fromExplainability(result.explainability()));
     plantService.save(plant);
     recommendationSnapshotService.saveFromResponse(plant, response);
     aiTextCacheInvalidationService.invalidateForPlantMutation(user, plant, "watering_recommendation_refresh");
     return response;
+  }
+
+  RecommendationRequestContext buildRefreshContext(User user, Plant plant) {
+    WateringSensorContextDto sensorContext = optionalSensorContextService.resolveForPlant(user, plant);
+    return plantRecommendationContextMapper.mapForRefresh(plant, user, sensorContext);
   }
 
   public WeatherContextPreviewResponse previewWeatherContext(User user, WateringRecommendationPreviewRequest request) {
@@ -83,28 +107,37 @@ public class WateringRecommendationPreviewService {
     int interval = clampInt(defaultInt(request.recommendedIntervalDays(), plant.getBaseIntervalDays()), 1, 30);
     int waterMl = clampInt(defaultInt(request.recommendedWaterMl(), plant.getPreferredWaterMl() == null ? 300 : plant.getPreferredWaterMl()), 50, 10_000);
     RecommendationSource source = request.source() == null ? RecommendationSource.MANUAL : request.source();
+    Instant eventTime = Instant.now();
+    var persistedExplainability = explainabilityPersistenceMapper.fromSummaryOnly(request.summary());
+    RecommendationPersistencePlan persistencePlan = recommendationPersistencePolicy.buildPlan(
+        plant,
+        new RecommendationPersistenceCommand(
+            interval,
+            waterMl,
+            source,
+            persistedExplainability.summary(),
+            persistedExplainability.reasoningJson(),
+            persistedExplainability.warningsJson(),
+            null,
+            eventTime,
+            true,
+            source == RecommendationSource.MANUAL,
+            waterMl,
+            true,
+            null
+        ),
+        RecommendationPersistenceFlow.APPLY
+    );
 
-    plant.setBaseIntervalDays(interval);
-    plant.setPreferredWaterMl(waterMl);
-    plant.setLastRecommendationSource(source);
-    plant.setLastRecommendedIntervalDays(interval);
-    plant.setLastRecommendedWaterMl(waterMl);
-    plant.setLastRecommendationSummary(request.summary());
-    plant.setLastRecommendationUpdatedAt(Instant.now());
-    plant.setManualWaterVolumeMl(waterMl);
-    plant.setRecommendedIntervalDays(interval);
-    plant.setRecommendedWaterVolumeMl(waterMl);
-    plant.setRecommendationSource(source);
-    plant.setRecommendationSummary(request.summary());
-    plant.setGeneratedAt(Instant.now());
+    recommendationPersistencePlanApplier.apply(plant, persistencePlan);
     plantService.save(plant);
-    recommendationSnapshotService.saveManualSnapshot(plant, source, interval, waterMl, request.summary());
+    recommendationSnapshotService.saveFromPayload(plant, persistencePlan.snapshotPayload());
     aiTextCacheInvalidationService.invalidateForPlantMutation(user, plant, "manual_recommendation_apply");
 
     return new ApplyWateringRecommendationResponse(
         true,
         plant.getId(),
-        source,
+        persistencePlan.appliedSource(),
         plant.getBaseIntervalDays(),
         plant.getPreferredWaterMl(),
         plant.getLastRecommendationUpdatedAt()
@@ -119,21 +152,26 @@ public class WateringRecommendationPreviewService {
     return Math.max(min, Math.min(max, value));
   }
 
-  private void applyRecommendationToPlant(Plant plant, WateringRecommendationResponse response) {
+  private void applyRecommendationToPlant(Plant plant,
+                                          WateringRecommendationResponse response,
+                                          com.example.plantbot.service.recommendation.persistence.PersistedRecommendationExplainability persistedExplainability) {
     int interval = clampInt(defaultInt(response.recommendedIntervalDays(), plant.getBaseIntervalDays()), 1, 30);
     int waterMl = clampInt(defaultInt(response.recommendedWaterVolumeMl(), defaultInt(response.recommendedWaterMl(), plant.getPreferredWaterMl() == null ? 300 : plant.getPreferredWaterMl())), 50, 10_000);
     plant.setRecommendedIntervalDays(interval);
     plant.setRecommendedWaterVolumeMl(waterMl);
     plant.setRecommendationSource(response.source());
-    plant.setRecommendationSummary(response.summary());
-    plant.setRecommendationReasoningJson(toJson(response.reasoning()));
-    plant.setRecommendationWarningsJson(toJson(response.warnings()));
+    plant.setRecommendationSummary(persistedExplainability == null ? response.summary() : persistedExplainability.summary());
+    plant.setRecommendationReasoningJson(persistedExplainability == null ? toJson(response.reasoning()) : persistedExplainability.reasoningJson());
+    plant.setRecommendationWarningsJson(persistedExplainability == null ? toJson(response.warnings()) : persistedExplainability.warningsJson());
     plant.setConfidenceScore(response.confidence());
     plant.setGeneratedAt(Instant.now());
+    boolean manualOverride = response.source() == RecommendationSource.MANUAL;
+    plant.setManualOverrideActive(manualOverride);
+    plant.setManualWaterVolumeMl(manualOverride ? waterMl : null);
     plant.setLastRecommendationSource(response.source());
     plant.setLastRecommendedIntervalDays(interval);
     plant.setLastRecommendedWaterMl(waterMl);
-    plant.setLastRecommendationSummary(response.summary());
+    plant.setLastRecommendationSummary(persistedExplainability == null ? response.summary() : persistedExplainability.summary());
     plant.setLastRecommendationUpdatedAt(Instant.now());
   }
 

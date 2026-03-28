@@ -2,7 +2,11 @@
 .gradle/
 build/
 out/
-
+.project
+.agents/skills
+data/
+docs/
+opencode.json
 # Java
 *.class
 *.jar

@@ -1,7 +1,12 @@
 package com.example.plantbot.service.recommendation.mapper;
 
+import com.example.plantbot.domain.GrowthStage;
+import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.RecommendationMode;
+import com.example.plantbot.domain.SoilType;
+import com.example.plantbot.domain.SunExposure;
+import com.example.plantbot.domain.SunlightExposure;
 import com.example.plantbot.service.recommendation.model.LocationContext;
 import com.example.plantbot.service.recommendation.model.LocationSource;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
@@ -73,6 +78,28 @@ public class RecommendationContextMapperSupport {
 
   public String toProfileTypeName(Enum<?> value) {
     return value == null ? null : value.name();
+  }
+
+  public SunExposure toSunExposure(SunlightExposure sunlightExposure) {
+    if (sunlightExposure == null) {
+      return null;
+    }
+    return switch (sunlightExposure) {
+      case HIGH -> SunExposure.FULL_SUN;
+      case MEDIUM -> SunExposure.PARTIAL_SHADE;
+      case LOW -> SunExposure.SHADE;
+    };
+  }
+
+  public PlantGrowthStage toPlantGrowthStage(GrowthStage growthStage) {
+    if (growthStage == null) {
+      return null;
+    }
+    try {
+      return PlantGrowthStage.valueOf(growthStage.name());
+    } catch (IllegalArgumentException ex) {
+      return null;
+    }
   }
 
   private String normalize(String value) {

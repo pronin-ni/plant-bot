@@ -7,9 +7,13 @@ import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationFlowType;
 import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+import java.util.Map;
 
 @Component
 public class SeedRecommendationContextMapper {
@@ -29,6 +33,9 @@ public class SeedRecommendationContextMapper {
 
   public RecommendationRequestContext map(User user, SeedRecommendationPreviewRequest request) {
     var locationContext = locationContextResolver.resolveForSeedPreview(user, request);
+    SeedStage stage = request == null || request.seedStage() == null ? SeedStage.SOWN : request.seedStage();
+    PlantEnvironmentType targetEnvironment = request == null ? null : request.targetEnvironmentType();
+    RecommendationExecutionMode mode = RecommendationExecutionMode.AI;
     return new RecommendationRequestContext(
         user == null ? null : user.getId(),
         null,
@@ -58,8 +65,10 @@ public class SeedRecommendationContextMapper {
         null,
         null,
         null,
-        request == null ? SeedStage.SOWN : request.seedStage(),
-        request == null ? null : request.targetEnvironmentType(),
+        null,
+        null,
+        stage,
+        targetEnvironment,
         request == null ? null : request.seedContainerType(),
         request == null ? null : request.seedSubstrateType(),
         request == null ? null : request.sowingDate(),
@@ -67,16 +76,31 @@ public class SeedRecommendationContextMapper {
         request == null ? null : request.growLight(),
         request == null ? null : request.germinationTemperatureC(),
         locationContext,
-        weatherContextResolver.resolve(user, locationContext, RecommendationFlowType.PREVIEW),
         null,
         null,
+        buildSeedSeasonContext(request, stage, targetEnvironment),
         null,
-        null,
+        mode,
         true,
         false,
         false,
         false,
         false
     );
+  }
+
+  private Map<String, Object> buildSeedSeasonContext(SeedRecommendationPreviewRequest request,
+                                                     SeedStage stage,
+                                                     PlantEnvironmentType targetEnvironment) {
+    return Map.of(
+        "seedStage", stage == null ? SeedStage.SOWN.name() : stage.name(),
+        "targetEnvironmentType", targetEnvironment == null ? nullValue() : targetEnvironment.name(),
+        "hasSowingDate", request != null && request.sowingDate() != null,
+        "currentMonth", LocalDate.now().getMonthValue()
+    );
+  }
+
+  private String nullValue() {
+    return "";
   }
 }

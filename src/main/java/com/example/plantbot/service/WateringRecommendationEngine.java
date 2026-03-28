@@ -71,6 +71,12 @@ public class WateringRecommendationEngine {
         RecommendationMode.HYBRID
     );
     WateringSensorContextDto sensorContext = optionalSensorContextService.resolveForPlant(user, plant);
+    return recommendExistingPlantContext(user, request, sensorContext);
+  }
+
+  public WateringRecommendationResponse recommendExistingPlantContext(User user,
+                                                                     WateringRecommendationPreviewRequest request,
+                                                                     WateringSensorContextDto sensorContext) {
     return recommendInternal(user, request, sensorContext);
   }
 

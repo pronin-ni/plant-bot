@@ -6,7 +6,19 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.RecommendationSnapshot;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.context.OptionalSensorContextService;
 import com.example.plantbot.service.dto.NormalizedWeatherContext;
+import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
+import com.example.plantbot.service.recommendation.mapper.PreviewRecommendationResponseAdapter;
+import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
+import com.example.plantbot.service.recommendation.persistence.RecommendationExplainabilityPersistenceMapper;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceCommand;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceFlow;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlan;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePolicy;
+import com.example.plantbot.util.LearningInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +37,15 @@ import java.util.List;
 @Slf4j
 public class ScheduledWateringRecalculationService {
   private final PlantService plantService;
+  private final LearningService learningService;
+  private final OptionalSensorContextService optionalSensorContextService;
   private final WateringRecommendationEngine recommendationEngine;
+  private final PlantRecommendationContextMapper plantRecommendationContextMapper;
+  private final RecommendationFacade recommendationFacade;
+  private final PreviewRecommendationResponseAdapter previewRecommendationResponseAdapter;
+  private final RecommendationExplainabilityPersistenceMapper explainabilityPersistenceMapper;
+  private final RecommendationPersistencePolicy recommendationPersistencePolicy;
+  private final RecommendationPersistencePlanApplier recommendationPersistencePlanApplier;
   private final RecommendationSnapshotService recommendationSnapshotService;
   private final OutdoorWeatherContextService outdoorWeatherContextService;
   private final ObjectMapper objectMapper;
@@ -49,10 +69,21 @@ public class ScheduledWateringRecalculationService {
         continue;
       }
       try {
-        WateringRecommendationResponse response = recommendationEngine.recommendForExistingPlant(plant.getUser(), plant);
-        applyRecommendation(plant, response);
+        RecommendationRequestContext context = buildScheduledContext(plant, plant.getUser());
+        var result = recommendationFacade.scheduled(context);
+        WateringRecommendationResponse response = previewRecommendationResponseAdapter.adaptForRefresh(
+            result,
+            context
+        );
+        WateringRecommendationResponse legacyResponse = recommendationEngine.recommendForExistingPlant(plant.getUser(), plant);
+        logScheduledDualRun(plant, response, legacyResponse);
+        RecommendationPersistencePlan plan = applyRecommendation(plant, response, explainabilityPersistenceMapper.fromExplainability(result.explainability()));
         plantService.save(plant);
-        recommendationSnapshotService.saveFromResponse(plant, response);
+        if (plan != null && plan.snapshotPayload() != null) {
+          recommendationSnapshotService.saveFromPayload(plant, plan.snapshotPayload());
+        } else {
+          recommendationSnapshotService.saveFromResponse(plant, response);
+        }
         updated++;
       } catch (Exception ex) {
         log.warn("Scheduled smart watering recalculation failed for plantId={} name='{}': {}",
@@ -61,6 +92,23 @@ public class ScheduledWateringRecalculationService {
     }
     log.info("Scheduled smart watering recalculation done. processed={}, updated={}, skippedManual={}",
         processed, updated, skippedManual);
+  }
+
+  RecommendationRequestContext buildScheduledContext(Plant plant, User user) {
+    double base = plant.getBaseIntervalDays();
+    var avgActual = learningService.getAverageInterval(plant);
+    var smoothed = learningService.getSmoothedInterval(plant);
+    Object learningContext = new LearningInfo(
+        base,
+        avgActual.isPresent() ? avgActual.getAsDouble() : null,
+        smoothed.isPresent() ? smoothed.getAsDouble() : null,
+        1.0,
+        1.0,
+        1.0,
+        smoothed.isPresent() ? smoothed.getAsDouble() : base
+    );
+    Object sensorContext = optionalSensorContextService.resolveForPlant(user, plant);
+    return plantRecommendationContextMapper.mapForScheduled(plant, user, learningContext, sensorContext);
   }
 
   private boolean shouldRecalculate(Plant plant) {
@@ -128,6 +176,37 @@ public class ScheduledWateringRecalculationService {
     return seasonIndex(then) != seasonIndex(now);
   }
 
+  private void logScheduledDualRun(Plant plant,
+                                   WateringRecommendationResponse unified,
+                                   WateringRecommendationResponse legacy) {
+    if (plant == null || unified == null || legacy == null) {
+      return;
+    }
+    int unifiedInterval = Math.max(1, unified.recommendedIntervalDays() == null ? 1 : unified.recommendedIntervalDays());
+    int legacyInterval = Math.max(1, legacy.recommendedIntervalDays() == null ? 1 : legacy.recommendedIntervalDays());
+    int unifiedWater = Math.max(0, unified.recommendedWaterVolumeMl() == null
+        ? (unified.recommendedWaterMl() == null ? 0 : unified.recommendedWaterMl())
+        : unified.recommendedWaterVolumeMl());
+    int legacyWater = Math.max(0, legacy.recommendedWaterVolumeMl() == null
+        ? (legacy.recommendedWaterMl() == null ? 0 : legacy.recommendedWaterMl())
+        : legacy.recommendedWaterVolumeMl());
+    if (Math.abs(unifiedInterval - legacyInterval) >= 1 || Math.abs(unifiedWater - legacyWater) >= 250) {
+      log.warn("Scheduled dual-run drift: plantId={} intervalNew={} intervalOld={} waterMlNew={} waterMlOld={} sourceNew={} sourceOld={}",
+          plant.getId(),
+          unifiedInterval,
+          legacyInterval,
+          unifiedWater,
+          legacyWater,
+          unified.source(),
+          legacy.source());
+    } else {
+      log.debug("Scheduled dual-run parity ok: plantId={} intervalDiff={} waterDiffMl={}",
+          plant.getId(),
+          Math.abs(unifiedInterval - legacyInterval),
+          Math.abs(unifiedWater - legacyWater));
+    }
+  }
+
   private int seasonIndex(LocalDate date) {
     int month = date.getMonthValue();
     if (month == 12 || month <= 2) return 0;
@@ -150,7 +229,9 @@ public class ScheduledWateringRecalculationService {
     return source == RecommendationSource.MANUAL || lastSource == RecommendationSource.MANUAL;
   }
 
-  private void applyRecommendation(Plant plant, WateringRecommendationResponse response) {
+  private RecommendationPersistencePlan applyRecommendation(Plant plant,
+                                                            WateringRecommendationResponse response,
+                                                            com.example.plantbot.service.recommendation.persistence.PersistedRecommendationExplainability persistedExplainability) {
     int interval = clampInt(response.recommendedIntervalDays(), 1, 30, Math.max(1, plant.getBaseIntervalDays()));
     int waterMl = clampInt(
         response.recommendedWaterVolumeMl() == null ? response.recommendedWaterMl() : response.recommendedWaterVolumeMl(),
@@ -159,26 +240,27 @@ public class ScheduledWateringRecalculationService {
         plant.getPreferredWaterMl() == null ? 300 : plant.getPreferredWaterMl()
     );
     RecommendationSource source = response.source() == null ? RecommendationSource.FALLBACK : response.source();
-    Instant now = Instant.now();
-
-    plant.setRecommendedIntervalDays(interval);
-    plant.setRecommendedWaterVolumeMl(waterMl);
-    plant.setRecommendationSource(source);
-    plant.setRecommendationSummary(response.summary());
-    plant.setRecommendationReasoningJson(writeJsonSafe(response.reasoning()));
-    plant.setRecommendationWarningsJson(writeJsonSafe(response.warnings()));
-    plant.setConfidenceScore(response.confidence());
-    plant.setGeneratedAt(now);
-
-    plant.setLastRecommendationSource(source);
-    plant.setLastRecommendedIntervalDays(interval);
-    plant.setLastRecommendedWaterMl(waterMl);
-    plant.setLastRecommendationSummary(response.summary());
-    plant.setLastRecommendationUpdatedAt(now);
-
-    // Keep next watering schedule up to date for non-manual mode.
-    plant.setBaseIntervalDays(interval);
-    plant.setPreferredWaterMl(waterMl);
+    RecommendationPersistencePlan plan = recommendationPersistencePolicy.buildPlan(
+        plant,
+        new RecommendationPersistenceCommand(
+            interval,
+            waterMl,
+            source,
+            persistedExplainability == null ? response.summary() : persistedExplainability.summary(),
+            persistedExplainability == null ? writeJsonSafe(response.reasoning()) : persistedExplainability.reasoningJson(),
+            persistedExplainability == null ? writeJsonSafe(response.warnings()) : persistedExplainability.warningsJson(),
+            response.confidence(),
+            Instant.now(),
+            true,
+            source == RecommendationSource.MANUAL,
+            source == RecommendationSource.MANUAL ? waterMl : null,
+            true,
+            writeJsonSafe(response.weatherContextPreview())
+        ),
+        RecommendationPersistenceFlow.SCHEDULED
+    );
+    recommendationPersistencePlanApplier.apply(plant, plan);
+    return plan;
   }
 
   private int clampInt(Integer value, int min, int max, int fallback) {

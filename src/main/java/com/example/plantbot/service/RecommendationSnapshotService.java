@@ -5,6 +5,7 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.RecommendationSnapshot;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.repository.RecommendationSnapshotRepository;
+import com.example.plantbot.service.recommendation.persistence.RecommendationSnapshotPayload;
 import com.example.plantbot.util.WateringRecommendation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,7 +52,7 @@ public class RecommendationSnapshotService {
     RecommendationSource source = plant.getRecommendationSource() == null
         ? RecommendationSource.BASE_PROFILE
         : plant.getRecommendationSource();
-    return saveSnapshot(
+    return saveSnapshotRawJson(
         plant,
         source,
         interval,
@@ -59,8 +60,8 @@ public class RecommendationSnapshotService {
         plant.getRecommendationSummary() == null
             ? "Initial recommendation snapshot on plant create."
             : plant.getRecommendationSummary(),
-        List.of(),
-        List.of(),
+        plant.getRecommendationReasoningJson(),
+        plant.getRecommendationWarningsJson(),
         null,
         plant.getConfidenceScore(),
         plant.getGeneratedAt() == null ? Instant.now() : plant.getGeneratedAt()
@@ -106,6 +107,24 @@ public class RecommendationSnapshotService {
     );
   }
 
+  public RecommendationSnapshot saveFromPayload(Plant plant, RecommendationSnapshotPayload payload) {
+    if (plant == null || payload == null) {
+      return null;
+    }
+    return saveSnapshotRawJson(
+        plant,
+        payload.source(),
+        payload.recommendedIntervalDays(),
+        payload.recommendedWaterVolumeMl(),
+        payload.summary(),
+        payload.reasoningJson(),
+        payload.warningsJson(),
+        payload.weatherContextSnapshotJson(),
+        payload.confidenceScore(),
+        payload.generatedAt()
+    );
+  }
+
   public List<RecommendationSnapshot> listForPlant(Plant plant, int limit) {
     int normalizedLimit = Math.max(1, Math.min(100, limit));
     if (normalizedLimit <= 50) {
@@ -137,6 +156,30 @@ public class RecommendationSnapshotService {
                                               Object weatherContextSnapshot,
                                               Double confidence,
                                               Instant generatedAt) {
+    return saveSnapshotRawJson(
+        plant,
+        source,
+        intervalDays,
+        waterMl,
+        summary,
+        toJson(reasoning),
+        toJson(warnings),
+        toJson(weatherContextSnapshot),
+        confidence,
+        generatedAt
+    );
+  }
+
+  private RecommendationSnapshot saveSnapshotRawJson(Plant plant,
+                                                     RecommendationSource source,
+                                                     Integer intervalDays,
+                                                     Integer waterMl,
+                                                     String summary,
+                                                     String reasoningJson,
+                                                     String warningsJson,
+                                                     String weatherContextSnapshotJson,
+                                                     Double confidence,
+                                                     Instant generatedAt) {
     if (plant == null || plant.getId() == null) {
       return null;
     }
@@ -146,9 +189,9 @@ public class RecommendationSnapshotService {
     snapshot.setRecommendedIntervalDays(Math.max(1, intervalDays == null ? 7 : intervalDays));
     snapshot.setRecommendedWaterVolumeMl(Math.max(50, waterMl == null ? 300 : waterMl));
     snapshot.setSummary(summary);
-    snapshot.setReasoningJson(toJson(reasoning));
-    snapshot.setWarningsJson(toJson(warnings));
-    snapshot.setWeatherContextSnapshotJson(toJson(weatherContextSnapshot));
+    snapshot.setReasoningJson(reasoningJson);
+    snapshot.setWarningsJson(warningsJson);
+    snapshot.setWeatherContextSnapshotJson(weatherContextSnapshotJson);
     snapshot.setConfidenceScore(confidence);
     snapshot.setGeneratedAt(generatedAt == null ? Instant.now() : generatedAt);
     return snapshotRepository.save(snapshot);

@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 @RestController
 @RequestMapping("/api/pwa/auth")
 @RequiredArgsConstructor
@@ -91,11 +94,31 @@ public class PwaAuthController {
       return false;
     }
     String remoteAddr = request.getRemoteAddr();
-    if (remoteAddr == null || remoteAddr.isBlank()) {
+    return isLoopbackAddress(remoteAddr);
+  }
+
+  private boolean isLoopbackAddress(String rawAddress) {
+    if (rawAddress == null || rawAddress.isBlank()) {
       return false;
     }
-    return "127.0.0.1".equals(remoteAddr)
-        || "0:0:0:0:0:0:0:1".equals(remoteAddr)
-        || "::1".equals(remoteAddr);
+    String normalized = rawAddress.trim();
+    if ("localhost".equalsIgnoreCase(normalized)) {
+      return true;
+    }
+    if (normalized.startsWith("::ffff:127.")
+        || normalized.startsWith("0:0:0:0:0:ffff:127.")
+        || normalized.startsWith("0:0:0:0:0:ffff:7f00:")
+        || normalized.startsWith("::ffff:7f00:")) {
+      return true;
+    }
+    int zoneIndex = normalized.indexOf('%');
+    if (zoneIndex >= 0) {
+      normalized = normalized.substring(0, zoneIndex);
+    }
+    try {
+      return InetAddress.getByName(normalized).isLoopbackAddress();
+    } catch (UnknownHostException ex) {
+      return false;
+    }
   }
 }

@@ -20,6 +20,9 @@ import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.SeedLifecycleService;
 import com.example.plantbot.service.SeedRecommendationService;
+import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.mapper.SeedRecommendationContextMapper;
+import com.example.plantbot.service.recommendation.mapper.SeedRecommendationResponseAdapter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -39,6 +42,9 @@ public class SeedController {
   private final PlantService plantService;
   private final SeedRecommendationService seedRecommendationService;
   private final SeedLifecycleService seedLifecycleService;
+  private final RecommendationFacade recommendationFacade;
+  private final SeedRecommendationContextMapper seedRecommendationContextMapper;
+  private final SeedRecommendationResponseAdapter seedRecommendationResponseAdapter;
 
   @PostMapping("/recommendation/preview")
   public SeedRecommendationPreviewResponse preview(
@@ -53,7 +59,11 @@ public class SeedController {
     if (request.targetEnvironmentType() == null || request.targetEnvironmentType() == PlantEnvironmentType.SEED_START) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetEnvironmentType обязателен и не может указывать на режим проращивания");
     }
-    return seedRecommendationService.preview(user, request);
+    var context = seedRecommendationContextMapper.map(user, request);
+    return seedRecommendationResponseAdapter.adapt(
+        recommendationFacade.preview(context),
+        context
+    );
   }
 
   @PostMapping("/{plantId}/stage")

@@ -23,8 +23,11 @@ import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherConfidence;
 import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.domain.WateringProfileType;
+import com.example.plantbot.controller.dto.WateringSensorContextDto;
+import com.example.plantbot.domain.SensorConfidence;
 import com.example.plantbot.service.OutdoorWeatherContextService;
 import com.example.plantbot.service.dto.NormalizedWeatherContext;
+import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.service.recommendation.model.LocationSource;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationFlowType;
@@ -153,6 +156,7 @@ class RecommendationContextMapperTest {
     plant.setRecommendedIntervalDays(2);
     plant.setRecommendedWaterVolumeMl(620);
     plant.setManualWaterVolumeMl(550);
+    plant.setManualOverrideActive(true);
     plant.setRecommendationSource(RecommendationSource.HYBRID);
     plant.setGeneratedAt(Instant.parse("2026-03-22T12:00:00Z"));
     plant.setPotVolumeLiters(6.0);
@@ -202,6 +206,133 @@ class RecommendationContextMapperTest {
   }
 
   @Test
+  void plantRefreshMapperMapsPersistedPlantContextAndSensorContext() {
+    stubNormalizedWeather();
+    User user = new User();
+    user.setId(8L);
+    user.setCity("Saint Petersburg");
+    user.setCityDisplayName("Санкт-Петербург");
+    user.setCityLat(59.93);
+    user.setCityLon(30.31);
+
+    Plant plant = new Plant();
+    plant.setId(44L);
+    plant.setUser(user);
+    plant.setName("Rose");
+    plant.setCategory(PlantCategory.OUTDOOR_DECORATIVE);
+    plant.setWateringProfile(PlantEnvironmentType.OUTDOOR_ORNAMENTAL);
+    plant.setPlacement(PlantPlacement.OUTDOOR);
+    plant.setType(PlantType.DEFAULT);
+    plant.setWateringProfileType(WateringProfileType.OUTDOOR_ORNAMENTAL);
+    plant.setBaseIntervalDays(4);
+    plant.setPreferredWaterMl(350);
+    plant.setRecommendedIntervalDays(3);
+    plant.setRecommendedWaterVolumeMl(420);
+    plant.setManualWaterVolumeMl(390);
+    plant.setManualOverrideActive(true);
+    plant.setRecommendationSource(RecommendationSource.MANUAL);
+    plant.setGeneratedAt(Instant.parse("2026-03-28T12:00:00Z"));
+    plant.setContainerType(PlantContainerType.OPEN_GROUND);
+    plant.setContainerVolumeLiters(18.0);
+    plant.setOutdoorAreaM2(2.0);
+    plant.setSunlightExposure(SunlightExposure.HIGH);
+    plant.setGrowthStageV2(com.example.plantbot.domain.GrowthStage.FLOWERING);
+    plant.setGreenhouse(false);
+    plant.setMulched(true);
+    plant.setDripIrrigation(false);
+    plant.setCity(null);
+    plant.setRegion("Leningrad oblast");
+    plant.setWeatherAdjustmentEnabled(false);
+    plant.setAiWateringEnabled(false);
+
+    WateringSensorContextDto sensorContext = new WateringSensorContextDto(
+        true, "room-1", "Garden", 23.0, 55.0, 48.0, 500.0, SensorConfidence.HIGH, "HOME_ASSISTANT", List.of("sensor.soil"), "ok"
+    );
+
+    RecommendationRequestContext context = plantMapper.mapForRefresh(plant, user, sensorContext);
+
+    assertEquals(RecommendationFlowType.RUNTIME, context.flowType());
+    assertEquals(RecommendationExecutionMode.HYBRID, context.mode());
+    assertEquals("Rose", context.plantName());
+    assertEquals(PlantCategory.OUTDOOR_DECORATIVE, context.category());
+    assertEquals(PlantEnvironmentType.OUTDOOR_ORNAMENTAL, context.environmentType());
+    assertEquals(PlantPlacement.OUTDOOR, context.placement());
+    assertEquals("OUTDOOR_ORNAMENTAL", context.wateringProfileType());
+    assertEquals(4, context.baseIntervalDays());
+    assertEquals(350, context.preferredWaterMl());
+    assertEquals(3, context.recommendedIntervalDays());
+    assertEquals(420, context.recommendedWaterVolumeMl());
+    assertEquals(390, context.manualWaterVolumeMl());
+    assertTrue(context.manualOverrideActive());
+    assertEquals(PlantContainerType.OPEN_GROUND, context.containerType());
+    assertEquals(18.0, context.containerVolumeLiters());
+    assertEquals(2.0, context.outdoorAreaM2());
+    assertEquals(SunExposure.FULL_SUN, context.sunExposure());
+    assertEquals(PlantGrowthStage.FLOWERING, context.growthStage());
+    assertEquals(LocationSource.PLANT_EXPLICIT, context.locationContext().locationSource());
+    assertEquals("Leningrad oblast", context.locationContext().displayName());
+    assertNull(context.weatherContext());
+    assertSame(sensorContext, context.sensorContext());
+    assertFalse(context.allowAI());
+    assertFalse(context.allowWeather());
+    assertTrue(context.allowSensors());
+  }
+
+  @Test
+  void plantQuickMapperBuildsLightweightQuickContextWithoutWeatherPayload() {
+    User user = new User();
+    user.setId(9L);
+    user.setCity("Moscow");
+    user.setCityDisplayName("Москва");
+
+    Plant plant = new Plant();
+    plant.setId(55L);
+    plant.setName("Quick Basil");
+    plant.setCategory(PlantCategory.OUTDOOR_GARDEN);
+    plant.setWateringProfile(PlantEnvironmentType.OUTDOOR_GARDEN);
+    plant.setPlacement(PlantPlacement.OUTDOOR);
+    plant.setType(PlantType.DEFAULT);
+    plant.setBaseIntervalDays(4);
+    plant.setPreferredWaterMl(450);
+    plant.setRecommendedIntervalDays(3);
+    plant.setRecommendedWaterVolumeMl(400);
+    plant.setManualWaterVolumeMl(380);
+    plant.setManualOverrideActive(true);
+    plant.setOutdoorAreaM2(2.5);
+    plant.setOutdoorSoilType(OutdoorSoilType.LOAMY);
+    plant.setSunExposure(SunExposure.FULL_SUN);
+    plant.setMulched(true);
+    plant.setCity("Moscow");
+    plant.setRegion("Moscow region");
+
+    LearningInfo learning = new LearningInfo(4.0, 3.5, 3.8, 1.0, 1.0, 0.9, 3.42);
+
+    RecommendationRequestContext context = plantMapper.mapForQuick(plant, user, learning, true);
+
+    assertEquals(RecommendationFlowType.RUNTIME, context.flowType());
+    assertEquals(RecommendationExecutionMode.HEURISTIC, context.mode());
+    assertEquals("Quick Basil", context.plantName());
+    assertEquals(4, context.baseIntervalDays());
+    assertEquals(450, context.preferredWaterMl());
+    assertEquals(3, context.recommendedIntervalDays());
+    assertEquals(400, context.recommendedWaterVolumeMl());
+    assertTrue(context.manualOverrideActive());
+    assertEquals(2.5, context.outdoorAreaM2());
+    assertEquals(OutdoorSoilType.LOAMY, context.outdoorSoilType());
+    assertEquals(SunExposure.FULL_SUN, context.sunExposure());
+    assertNotNull(context.locationContext());
+    assertNull(context.weatherContext());
+    assertNull(context.sensorContext());
+    assertSame(learning, context.learningContext());
+    assertNotNull(context.seasonContext());
+    assertFalse(context.allowAI());
+    assertFalse(context.allowWeather());
+    assertTrue(context.allowSensors());
+    assertTrue(context.allowLearning());
+    assertFalse(context.allowPersistence());
+  }
+
+  @Test
   void seedMapperMapsSeedSpecificFieldsIntoSeedContext() {
     stubNormalizedWeather();
     User user = new User();
@@ -236,12 +367,14 @@ class RecommendationContextMapperTest {
     assertFalse(Boolean.TRUE.equals(context.growLight()));
     assertEquals(LocationSource.REQUEST_EXPLICIT, context.locationContext().locationSource());
     assertEquals("Leningrad oblast", context.locationContext().displayName());
-    assertNotNull(context.weatherContext());
-    assertTrue(context.weatherContext().available());
+    assertNull(context.weatherContext());
+    assertEquals(RecommendationExecutionMode.AI, context.mode());
+    assertTrue(context.allowAI());
     assertFalse(context.allowWeather());
     assertFalse(context.allowSensors());
     assertFalse(context.allowLearning());
     assertFalse(context.allowPersistence());
+    assertNotNull(context.seasonContext());
   }
 
   @Test

@@ -37,6 +37,10 @@ public class PreviewRecommendationResponseAdapter {
     );
   }
 
+  public WateringRecommendationResponse adaptForRefresh(RecommendationResult result, RecommendationRequestContext context) {
+    return adapt(result, context);
+  }
+
   private RecommendationSource toRecommendationSource(String source) {
     if (source == null || source.isBlank()) {
       return null;

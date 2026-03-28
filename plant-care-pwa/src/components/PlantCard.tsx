@@ -161,7 +161,13 @@ export function PlantCard({
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400"
+              className={`h-full rounded-full transition-all duration-500 ${
+                cycleProgress > 70
+                  ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500'
+                  : cycleProgress > 40
+                    ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500'
+                    : 'bg-gradient-to-r from-red-500 via-orange-500 to-red-500'
+              }`}
               style={{ width: `${cycleProgress}%` }}
             />
           </div>

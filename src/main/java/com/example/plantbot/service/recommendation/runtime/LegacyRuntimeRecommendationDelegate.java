@@ -1,4 +1,4 @@
-package com.example.plantbot.service;
+package com.example.plantbot.service.recommendation.runtime;
 
 import com.example.plantbot.domain.OutdoorSoilType;
 import com.example.plantbot.domain.Plant;
@@ -6,21 +6,14 @@ import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.SunExposure;
 import com.example.plantbot.domain.User;
-import com.example.plantbot.service.context.OptionalSensorContextService;
-import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
-import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
-import com.example.plantbot.service.recommendation.mapper.RuntimeRecommendationAdapter;
-import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
-import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
-import com.example.plantbot.service.recommendation.model.RecommendationFlowType;
-import com.example.plantbot.util.AIWateringProfile;
-import com.example.plantbot.util.LearningInfo;
-import com.example.plantbot.util.WateringRecommendation;
-import com.example.plantbot.util.WeatherData;
+import com.example.plantbot.service.LearningService;
+import com.example.plantbot.service.OpenRouterPlantAdvisorService;
+import com.example.plantbot.service.WeatherService;
 import com.example.plantbot.service.ha.HomeAssistantIntegrationService;
 import com.example.plantbot.service.ha.IntervalAdjustmentResult;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import com.example.plantbot.util.AIWateringProfile;
+import com.example.plantbot.util.WateringRecommendation;
+import com.example.plantbot.util.WeatherData;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -29,81 +22,121 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
-public class WateringRecommendationService {
+public class LegacyRuntimeRecommendationDelegate {
   private final WeatherService weatherService;
   private final LearningService learningService;
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final HomeAssistantIntegrationService haIntegrationService;
-  private final OptionalSensorContextService optionalSensorContextService;
-  private final PlantRecommendationContextMapper plantRecommendationContextMapper;
-  private final RecommendationFacade recommendationFacade;
-  private final RuntimeRecommendationAdapter runtimeRecommendationAdapter;
+
+  public LegacyRuntimeRecommendationDelegate(
+      WeatherService weatherService,
+      LearningService learningService,
+      OpenRouterPlantAdvisorService openRouterPlantAdvisorService,
+      HomeAssistantIntegrationService haIntegrationService
+  ) {
+    this.weatherService = weatherService;
+    this.learningService = learningService;
+    this.openRouterPlantAdvisorService = openRouterPlantAdvisorService;
+    this.haIntegrationService = haIntegrationService;
+  }
 
   public WateringRecommendation recommend(Plant plant, User user) {
-    RecommendationRequestContext context = buildRuntimeContext(plant, user);
-    return runtimeRecommendationAdapter.adapt(recommendationFacade.runtime(context));
+    return recommendProfile(plant, user, true, true, true);
   }
 
-  // Fast local-only recommendation path for user actions where low latency matters.
-  // Does not call external APIs (weather/OpenRouter).
-  public WateringRecommendation recommendQuick(Plant plant) {
-    RecommendationRequestContext context = buildQuickContext(plant, null);
-    return runtimeRecommendationAdapter.adapt(recommendationFacade.runtime(context));
-  }
-
-  public WateringRecommendation recommendQuick(Plant plant, User user) {
-    RecommendationRequestContext context = buildQuickContext(plant, user);
-    return runtimeRecommendationAdapter.adapt(recommendationFacade.runtime(context));
-  }
-
-  public LearningInfo learningInfo(Plant plant, User user) {
+  public WateringRecommendation recommendProfile(Plant plant,
+                                                 User user,
+                                                 boolean allowWeather,
+                                                 boolean allowAi,
+                                                 boolean allowSensors) {
     String location = resolvePlantWeatherLocation(plant, user);
-    Optional<WeatherData> weather = weatherService.getCurrent(location, user.getCityLat(), user.getCityLon());
+    Optional<WeatherData> weather = allowWeather
+        ? weatherService.getCurrent(location, user == null ? null : user.getCityLat(), user == null ? null : user.getCityLon())
+        : Optional.empty();
     double base = plant.getBaseIntervalDays();
     double seasonFactor = seasonFactor(LocalDate.now().getMonth());
     double weatherFactor = weather.map(this::weatherFactor).orElse(1.0);
     double plantFactor = plantFactor(plant);
 
-    OptionalDouble avgActual = learningService.getAverageInterval(plant);
-    OptionalDouble smoothed = learningService.getSmoothedInterval(plant);
+    OptionalDouble smoothedOpt = learningService.getSmoothedInterval(plant);
+    double learned = smoothedOpt.isPresent() ? smoothedOpt.getAsDouble() : base;
 
-    double learned = smoothed.isPresent() ? smoothed.getAsDouble() : base;
-    double finalInterval = clamp(learned * seasonFactor * weatherFactor * plantFactor, 1.0, 60.0);
+    double interval = learned * seasonFactor * weatherFactor * plantFactor;
+    interval = clamp(interval, 1.0, 60.0);
 
-    return new LearningInfo(base,
-        avgActual.isPresent() ? avgActual.getAsDouble() : null,
-        smoothed.isPresent() ? smoothed.getAsDouble() : null,
-        seasonFactor,
-        weatherFactor,
-        plantFactor,
-        finalInterval);
+    if (isOutdoor(plant) && isWinterDormancyActive(plant)) {
+      return new WateringRecommendation(90.0, 0.0);
+    }
+
+    if (isOutdoor(plant)) {
+      if (allowWeather) {
+        double rain24 = weatherService.getAccumulatedRainMm(location, user == null ? null : user.getCityLat(), user == null ? null : user.getCityLon(), 24);
+        double rain72 = weatherService.getAccumulatedRainMm(location, user == null ? null : user.getCityLat(), user == null ? null : user.getCityLon(), 72);
+        if (rain24 >= 8.0 || rain72 >= 16.0) {
+          return new WateringRecommendation(Math.max(2.0, interval), safeNonZeroLiters(0.0, plant));
+        }
+        if (rain24 >= 4.0 || rain72 >= 10.0) {
+          interval = clamp(interval * 1.2, 1.0, 60.0);
+        }
+      }
+    }
+
+    double waterLiters = recommendWaterLiters(plant, weather.orElse(null));
+    if (allowAi) {
+      Optional<AIWateringProfile> aiProfile = openRouterPlantAdvisorService
+          .suggestWateringProfile(plant, weather.orElse(null), isOutdoor(plant));
+      if (aiProfile.isPresent()) {
+        AIWateringProfile p = aiProfile.get();
+        interval = clamp(interval * p.intervalFactor(), 1.0, 60.0);
+        waterLiters = roundTwoDecimals(waterLiters * p.waterFactor());
+      }
+    }
+    interval = clampIntervalByConfidence(base, interval, smoothedOpt.isPresent());
+
+    if (allowSensors) {
+      IntervalAdjustmentResult haAdjustment = haIntegrationService.applyHaAdjustment(plant, user, interval);
+      if (haAdjustment.applied()) {
+        interval = clamp(haAdjustment.intervalDays(), 1.0, 60.0);
+        haIntegrationService.logAdjustment(plant, base, haAdjustment);
+      }
+    }
+
+    waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
+    waterLiters = safeNonZeroLiters(waterLiters, plant);
+    return new WateringRecommendation(interval, waterLiters);
   }
 
-  RecommendationRequestContext buildRuntimeContext(Plant plant, User user) {
-    var sensorContext = optionalSensorContextService.resolveForPlant(user, plant);
-    return plantRecommendationContextMapper.mapForRefresh(plant, user, sensorContext);
-  }
-
-  RecommendationRequestContext buildQuickContext(Plant plant, User user) {
+  public WateringRecommendation recommendQuick(Plant plant) {
     double base = plant.getBaseIntervalDays();
     double seasonFactor = seasonFactor(LocalDate.now().getMonth());
     double plantFactor = plantFactor(plant);
-    OptionalDouble avgActual = learningService.getAverageInterval(plant);
-    OptionalDouble smoothed = learningService.getSmoothedInterval(plant);
-    double learned = smoothed.isPresent() ? smoothed.getAsDouble() : base;
-    double finalInterval = clamp(learned * seasonFactor * plantFactor, 1.0, 60.0);
-    LearningInfo info = new LearningInfo(
-        base,
-        avgActual.isPresent() ? avgActual.getAsDouble() : null,
-        smoothed.isPresent() ? smoothed.getAsDouble() : null,
-        seasonFactor,
-        1.0,
-        plantFactor,
-        finalInterval
-    );
-    return plantRecommendationContextMapper.mapForQuick(plant, user, info, user != null);
+
+    OptionalDouble smoothedOpt = learningService.getSmoothedInterval(plant);
+    double learned = smoothedOpt.isPresent() ? smoothedOpt.getAsDouble() : base;
+
+    double interval = learned * seasonFactor * plantFactor;
+    interval = clamp(interval, 1.0, 60.0);
+    interval = clampIntervalByConfidence(base, interval, smoothedOpt.isPresent());
+
+    if (isOutdoor(plant) && isWinterDormancyActive(plant)) {
+      return new WateringRecommendation(90.0, 0.0);
+    }
+
+    double waterLiters = recommendWaterLiters(plant, null);
+    waterLiters = enforceMinimumReasonableWater(plant, waterLiters);
+    waterLiters = safeNonZeroLiters(waterLiters, plant);
+    return new WateringRecommendation(interval, waterLiters);
+  }
+
+  public WateringRecommendation recommendQuick(Plant plant, User user) {
+    WateringRecommendation baseQuick = recommendQuick(plant);
+    IntervalAdjustmentResult haAdjustment = haIntegrationService.applyHaAdjustment(plant, user, baseQuick.intervalDays());
+    if (haAdjustment.applied()) {
+      double adjustedInterval = clamp(haAdjustment.intervalDays(), 1.0, 60.0);
+      haIntegrationService.logAdjustment(plant, baseQuick.intervalDays(), haAdjustment);
+      return new WateringRecommendation(adjustedInterval, baseQuick.waterLiters());
+    }
+    return baseQuick;
   }
 
   private double seasonFactor(Month month) {
@@ -195,7 +228,6 @@ public class WateringRecommendationService {
   }
 
   private double recommendWaterLiters(Plant plant, WeatherData weather) {
-    // Если пользователь вручную зафиксировал объём в wizard — используем его как приоритет.
     if (plant.getPreferredWaterMl() != null && plant.getPreferredWaterMl() > 0) {
       return roundTwoDecimals(clamp(plant.getPreferredWaterMl() / 1000.0, 0.05, 25.0));
     }
@@ -225,8 +257,7 @@ public class WateringRecommendationService {
   }
 
   private boolean isOutdoor(Plant plant) {
-    PlantPlacement placement = plant.getPlacement();
-    return placement == PlantPlacement.OUTDOOR;
+    return plant.getPlacement() == PlantPlacement.OUTDOOR;
   }
 
   private String resolvePlantWeatherLocation(Plant plant, User user) {
@@ -256,19 +287,13 @@ public class WateringRecommendationService {
     if (isOutdoor(plant)) {
       double area = plant.getOutdoorAreaM2() == null || plant.getOutdoorAreaM2() <= 0 ? 1.0 : plant.getOutdoorAreaM2();
       double derived = Math.max(0.5, area * outdoorLitersPerM2(plant) * 0.35);
-      double fallback = roundTwoDecimals(clamp(derived, 0.5, 25.0));
-      log.warn("Watering liters was <= 0, using outdoor fallback {} (area={}, type={})",
-          fallback, plant.getOutdoorAreaM2(), plant.getType());
-      return fallback;
+      return roundTwoDecimals(clamp(derived, 0.5, 25.0));
     }
 
     double pot = plant.getPotVolumeLiters() > 0 ? plant.getPotVolumeLiters() : 1.5;
     double percent = (plant.getType().getMinWaterPercent() + plant.getType().getMaxWaterPercent()) / 2.0;
     double derived = pot * percent;
-    double fallback = roundTwoDecimals(clamp(Math.max(0.12, derived), 0.12, 3.0));
-    log.warn("Watering liters was <= 0, using indoor fallback {} (pot={}, type={})",
-        fallback, plant.getPotVolumeLiters(), plant.getType());
-    return fallback;
+    return roundTwoDecimals(clamp(Math.max(0.12, derived), 0.12, 3.0));
   }
 
   private double outdoorLitersPerM2(Plant plant) {
@@ -285,7 +310,7 @@ public class WateringRecommendationService {
   private double outdoorCategoryIntervalFactor(Plant plant) {
     PlantCategory category = plant.getCategory();
     if (category == PlantCategory.OUTDOOR_GARDEN) {
-      return 0.88; // садовые поливаем чаще
+      return 0.88;
     }
     if (category == PlantCategory.OUTDOOR_DECORATIVE) {
       return 1.0;
@@ -296,7 +321,7 @@ public class WateringRecommendationService {
   private double outdoorCategoryVolumeFactor(Plant plant) {
     PlantCategory category = plant.getCategory();
     if (category == PlantCategory.OUTDOOR_GARDEN) {
-      return 1.25; // садовым обычно нужен больший объём
+      return 1.25;
     }
     if (category == PlantCategory.OUTDOOR_DECORATIVE) {
       return 1.0;
@@ -308,7 +333,6 @@ public class WateringRecommendationService {
     if (liters <= 0) {
       return liters;
     }
-    // Если объём задан пользователем вручную в wizard, не повышаем его эвристиками.
     if (plant.getPreferredWaterMl() != null && plant.getPreferredWaterMl() > 0) {
       return roundTwoDecimals(clamp(plant.getPreferredWaterMl() / 1000.0, 0.05, 25.0));
     }
@@ -320,12 +344,7 @@ public class WateringRecommendationService {
       double pot = plant.getPotVolumeLiters() > 0 ? plant.getPotVolumeLiters() : 1.5;
       minReasonable = Math.max(0.12, pot * plant.getType().getMinWaterPercent() * 0.85);
     }
-    double adjusted = Math.max(liters, minReasonable);
-    if (adjusted > liters) {
-      log.info("Raised low water recommendation from {} to {} for plantId={} name='{}'",
-          roundTwoDecimals(liters), roundTwoDecimals(adjusted), plant.getId(), plant.getName());
-    }
-    return roundTwoDecimals(adjusted);
+    return roundTwoDecimals(Math.max(liters, minReasonable));
   }
 
   private double clampIntervalByConfidence(double baseInterval, double interval, boolean hasHistory) {
@@ -333,11 +352,6 @@ public class WateringRecommendationService {
     double maxFactor = hasHistory ? 2.0 : 1.5;
     double min = Math.max(1.0, baseInterval * minFactor);
     double max = Math.max(3.0, baseInterval * maxFactor);
-    double clamped = clamp(interval, min, max);
-    if (clamped != interval) {
-      log.info("Interval clamped from {} to {} (base={}, hasHistory={})",
-          roundTwoDecimals(interval), roundTwoDecimals(clamped), baseInterval, hasHistory);
-    }
-    return clamped;
+    return clamp(interval, min, max);
   }
 }

@@ -47,7 +47,7 @@ export function IOSBottomTab() {
             {isActive ? (
               <motion.span
                 layoutId="ios-tab-active"
-                className="absolute inset-0 rounded-ios-tab bg-ios-accent/12"
+                className="absolute inset-0 rounded-ios-tab bg-ios-accent/18"
                 transition={{ type: 'spring', stiffness: 360, damping: 28, mass: 1 }}
               />
             ) : null}

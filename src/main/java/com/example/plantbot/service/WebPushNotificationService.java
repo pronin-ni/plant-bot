@@ -5,6 +5,8 @@ import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WebPushSubscription;
 import com.example.plantbot.repository.WebPushSubscriptionRepository;
+import com.example.plantbot.service.recommendation.model.RecommendationExplainability;
+import com.example.plantbot.service.recommendation.model.RecommendationResult;
 import com.example.plantbot.util.WateringRecommendation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -128,6 +130,28 @@ public class WebPushNotificationService {
 
   @Transactional
   public boolean sendWateringReminder(Plant plant, WateringRecommendation rec) {
+    if (rec == null) {
+      return false;
+    }
+    return sendWateringReminder(
+        plant,
+        new RecommendationResult(
+            Math.max(1, (int) Math.floor(rec.intervalDays())),
+            Math.max(1, (int) Math.round(rec.waterLiters() * 1000.0)),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            Instant.now(),
+            false
+        )
+    );
+  }
+
+  @Transactional
+  public boolean sendWateringReminder(Plant plant, RecommendationResult result) {
     if (!isEnabled() || plant == null || plant.getUser() == null) {
       return false;
     }
@@ -135,16 +159,27 @@ public class WebPushNotificationService {
     if (subscriptions.isEmpty()) {
       log.info("WebPush watering reminder skipped: plantId={} userId={} reason=no-subscriptions",
           plant.getId(),
-          plant.getUser().getId());
+              plant.getUser().getId());
       return false;
     }
 
-    String waterMl = String.valueOf(Math.max(1, (int) Math.round(rec.waterLiters() * 1000.0)));
-    LocalDate dueDate = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
+    int intervalDays = result == null || result.recommendedIntervalDays() == null
+        ? 1
+        : Math.max(1, result.recommendedIntervalDays());
+    int waterMlValue = result == null || result.recommendedWaterMl() == null
+        ? 1
+        : Math.max(1, result.recommendedWaterMl());
+    String waterMl = String.valueOf(waterMlValue);
+    LocalDate dueDate = plant.getLastWateredDate().plusDays(intervalDays);
+    String explainabilitySnippet = toNotificationExplainabilitySnippet(result == null ? null : result.explainability());
+    String body = plant.getName() + " • " + waterMl + " мл • до " + dueDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+    if (explainabilitySnippet != null && !explainabilitySnippet.isBlank()) {
+      body = body + " • " + explainabilitySnippet;
+    }
 
     Map<String, Object> payload = new HashMap<>();
     payload.put("title", "Пора поливать растение");
-    payload.put("body", plant.getName() + " • " + waterMl + " мл • до " + dueDate.format(DateTimeFormatter.ofPattern("dd.MM")));
+    payload.put("body", body);
     payload.put("tag", "plant-watering-" + plant.getId());
     payload.put("url", resolvePwaPublicUrl());
     payload.put("plantId", plant.getId());
@@ -157,6 +192,71 @@ public class WebPushNotificationService {
 
     String payloadJson = toJson(payload);
     return countDelivered(sendPayload(subscriptions, payloadJson)) > 0;
+  }
+
+  String toNotificationExplainabilitySnippet(RecommendationExplainability explainability) {
+    if (explainability == null) {
+      return null;
+    }
+
+    String summary = normalizeExplainabilityText(explainability.summary());
+    if (summary != null && !isTechnicalSummary(summary)) {
+      return summary;
+    }
+
+    if (normalizeExplainabilityText(explainability.manualOverrideContribution()) != null) {
+      return "Используется ручная настройка полива.";
+    }
+
+    String warning = firstMeaningful(explainability.warnings());
+    if (warning != null) {
+      return warning;
+    }
+
+    String weatherContribution = normalizeExplainabilityText(explainability.weatherContribution());
+    if (weatherContribution != null) {
+      return "Учтена текущая погода.";
+    }
+
+    String learningContribution = normalizeExplainabilityText(explainability.learningContribution());
+    if (learningContribution != null) {
+      return "Учтена история полива.";
+    }
+
+    String sensorContribution = normalizeExplainabilityText(explainability.sensorContribution());
+    if (sensorContribution != null) {
+      return "Учтены показания датчиков.";
+    }
+
+    return null;
+  }
+
+  private String firstMeaningful(List<String> values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      String normalized = normalizeExplainabilityText(value);
+      if (normalized != null) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  private String normalizeExplainabilityText(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isBlank() ? null : trimmed;
+  }
+
+  private boolean isTechnicalSummary(String summary) {
+    String normalized = summary.toLowerCase();
+    return normalized.contains("generated through unified facade")
+        || normalized.contains("runtime recommendation generated")
+        || normalized.contains("legacy runtime delegate");
   }
 
   @Transactional

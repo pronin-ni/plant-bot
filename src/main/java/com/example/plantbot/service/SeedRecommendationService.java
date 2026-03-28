@@ -6,6 +6,9 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.SeedWateringMode;
 import com.example.plantbot.domain.User;
+import com.example.plantbot.service.recommendation.mapper.SeedRecommendationResultMapper;
+import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
+import com.example.plantbot.service.recommendation.model.RecommendationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +21,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SeedRecommendationService {
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
+  private final SeedRecommendationResultMapper seedRecommendationResultMapper;
+
+  public RecommendationResult previewResult(User user, RecommendationRequestContext context) {
+    SeedRecommendationPreviewResponse response = preview(user, toPreviewRequest(context));
+    return seedRecommendationResultMapper.fromPreviewResponse(response, context);
+  }
 
   public SeedRecommendationPreviewResponse preview(User user, SeedRecommendationPreviewRequest request) {
     SeedStage stage = request.seedStage() == null ? SeedStage.SOWN : request.seedStage();
@@ -117,6 +126,21 @@ public class SeedRecommendationService {
         summary,
         reasoning,
         warnings
+    );
+  }
+
+  private SeedRecommendationPreviewRequest toPreviewRequest(RecommendationRequestContext context) {
+    return new SeedRecommendationPreviewRequest(
+        context == null ? null : context.plantName(),
+        context == null ? null : context.seedStage(),
+        context == null ? null : context.targetEnvironmentType(),
+        context == null ? null : context.seedContainerType(),
+        context == null ? null : context.seedSubstrateType(),
+        context == null ? null : context.sowingDate(),
+        context == null ? null : context.germinationTemperatureC(),
+        context == null ? null : context.underCover(),
+        context == null ? null : context.growLight(),
+        context == null || context.locationContext() == null ? null : context.locationContext().regionLabel()
     );
   }
 }

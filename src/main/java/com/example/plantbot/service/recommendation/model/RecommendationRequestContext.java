@@ -42,6 +42,8 @@ public record RecommendationRequestContext(
     SunExposure sunExposure,
     Boolean greenhouse,
     Boolean mulched,
+    Boolean perennial,
+    Boolean winterDormancyEnabled,
     Boolean dripIrrigation,
     PlantGrowthStage growthStage,
     String cropType,

@@ -28,6 +28,7 @@ import com.example.plantbot.domain.PlantCategory;
 import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherProvider;
@@ -50,6 +51,11 @@ import com.example.plantbot.service.AiTextCacheInvalidationService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.service.WeatherService;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceCommand;
+import com.example.plantbot.service.recommendation.persistence.RecommendationExplainabilityPersistenceMapper;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceFlow;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
+import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePolicy;
 import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.PlantCareAdvice;
 import com.example.plantbot.util.WateringRecommendation;
@@ -123,6 +129,9 @@ public class AppController {
   private final SeedLifecycleService seedLifecycleService;
   private final RecommendationSnapshotService recommendationSnapshotService;
   private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
+  private final RecommendationExplainabilityPersistenceMapper explainabilityPersistenceMapper;
+  private final RecommendationPersistencePolicy recommendationPersistencePolicy;
+  private final RecommendationPersistencePlanApplier recommendationPersistencePlanApplier;
   private final ObjectMapper objectMapper;
 
   @org.springframework.beans.factory.annotation.Value("${app.public-base-url:http://localhost:8080}")
@@ -315,24 +324,39 @@ public class AppController {
     seedLifecycleService.applySeedCreateFields(plant, request);
     plant.setGreenhouse(request.greenhouse());
     plant.setDripIrrigation(request.dripIrrigation());
-    if (request.recommendationSource() != null) {
-      plant.setManualWaterVolumeMl(request.preferredWaterMl());
-      plant.setRecommendedIntervalDays(baseInterval);
-      plant.setRecommendedWaterVolumeMl(request.preferredWaterMl());
-      plant.setRecommendationSource(request.recommendationSource());
-      plant.setRecommendationSummary(request.recommendationSummary());
-      plant.setRecommendationReasoningJson(request.recommendationReasoningJson());
-      plant.setRecommendationWarningsJson(request.recommendationWarningsJson());
-      plant.setConfidenceScore(request.confidenceScore());
-      plant.setGeneratedAt(Instant.now());
-      plant.setLastRecommendationSource(request.recommendationSource());
-      plant.setLastRecommendedIntervalDays(baseInterval);
-      plant.setLastRecommendedWaterMl(request.preferredWaterMl());
-      plant.setLastRecommendationSummary(request.recommendationSummary());
-      plant.setLastRecommendationUpdatedAt(Instant.now());
+    var persistedExplainability = explainabilityPersistenceMapper.fromLegacy(
+        request.recommendationSummary(),
+        request.recommendationReasoningJson(),
+        request.recommendationWarningsJson()
+    );
+    var persistencePlan = request.recommendationSource() == null ? null : recommendationPersistencePolicy.buildPlan(
+          plant,
+          new RecommendationPersistenceCommand(
+              baseInterval,
+              request.preferredWaterMl(),
+              request.recommendationSource(),
+              persistedExplainability.summary(),
+              persistedExplainability.reasoningJson(),
+              persistedExplainability.warningsJson(),
+              request.confidenceScore(),
+              Instant.now(),
+              true,
+              request.recommendationSource() == RecommendationSource.MANUAL,
+              request.preferredWaterMl(),
+              true,
+              null
+          ),
+          RecommendationPersistenceFlow.CREATE
+      );
+    if (persistencePlan != null) {
+      recommendationPersistencePlanApplier.apply(plant, persistencePlan);
     }
     plant = plantService.save(plant);
-    recommendationSnapshotService.saveInitialOnCreate(plant);
+    if (persistencePlan != null && persistencePlan.snapshotPayload() != null) {
+      recommendationSnapshotService.saveFromPayload(plant, persistencePlan.snapshotPayload());
+    } else {
+      recommendationSnapshotService.saveInitialOnCreate(plant);
+    }
     aiTextCacheInvalidationService.invalidateUserDraftFeatures(user, "plant_created_from_wizard");
     return toPlantResponse(plant, user, false);
   }
@@ -776,13 +800,28 @@ public class AppController {
     WateringRecommendation rec = lightweight
         ? wateringRecommendationService.recommendQuick(plant)
         : wateringRecommendationService.recommendQuick(plant, user);
-    int interval = plant.getRecommendedIntervalDays() == null
+    boolean hasPersistedRecommendation = plant.getRecommendedIntervalDays() != null
+        && plant.getRecommendedWaterVolumeMl() != null
+        && plant.getRecommendationSource() != null;
+    int interval = !hasPersistedRecommendation
         ? Math.max(1, (int) Math.floor(rec.intervalDays()))
         : Math.max(1, plant.getRecommendedIntervalDays());
     LocalDate next = plant.getLastWateredDate().plusDays(interval);
-    int ml = plant.getRecommendedWaterVolumeMl() == null
+    int ml = !hasPersistedRecommendation
         ? (int) Math.round(rec.waterLiters() * 1000.0)
         : plant.getRecommendedWaterVolumeMl();
+    RecommendationSource recommendationSource = hasPersistedRecommendation
+        ? plant.getRecommendationSource()
+        : null;
+    String recommendationSummary = hasPersistedRecommendation
+        ? plant.getRecommendationSummary()
+        : null;
+    Double confidenceScore = hasPersistedRecommendation
+        ? plant.getConfidenceScore()
+        : null;
+    Instant recommendationGeneratedAt = hasPersistedRecommendation
+        ? plant.getGeneratedAt()
+        : null;
     return new PlantResponse(
         plant.getId(),
         plant.getName(),
@@ -827,10 +866,10 @@ public class AppController {
         next,
         ml,
         interval,
-        plant.getRecommendationSource() == null ? plant.getLastRecommendationSource() : plant.getRecommendationSource(),
-        plant.getRecommendationSummary() == null ? plant.getLastRecommendationSummary() : plant.getRecommendationSummary(),
-        plant.getConfidenceScore(),
-        plant.getGeneratedAt() == null ? plant.getLastRecommendationUpdatedAt() : plant.getGeneratedAt(),
+        recommendationSource,
+        recommendationSummary,
+        confidenceScore,
+        recommendationGeneratedAt,
         plant.getType(),
         plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant),
         plant.getCreatedAt()

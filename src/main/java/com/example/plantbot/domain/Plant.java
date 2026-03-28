@@ -152,6 +152,8 @@ public class Plant {
 
   private Integer manualWaterVolumeMl;
 
+  private Boolean manualOverrideActive = false;
+
   private Boolean weatherAdjustmentEnabled;
 
   private Boolean aiWateringEnabled;
