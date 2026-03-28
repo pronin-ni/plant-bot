@@ -17,7 +17,7 @@ import {
   success as hapticSuccess
 } from '@/lib/haptics';
 import { useAuthStore, useOfflineStore, useUiStore } from '@/lib/store';
-import type { PlantDto } from '@/types/api';
+import type { CalendarEventDto, PlantDto } from '@/types/api';
 
 type SortMode = 'needs_water' | 'created_desc' | 'alpha' | 'category';
 
@@ -160,6 +160,24 @@ function sortPlants(plants: PlantDto[], mode: SortMode): PlantDto[] {
 function mergeWateredPlant(plants: PlantDto[] | undefined, updatedPlant: PlantDto): PlantDto[] {
   const items = plants ?? [];
   return items.map((plant) => (plant.id === updatedPlant.id ? { ...plant, ...updatedPlant } : plant));
+}
+
+function updateCalendarAfterWatering(
+  events: CalendarEventDto[] | undefined,
+  updatedPlant: PlantDto
+): CalendarEventDto[] {
+  const items = (events ?? []).filter((event) => event.plantId !== updatedPlant.id);
+  if (!updatedPlant.nextWateringDate) {
+    return items;
+  }
+  return [
+    ...items,
+    {
+      date: updatedPlant.nextWateringDate.slice(0, 10),
+      plantId: updatedPlant.id,
+      plantName: updatedPlant.name
+    }
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 function filterByCategory(plants: PlantDto[], filter: PlantCategoryFilter): PlantDto[] {
@@ -317,7 +335,9 @@ export function PlantsList() {
     onSuccess: (updatedPlant) => {
       hapticSuccess();
       queryClient.setQueryData<PlantDto[]>(['plants'], (current) => mergeWateredPlant(current, updatedPlant));
+      queryClient.setQueryData<CalendarEventDto[]>(['calendar'], (current) => updateCalendarAfterWatering(current, updatedPlant));
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
+      void queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
     onError: () => {
       hapticError();

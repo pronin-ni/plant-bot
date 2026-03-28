@@ -65,6 +65,7 @@ import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -666,8 +667,16 @@ public class AppController {
     var models = openRouterUserSettingsService.resolveGlobalModels();
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
     boolean hasApiKey = apiKey != null && !apiKey.isBlank();
-    String effectiveTextModel = firstNonBlank(models.chatModel(), openRouterModelCatalogService.resolveDynamicTextFallback(user));
-    String effectivePhotoModel = firstNonBlank(models.photoRecognitionModel(), openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
+    String effectiveTextModel = firstNonBlank(
+        models.chatModel(),
+        openRouterModelCatalogService.resolveConfiguredTextFallback(),
+        hasApiKey ? openRouterModelCatalogService.resolveDynamicTextFallback(user) : null
+    );
+    String effectivePhotoModel = firstNonBlank(
+        models.photoRecognitionModel(),
+        openRouterModelCatalogService.resolveConfiguredPhotoFallback(),
+        hasApiKey ? openRouterModelCatalogService.resolveDynamicPhotoFallback(user) : null
+    );
     return new OpenRouterRuntimeSettingsResponse(
         effectiveTextModel,
         effectivePhotoModel,
@@ -678,23 +687,25 @@ public class AppController {
   @GetMapping("/calendar/sync")
   public CalendarSyncResponse getCalendarSync(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
-      Authentication authentication
+      Authentication authentication,
+      HttpServletRequest request
   ) {
     User user = currentUserService.resolve(authentication, initData);
-    return toCalendarSyncResponse(user);
+    return toCalendarSyncResponse(user, request);
   }
 
   @PostMapping("/calendar/sync")
   public CalendarSyncResponse updateCalendarSync(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
       Authentication authentication,
-      @RequestBody CalendarSyncRequest request
+      @RequestBody CalendarSyncRequest request,
+      HttpServletRequest httpServletRequest
   ) {
     User user = currentUserService.resolve(authentication, initData);
     boolean enabled = request != null && Boolean.TRUE.equals(request.enabled());
     user.setCalendarSyncEnabled(enabled);
     user = userService.save(user);
-    return toCalendarSyncResponse(user);
+    return toCalendarSyncResponse(user, httpServletRequest);
   }
 
   @GetMapping(value = "/calendar/ics/{token}", produces = "text/calendar; charset=UTF-8")
@@ -993,11 +1004,60 @@ public class AppController {
     return null;
   }
 
-  private CalendarSyncResponse toCalendarSyncResponse(User user) {
-    String base = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+  private CalendarSyncResponse toCalendarSyncResponse(User user, HttpServletRequest request) {
+    String base = resolvePublicBaseUrl(request);
     String https = base + "/api/calendar/ics/" + user.getCalendarToken();
     String webcal = https.replaceFirst("^https?://", "webcal://");
     return new CalendarSyncResponse(Boolean.TRUE.equals(user.getCalendarSyncEnabled()), webcal, https);
+  }
+
+  private String resolvePublicBaseUrl(HttpServletRequest request) {
+    String configured = normalizeBaseUrl(publicBaseUrl);
+    boolean configuredLooksDefault = configured == null
+        || configured.isBlank()
+        || "http://localhost:8080".equalsIgnoreCase(configured)
+        || "https://localhost:8080".equalsIgnoreCase(configured);
+    if (request == null || !configuredLooksDefault) {
+      return configured;
+    }
+
+    String scheme = firstNonBlank(
+        firstForwardedValue(request.getHeader("X-Forwarded-Proto")),
+        request.getScheme(),
+        "http"
+    );
+    String forwardedHost = firstForwardedValue(request.getHeader("X-Forwarded-Host"));
+    String host = request.getServerName();
+    String port = firstNonBlank(firstForwardedValue(request.getHeader("X-Forwarded-Port")), String.valueOf(request.getServerPort()));
+    if (forwardedHost != null) {
+      if (forwardedHost.contains(":")) {
+        int idx = forwardedHost.lastIndexOf(':');
+        host = forwardedHost.substring(0, idx);
+        port = forwardedHost.substring(idx + 1);
+      } else {
+        host = forwardedHost;
+      }
+    }
+
+    boolean defaultPort = ("http".equalsIgnoreCase(scheme) && "80".equals(port))
+        || ("https".equalsIgnoreCase(scheme) && "443".equals(port));
+    String suffix = defaultPort || port == null || port.isBlank() ? "" : ":" + port;
+    return scheme + "://" + host + suffix;
+  }
+
+  private String normalizeBaseUrl(String value) {
+    if (value == null || value.isBlank()) {
+      return "http://localhost:8080";
+    }
+    String trimmed = value.trim();
+    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+  }
+
+  private String firstForwardedValue(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return value.split(",")[0].trim();
   }
 
   private static String safeNum(Double value, int scale) {

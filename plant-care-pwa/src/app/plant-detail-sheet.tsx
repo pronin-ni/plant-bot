@@ -34,7 +34,7 @@ import {
   success as hapticSuccess
 } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
-import type { PlantCareAdviceDto, PlantDto, WateringRecommendationPreviewDto } from '@/types/api';
+import type { CalendarEventDto, PlantCareAdviceDto, PlantDto, WateringRecommendationPreviewDto } from '@/types/api';
 
 function getProgress(plant: PlantDto): number {
   const last = parseDateOnly(plant.lastWateredDate);
@@ -114,6 +114,24 @@ function updatePlantCaches(
     }
     return current.map((item) => (item.id === plantId ? updater(item) : item));
   });
+}
+
+function updateCalendarAfterWatering(
+  events: CalendarEventDto[] | undefined,
+  updatedPlant: PlantDto
+): CalendarEventDto[] {
+  const items = (events ?? []).filter((event) => event.plantId !== updatedPlant.id);
+  if (!updatedPlant.nextWateringDate) {
+    return items;
+  }
+  return [
+    ...items,
+    {
+      date: updatedPlant.nextWateringDate.slice(0, 10),
+      plantId: updatedPlant.id,
+      plantName: updatedPlant.name
+    }
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
 function appendSeedActionEntry(plant: PlantDto, action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT') {
@@ -344,9 +362,11 @@ export function PlantDetailSheet() {
 
   const waterMutation = useMutation({
     mutationFn: (id: number) => waterPlant(id),
-    onSuccess: () => {
+    onSuccess: (updatedPlant) => {
       hapticSuccess();
+      queryClient.setQueryData<CalendarEventDto[]>(['calendar'], (current) => updateCalendarAfterWatering(current, updatedPlant));
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
+      void queryClient.invalidateQueries({ queryKey: ['calendar'] });
       void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });

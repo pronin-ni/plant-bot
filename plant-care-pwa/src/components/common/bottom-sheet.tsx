@@ -15,7 +15,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
         <>
           <motion.button
             type="button"
-            className="fixed inset-0 z-40 bg-black/28 backdrop-blur-[3px]"
+            className="fixed inset-x-0 top-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-40 bg-black/28 backdrop-blur-[3px]"
             aria-label="Закрыть лист"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -24,7 +24,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[430px] rounded-t-[30px] border border-ios-border/50 bg-ios-card/58 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-8px_36px_rgba(0,0,0,0.14)] backdrop-blur-[30px] android:rounded-t-[28px] android:bg-[#FFFBFE] android:border-[#E7E0EC] android:backdrop-blur-0 android:shadow-[0_-2px_10px_rgba(0,0,0,0.18)]"
+            className="fixed inset-x-0 bottom-[calc(72px+env(safe-area-inset-bottom))] z-50 mx-auto w-full max-w-[430px] rounded-t-[30px] border border-ios-border/50 bg-ios-card/58 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-8px_36px_rgba(0,0,0,0.14)] backdrop-blur-[30px] android:rounded-t-[28px] android:bg-[#FFFBFE] android:border-[#E7E0EC] android:backdrop-blur-0 android:shadow-[0_-2px_10px_rgba(0,0,0,0.18)]"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}

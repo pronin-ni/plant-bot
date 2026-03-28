@@ -26,6 +26,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Slf4j
 public class OpenRouterModelCatalogService {
+  private static final String DEFAULT_TEXT_FALLBACK_MODEL = "arcee-ai/trinity-large-preview:free";
+  private static final String DEFAULT_PHOTO_FALLBACK_MODEL = "google/gemma-3-12b-it:free";
+
   private final RestTemplate restTemplate;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
 
@@ -105,6 +108,14 @@ public class OpenRouterModelCatalogService {
 
   public String resolveDynamicPhotoFallback(User user) {
     return resolveDynamicFallback(fetchModels(user), true);
+  }
+
+  public String resolveConfiguredTextFallback() {
+    return firstNonBlank(fallbackModelChat, fallbackModelPlant, fallbackModel, DEFAULT_TEXT_FALLBACK_MODEL);
+  }
+
+  public String resolveConfiguredPhotoFallback() {
+    return firstNonBlank(fallbackModelPhotoIdentify, fallbackModelPhotoDiagnose, DEFAULT_PHOTO_FALLBACK_MODEL);
   }
 
   public KeyValidationResult validateApiKey(String apiKey) {
@@ -249,6 +260,18 @@ public class OpenRouterModelCatalogService {
       return null;
     }
     return value.trim();
+  }
+
+  private String firstNonBlank(String... values) {
+    if (values == null) {
+      return null;
+    }
+    for (String value : values) {
+      if (value != null && !value.isBlank()) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   public record KeyValidationResult(

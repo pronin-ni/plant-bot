@@ -107,7 +107,7 @@ interface UiState {
 export const useUiStore = create<UiState>((set) => ({
   activeTab: 'home',
   selectedPlantId: null,
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  setActiveTab: (tab) => set({ activeTab: tab, selectedPlantId: null }),
   openPlantDetail: (plantId) => set({ selectedPlantId: plantId }),
   closePlantDetail: () => set({ selectedPlantId: null })
 }));
