@@ -32,6 +32,10 @@ public class SeedLifecycleService {
   private final ObjectMapper objectMapper;
 
   public Plant applySeedCreateFields(Plant plant, CreatePlantRequest request) {
+    if (!isSeedPlant(plant, request)) {
+      clearSeedFields(plant);
+      return plant;
+    }
     plant.setSeedStage(request.seedStage() == null ? SeedStage.SOWN : request.seedStage());
     plant.setTargetEnvironmentType(request.targetEnvironmentType());
     plant.setSeedContainerType(request.seedContainerType());
@@ -53,6 +57,42 @@ public class SeedLifecycleService {
       plant.setSeedActionHistoryJson(toJson(List.of()));
     }
     return plant;
+  }
+
+  private boolean isSeedPlant(Plant plant, CreatePlantRequest request) {
+    if (plant != null && plant.getWateringProfile() == PlantEnvironmentType.SEED_START) {
+      return true;
+    }
+    if (plant != null && plant.getCategory() == PlantCategory.SEED_START) {
+      return true;
+    }
+    if (request == null) {
+      return false;
+    }
+    return request.environmentType() == PlantEnvironmentType.SEED_START
+        || request.wateringProfile() == PlantEnvironmentType.SEED_START
+        || request.category() == PlantCategory.SEED_START;
+  }
+
+  private void clearSeedFields(Plant plant) {
+    plant.setSeedStage(null);
+    plant.setTargetEnvironmentType(null);
+    plant.setSeedContainerType(null);
+    plant.setSeedSubstrateType(null);
+    plant.setSowingDate(null);
+    plant.setUnderCover(null);
+    plant.setGrowLight(null);
+    plant.setGerminationTemperatureC(null);
+    plant.setExpectedGerminationDaysMin(null);
+    plant.setExpectedGerminationDaysMax(null);
+    plant.setRecommendedCheckIntervalHours(null);
+    plant.setRecommendedWateringMode(null);
+    plant.setSeedCareMode(null);
+    plant.setSeedSummary(null);
+    plant.setSeedReasoningJson(null);
+    plant.setSeedWarningsJson(null);
+    plant.setSeedCareSource(null);
+    plant.setSeedActionHistoryJson(null);
   }
 
   public boolean canMigrate(Plant plant) {

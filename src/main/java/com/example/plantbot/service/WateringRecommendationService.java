@@ -8,38 +8,33 @@ import com.example.plantbot.domain.SunExposure;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.context.OptionalSensorContextService;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.mapper.LocationContextResolver;
 import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.RuntimeRecommendationAdapter;
+import com.example.plantbot.service.recommendation.mapper.WeatherContextResolver;
 import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
-import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
-import com.example.plantbot.service.recommendation.model.RecommendationFlowType;
-import com.example.plantbot.util.AIWateringProfile;
 import com.example.plantbot.util.LearningInfo;
 import com.example.plantbot.util.WateringRecommendation;
 import com.example.plantbot.util.WeatherData;
-import com.example.plantbot.service.ha.HomeAssistantIntegrationService;
-import com.example.plantbot.service.ha.IntervalAdjustmentResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.Month;
-import java.util.Optional;
 import java.util.OptionalDouble;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class WateringRecommendationService {
-  private final WeatherService weatherService;
   private final LearningService learningService;
-  private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
-  private final HomeAssistantIntegrationService haIntegrationService;
   private final OptionalSensorContextService optionalSensorContextService;
   private final PlantRecommendationContextMapper plantRecommendationContextMapper;
   private final RecommendationFacade recommendationFacade;
   private final RuntimeRecommendationAdapter runtimeRecommendationAdapter;
+  private final LocationContextResolver locationContextResolver;
+  private final WeatherContextResolver weatherContextResolver;
 
   public WateringRecommendation recommend(Plant plant, User user) {
     RecommendationRequestContext context = buildRuntimeContext(plant, user);
@@ -59,11 +54,11 @@ public class WateringRecommendationService {
   }
 
   public LearningInfo learningInfo(Plant plant, User user) {
-    String location = resolvePlantWeatherLocation(plant, user);
-    Optional<WeatherData> weather = weatherService.getCurrent(location, user.getCityLat(), user.getCityLon());
+    var locationContext = locationContextResolver.resolveForPlant(user, plant);
+    var weather = weatherContextResolver.resolve(user, locationContext, com.example.plantbot.service.recommendation.model.RecommendationFlowType.RUNTIME);
     double base = plant.getBaseIntervalDays();
     double seasonFactor = seasonFactor(LocalDate.now().getMonth());
-    double weatherFactor = weather.map(this::weatherFactor).orElse(1.0);
+    double weatherFactor = weatherFactor(weather);
     double plantFactor = plantFactor(plant);
 
     OptionalDouble avgActual = learningService.getAverageInterval(plant);
@@ -114,16 +109,19 @@ public class WateringRecommendationService {
     };
   }
 
-  private double weatherFactor(WeatherData weather) {
+  private double weatherFactor(com.example.plantbot.service.recommendation.model.WeatherContext weather) {
+    if (weather == null || !weather.available()) {
+      return 1.0;
+    }
     double factor = 1.0;
-    if (weather.temperatureC() >= 28) {
+    if (weather.temperatureNowC() != null && weather.temperatureNowC() >= 28) {
       factor *= 0.85;
-    } else if (weather.temperatureC() <= 10) {
+    } else if (weather.temperatureNowC() != null && weather.temperatureNowC() <= 10) {
       factor *= 1.15;
     }
-    if (weather.humidityPercent() <= 40) {
+    if (weather.humidityNowPercent() != null && weather.humidityNowPercent() <= 40) {
       factor *= 0.9;
-    } else if (weather.humidityPercent() >= 70) {
+    } else if (weather.humidityNowPercent() != null && weather.humidityNowPercent() >= 70) {
       factor *= 1.1;
     }
     return factor;
@@ -227,18 +225,6 @@ public class WateringRecommendationService {
   private boolean isOutdoor(Plant plant) {
     PlantPlacement placement = plant.getPlacement();
     return placement == PlantPlacement.OUTDOOR;
-  }
-
-  private String resolvePlantWeatherLocation(Plant plant, User user) {
-    if (plant != null) {
-      if (plant.getCity() != null && !plant.getCity().isBlank()) {
-        return plant.getCity().trim();
-      }
-      if (plant.getRegion() != null && !plant.getRegion().isBlank()) {
-        return plant.getRegion().trim();
-      }
-    }
-    return user == null || user.getCity() == null ? null : user.getCity().trim();
   }
 
   private double clamp(double value, double min, double max) {

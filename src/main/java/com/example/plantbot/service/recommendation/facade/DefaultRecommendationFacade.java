@@ -294,7 +294,7 @@ public class DefaultRecommendationFacade implements RecommendationFacade {
     User user = new User();
     user.setId(context.userId());
     LocationContext locationContext = context.locationContext();
-    if (locationContext != null && locationContext.locationSource() == LocationSource.USER_DEFAULT) {
+    if (locationContext != null && locationContext.locationSource() != LocationSource.NONE) {
       user.setCity(firstNonBlank(locationContext.cityLabel(), locationContext.canonicalQuery(), locationContext.displayName()));
       user.setCityDisplayName(locationContext.displayName());
       user.setCityLat(locationContext.lat());

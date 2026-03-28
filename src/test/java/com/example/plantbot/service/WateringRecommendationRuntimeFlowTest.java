@@ -18,9 +18,9 @@ import com.example.plantbot.service.SeedRecommendationService;
 import com.example.plantbot.service.context.OptionalSensorContextService;
 import com.example.plantbot.service.dto.NormalizedWeatherContext;
 import com.example.plantbot.service.ha.HomeAssistantIntegrationService;
+import com.example.plantbot.service.recommendation.mapper.LocationContextResolver;
 import com.example.plantbot.service.recommendation.facade.DefaultRecommendationFacade;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
-import com.example.plantbot.service.recommendation.mapper.LocationContextResolver;
 import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.RecommendationContextMapperSupport;
 import com.example.plantbot.service.recommendation.mapper.RecommendationResultMapper;
@@ -77,6 +77,10 @@ class WateringRecommendationRuntimeFlowTest {
   private WateringRecommendationEngine recommendationEngine;
   @Mock
   private SeedRecommendationService seedRecommendationService;
+  @Mock
+  private LocationContextResolver locationContextResolver;
+  @Mock
+  private WeatherContextResolver weatherContextResolver;
 
   private RuntimeRecommendationAdapter runtimeRecommendationAdapter;
   private WateringRecommendationService service;
@@ -91,14 +95,13 @@ class WateringRecommendationRuntimeFlowTest {
     plantMapper = new PlantRecommendationContextMapper(support, locationResolver, weatherResolver);
 
     service = new WateringRecommendationService(
-        weatherService,
         learningService,
-        openRouterPlantAdvisorService,
-        haIntegrationService,
         optionalSensorContextService,
         plantMapper,
         recommendationFacade,
-        runtimeRecommendationAdapter
+        runtimeRecommendationAdapter,
+        locationContextResolver,
+        weatherContextResolver
     );
 
     when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class))).thenReturn(
@@ -118,6 +121,12 @@ class WateringRecommendationRuntimeFlowTest {
             null,
             WeatherConfidence.HIGH,
             List.of()
+        )
+    );
+    when(locationContextResolver.resolveForPlant(any(), any())).thenCallRealMethod();
+    when(weatherContextResolver.resolve(any(), any(), any())).thenReturn(
+        new com.example.plantbot.service.recommendation.model.WeatherContext(
+            true, false, false, false, "OPEN_METEO", "Moscow", 22.5, 58.0, 1.0, 4.0, 27.0, null, "HIGH", List.of()
         )
     );
   }

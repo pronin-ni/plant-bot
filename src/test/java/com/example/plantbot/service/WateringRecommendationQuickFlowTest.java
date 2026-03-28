@@ -70,6 +70,10 @@ class WateringRecommendationQuickFlowTest {
   private WateringRecommendationEngine recommendationEngine;
   @Mock
   private SeedRecommendationService seedRecommendationService;
+  @Mock
+  private LocationContextResolver locationContextResolver;
+  @Mock
+  private WeatherContextResolver weatherContextResolver;
 
   private WateringRecommendationService service;
 
@@ -80,20 +84,25 @@ class WateringRecommendationQuickFlowTest {
     WeatherContextResolver weatherResolver = new WeatherContextResolver(outdoorWeatherContextService, new WeatherContextAdapter());
     PlantRecommendationContextMapper plantMapper = new PlantRecommendationContextMapper(support, locationResolver, weatherResolver);
     service = new WateringRecommendationService(
-        weatherService,
         learningService,
-        openRouterPlantAdvisorService,
-        haIntegrationService,
         optionalSensorContextService,
         plantMapper,
         recommendationFacade,
-        new RuntimeRecommendationAdapter()
+        new RuntimeRecommendationAdapter(),
+        locationContextResolver,
+        weatherContextResolver
     );
 
     when(learningService.getAverageInterval(any())).thenReturn(java.util.OptionalDouble.of(3.5));
     when(learningService.getSmoothedInterval(any())).thenReturn(java.util.OptionalDouble.of(4.0));
     when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class))).thenReturn(
         new NormalizedWeatherContext(true, false, false, false, null, "Moscow", "Moscow region", null, null, null, null, null, null, null, List.of())
+    );
+    when(locationContextResolver.resolveForPlant(any(), any())).thenCallRealMethod();
+    when(weatherContextResolver.resolve(any(), any(), any())).thenReturn(
+        new com.example.plantbot.service.recommendation.model.WeatherContext(
+            true, false, false, false, "OPEN_METEO", "Moscow", 20.0, 60.0, 1.0, 2.0, 25.0, null, "HIGH", List.of()
+        )
     );
   }
 

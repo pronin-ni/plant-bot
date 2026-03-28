@@ -51,6 +51,9 @@ import com.example.plantbot.service.AiTextCacheInvalidationService;
 import com.example.plantbot.service.WateringLogService;
 import com.example.plantbot.service.WateringRecommendationService;
 import com.example.plantbot.service.WeatherService;
+import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
+import com.example.plantbot.service.recommendation.mapper.LegacyPlantAiRecommendContextMapper;
+import com.example.plantbot.service.recommendation.mapper.LegacyPlantAiRecommendResponseAdapter;
 import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceCommand;
 import com.example.plantbot.service.recommendation.persistence.RecommendationExplainabilityPersistenceMapper;
 import com.example.plantbot.service.recommendation.persistence.RecommendationPersistenceFlow;
@@ -63,6 +66,7 @@ import com.example.plantbot.util.WeatherData;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -109,6 +113,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Slf4j
 public class AppController {
   private final CurrentUserService currentUserService;
   private final PlantService plantService;
@@ -129,6 +134,9 @@ public class AppController {
   private final SeedLifecycleService seedLifecycleService;
   private final RecommendationSnapshotService recommendationSnapshotService;
   private final AiTextCacheInvalidationService aiTextCacheInvalidationService;
+  private final RecommendationFacade recommendationFacade;
+  private final LegacyPlantAiRecommendContextMapper legacyPlantAiRecommendContextMapper;
+  private final LegacyPlantAiRecommendResponseAdapter legacyPlantAiRecommendResponseAdapter;
   private final RecommendationExplainabilityPersistenceMapper explainabilityPersistenceMapper;
   private final RecommendationPersistencePolicy recommendationPersistencePolicy;
   private final RecommendationPersistencePlanApplier recommendationPersistencePlanApplier;
@@ -581,74 +589,26 @@ public class AppController {
     return Map.of("ok", true);
   }
 
+  // Legacy compatibility wrapper kept for old clients until PR12+/cleanup confirms it can be removed safely.
   @PostMapping("/plants/ai-recommend")
+  @Deprecated(forRemoval = false)
   public PlantAiRecommendResponse aiRecommendPlant(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
       Authentication authentication,
       @RequestBody PlantAiRecommendRequest request
   ) {
+    log.warn("Deprecated compatibility endpoint hit: POST /api/plants/ai-recommend");
     User user = currentUserService.resolve(authentication, initData);
     if (request == null || request.name() == null || request.name().isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name обязателен");
     }
-    PlantEnvironmentType environmentType = request.environmentType() == null
-        ? PlantEnvironmentType.INDOOR
-        : request.environmentType();
-    PlantCategory category = request.category() == null ? categoryByEnvironment(environmentType) : request.category();
-    int baseInterval = clampInt(request.baseIntervalDays() == null ? 7 : request.baseIntervalDays(), 1, 60);
-    int fallbackWaterMl = estimateFallbackWaterMl(environmentType, request);
-
-    String targetRegion = request.region() != null && !request.region().isBlank()
-        ? request.region().trim()
-        : (user.getCity() == null ? "" : user.getCity().trim());
-    WeatherProvider provider = user.getWeatherProvider() == null ? WeatherProvider.OPEN_METEO : user.getWeatherProvider();
-    WeatherData weather = weatherService.getCurrent(targetRegion, user.getCityLat(), user.getCityLon(), provider).orElse(null);
-    String weatherSummary = weather == null
-        ? "нет актуальных погодных данных"
-        : String.format(Locale.ROOT, "%.1f°C, влажность %.0f%%, осадки %.1f мм/ч",
-        weather.temperatureC(),
-        weather.humidityPercent(),
-        weather.precipitationMm1h());
-
-    var recommendation = openRouterPlantAdvisorService
-        .suggestWizardRecommendation(user, new OpenRouterPlantAdvisorService.WizardRecommendInput(
-            request.name().trim(),
-            environmentType,
-            category,
-            request.plantType() == null ? PlantType.DEFAULT : request.plantType(),
-            baseInterval,
-            request.potVolumeLiters(),
-            request.diameterCm() == null ? null : Math.PI * Math.pow((request.diameterCm() / 100.0) / 2.0, 2),
-            request.containerType(),
-            request.growthStage(),
-            request.greenhouse(),
-            request.soilType(),
-            request.sunExposure(),
-            targetRegion,
-            weatherSummary,
-            request.mulched(),
-            request.dripIrrigation()
-        ))
-        .orElseGet(() -> new OpenRouterPlantAdvisorService.WizardWateringRecommendation(
-            "fallback",
-            baseInterval,
-            fallbackWaterMl,
-            fallbackSummary(environmentType, weather != null),
-            fallbackReasoning(environmentType, request, weather),
-            fallbackWarnings(environmentType, weather != null),
-            environmentType.name()
-        ));
-
-    return new PlantAiRecommendResponse(
-        recommendation.source(),
-        recommendation.recommendedIntervalDays(),
-        recommendation.recommendedWaterMl(),
-        recommendation.summary(),
-        recommendation.reasoning(),
-        recommendation.warnings(),
-        recommendation.profile()
+    var context = legacyPlantAiRecommendContextMapper.map(user, request);
+    return legacyPlantAiRecommendResponseAdapter.adapt(
+        recommendationFacade.preview(context),
+        context
     );
   }
+
 
   @GetMapping("/plants/suggest-profile")
   public PlantProfileSuggestionResponse suggestPlantProfile(

@@ -1,6 +1,5 @@
 package com.example.plantbot.controller;
 
-import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.SeedCareActionRequest;
 import com.example.plantbot.controller.dto.SeedCareActionResponse;
 import com.example.plantbot.controller.dto.SeedMigrationApplyRequest;
@@ -19,7 +18,6 @@ import com.example.plantbot.domain.User;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.SeedLifecycleService;
-import com.example.plantbot.service.SeedRecommendationService;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
 import com.example.plantbot.service.recommendation.mapper.SeedRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.SeedRecommendationResponseAdapter;
@@ -40,7 +38,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class SeedController {
   private final CurrentUserService currentUserService;
   private final PlantService plantService;
-  private final SeedRecommendationService seedRecommendationService;
   private final SeedLifecycleService seedLifecycleService;
   private final RecommendationFacade recommendationFacade;
   private final SeedRecommendationContextMapper seedRecommendationContextMapper;

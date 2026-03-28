@@ -73,8 +73,7 @@ class WateringRecommendationApplyPersistenceTest {
         previewRecommendationResponseAdapter,
         new RecommendationExplainabilityPersistenceMapper(new ObjectMapper()),
         new DefaultRecommendationPersistencePolicy(),
-        new RecommendationPersistencePlanApplier(),
-        new ObjectMapper()
+        new RecommendationPersistencePlanApplier()
     );
     when(plantService.save(org.mockito.ArgumentMatchers.any(Plant.class))).thenAnswer(invocation -> invocation.getArgument(0));
   }

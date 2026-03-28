@@ -115,8 +115,7 @@ class WateringRecommendationRefreshFlowTest {
         new PreviewRecommendationResponseAdapter(),
         new RecommendationExplainabilityPersistenceMapper(new ObjectMapper()),
         new DefaultRecommendationPersistencePolicy(),
-        new RecommendationPersistencePlanApplier(),
-        new ObjectMapper()
+        new RecommendationPersistencePlanApplier()
     );
 
     lenient().when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class))).thenReturn(

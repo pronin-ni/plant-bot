@@ -41,6 +41,8 @@ import com.example.plantbot.service.recommendation.persistence.DefaultRecommenda
 import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationFactor;
+import com.example.plantbot.service.recommendation.model.LocationContext;
+import com.example.plantbot.service.recommendation.model.LocationSource;
 import com.example.plantbot.service.recommendation.model.RecommendationResult;
 import com.example.plantbot.service.recommendation.model.WeatherContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -110,11 +113,10 @@ class PreviewFacadeFlowTest {
         responseAdapter,
         new RecommendationExplainabilityPersistenceMapper(new ObjectMapper()),
         new DefaultRecommendationPersistencePolicy(),
-        new RecommendationPersistencePlanApplier(),
-        new ObjectMapper()
+        new RecommendationPersistencePlanApplier()
     );
 
-    when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class)))
+    lenient().when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class)))
         .thenReturn(new NormalizedWeatherContext(
             true,
             false,
@@ -219,6 +221,70 @@ class PreviewFacadeFlowTest {
     assertEquals("Moscow", result.weatherContext().locationDisplayName());
     assertTrue(result.sensorContext() instanceof WateringSensorContextDto);
     assertEquals("AI summary", result.explainability().summary());
+  }
+
+  @Test
+  void facadePreviewPropagatesExplicitRequestLocationIntoPreviewUser() {
+    when(engine.recommendPreview(any(), any())).thenReturn(previewResponse());
+
+    RecommendationResult result = facade.preview(new com.example.plantbot.service.recommendation.model.RecommendationRequestContext(
+        17L,
+        null,
+        com.example.plantbot.service.recommendation.model.RecommendationFlowType.PREVIEW,
+        "Tomato",
+        com.example.plantbot.domain.PlantCategory.OUTDOOR_GARDEN,
+        PlantEnvironmentType.OUTDOOR_GARDEN,
+        com.example.plantbot.domain.PlantPlacement.OUTDOOR,
+        com.example.plantbot.domain.PlantType.DEFAULT,
+        WateringProfileType.OUTDOOR_GARDEN.name(),
+        5,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        false,
+        3.0,
+        com.example.plantbot.domain.PlantContainerType.OPEN_GROUND,
+        null,
+        1.13,
+        com.example.plantbot.domain.OutdoorSoilType.LOAMY,
+        com.example.plantbot.domain.SunExposure.FULL_SUN,
+        true,
+        true,
+        null,
+        null,
+        true,
+        com.example.plantbot.domain.PlantGrowthStage.FLOWERING,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        new LocationContext(LocationSource.REQUEST_EXPLICIT, "Moscow region", "Moscow region", null, "Moscow region", null, null),
+        new WeatherContext(true, false, false, false, "OPEN_METEO", "Moscow region", 20.0, 55.0, 0.0, 0.0, 24.0, null, "HIGH", List.of()),
+        null,
+        null,
+        null,
+        RecommendationExecutionMode.AI,
+        true,
+        true,
+        false,
+        false,
+        false
+    ));
+
+    ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+    verify(engine).recommendPreview(userCaptor.capture(), any());
+
+    assertEquals("Moscow region", userCaptor.getValue().getCity());
+    assertEquals("Moscow region", userCaptor.getValue().getCityDisplayName());
+    assertEquals(4, result.recommendedIntervalDays());
   }
 
   @Test

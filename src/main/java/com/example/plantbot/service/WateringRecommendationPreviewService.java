@@ -21,8 +21,6 @@ import com.example.plantbot.service.recommendation.persistence.RecommendationPer
 import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePlanApplier;
 import com.example.plantbot.service.recommendation.persistence.RecommendationPersistencePolicy;
 import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -44,7 +42,6 @@ public class WateringRecommendationPreviewService {
   private final RecommendationExplainabilityPersistenceMapper explainabilityPersistenceMapper;
   private final RecommendationPersistencePolicy recommendationPersistencePolicy;
   private final RecommendationPersistencePlanApplier recommendationPersistencePlanApplier;
-  private final ObjectMapper objectMapper;
 
   public WateringRecommendationResponse preview(User user, WateringRecommendationPreviewRequest request) {
     RecommendationRequestContext context = buildPreviewContext(user, request);
@@ -160,9 +157,9 @@ public class WateringRecommendationPreviewService {
     plant.setRecommendedIntervalDays(interval);
     plant.setRecommendedWaterVolumeMl(waterMl);
     plant.setRecommendationSource(response.source());
-    plant.setRecommendationSummary(persistedExplainability == null ? response.summary() : persistedExplainability.summary());
-    plant.setRecommendationReasoningJson(persistedExplainability == null ? toJson(response.reasoning()) : persistedExplainability.reasoningJson());
-    plant.setRecommendationWarningsJson(persistedExplainability == null ? toJson(response.warnings()) : persistedExplainability.warningsJson());
+    plant.setRecommendationSummary(persistedExplainability.summary());
+    plant.setRecommendationReasoningJson(persistedExplainability.reasoningJson());
+    plant.setRecommendationWarningsJson(persistedExplainability.warningsJson());
     plant.setConfidenceScore(response.confidence());
     plant.setGeneratedAt(Instant.now());
     boolean manualOverride = response.source() == RecommendationSource.MANUAL;
@@ -171,18 +168,7 @@ public class WateringRecommendationPreviewService {
     plant.setLastRecommendationSource(response.source());
     plant.setLastRecommendedIntervalDays(interval);
     plant.setLastRecommendedWaterMl(waterMl);
-    plant.setLastRecommendationSummary(persistedExplainability == null ? response.summary() : persistedExplainability.summary());
+    plant.setLastRecommendationSummary(persistedExplainability.summary());
     plant.setLastRecommendationUpdatedAt(Instant.now());
-  }
-
-  private String toJson(Object value) {
-    if (value == null) {
-      return null;
-    }
-    try {
-      return objectMapper.writeValueAsString(value);
-    } catch (JsonProcessingException ex) {
-      return null;
-    }
   }
 }
