@@ -56,6 +56,35 @@ type PushSummary = {
   tone: StatusTone;
 };
 
+type NotificationPreviewItem = {
+  title: string;
+  body: string;
+  tone: StatusTone;
+};
+
+const SMART_NOTIFICATION_PREVIEW: NotificationPreviewItem[] = [
+  {
+    title: 'Полить сегодня',
+    body: 'Когда растение уже пора проверить и, скорее всего, полить.',
+    tone: 'danger'
+  },
+  {
+    title: 'Можно немного подождать',
+    body: 'Когда дождь или прохлада снижают срочность полива.',
+    tone: 'success'
+  },
+  {
+    title: 'Режим изменился',
+    body: 'Когда погода, стадия роста или ручной режим меняют совет по уходу.',
+    tone: 'warning'
+  },
+  {
+    title: 'Подсказка для рассады',
+    body: 'Когда пора проверить всходы, снять крышку или перейти к следующей стадии.',
+    tone: 'neutral'
+  }
+];
+
 const RECEIPT_POLL_TIMEOUT_MS = 10000;
 const RECEIPT_POLL_INTERVAL_MS = 500;
 
@@ -108,9 +137,9 @@ function buildPushSummary(state: PushPanelState): PushSummary {
 
   if (!state.enabled) {
     return {
-      title: 'Push на сервере выключен',
-      body: 'Сервер не готов принимать подписки и отправлять тестовые push-уведомления.',
-      nextStep: 'Нужны включённый Web Push и корректные VAPID-ключи на backend.',
+      title: 'Умные уведомления пока недоступны',
+      body: 'Сервер ещё не готов доставлять push-уведомления на это устройство.',
+      nextStep: 'Нужно включить Web Push на сервере и настроить ключи доступа.',
       tone: 'danger'
     };
   }
@@ -126,8 +155,8 @@ function buildPushSummary(state: PushPanelState): PushSummary {
 
   if (state.permission !== 'granted') {
     return {
-      title: 'Сначала нужно разрешение браузера',
-      body: 'После разрешения мы создадим push-подписку именно для этого устройства.',
+      title: 'Разрешите уведомления для этого устройства',
+      body: 'После разрешения Plant Bot сможет присылать умные подсказки по уходу.',
       nextStep: 'Нажмите «Разрешить и подключить Web Push».',
       tone: 'warning'
     };
@@ -153,8 +182,8 @@ function buildPushSummary(state: PushPanelState): PushSummary {
 
   if (state.currentDeviceSubscribed) {
     return {
-      title: 'Push активен на этом устройстве',
-      body: 'Теперь можно отправить self-test и подтвердить receipt именно на текущем браузере.',
+      title: 'Умные уведомления активны на этом устройстве',
+      body: 'Теперь Plant Bot сможет присылать напоминания и заметные изменения режима ухода.',
       nextStep: 'Используйте «Отправить self-test» для проверки доставки.',
       tone: 'success'
     };
@@ -530,6 +559,31 @@ export function NotificationsPanel() {
         </div>
       </section>
 
+      <section className="theme-surface-2 rounded-2xl border p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ios-text">Какие уведомления вы получите</p>
+            <p className="mt-1 text-xs leading-5 text-ios-subtext">Plant Bot присылает не только напоминания о поливе, но и аккуратные обновления, если режим ухода заметно изменился.</p>
+          </div>
+          <span className="theme-surface-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-ios-accent">
+            <Bell className="h-5 w-5" />
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          {SMART_NOTIFICATION_PREVIEW.map((item) => (
+            <div key={item.title} className={`rounded-2xl border px-3 py-3 ${getToneClasses(item.tone)}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-ios-text">{item.title}</p>
+                <StatusPill tone={item.tone}>
+                  {item.tone === 'danger' ? 'Срочно' : item.tone === 'warning' ? 'Важное' : item.tone === 'success' ? 'Можно спокойно' : 'Подсказка'}
+                </StatusPill>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-ios-subtext">{item.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="space-y-1">
           <span className="text-[12px] text-ios-subtext">Время напоминаний</span>
@@ -576,7 +630,7 @@ export function NotificationsPanel() {
       <section className="theme-surface-2 space-y-3 rounded-2xl border p-4">
         <div>
           <p className="text-sm font-semibold text-ios-text">Действия</p>
-          <p className="mt-1 text-xs leading-5 text-ios-subtext">Сначала подключите это устройство, затем отправьте self-test. Сообщение о принятии провайдером ещё не означает receipt на вашем браузере.</p>
+          <p className="mt-1 text-xs leading-5 text-ios-subtext">Сначала подключите это устройство, затем отправьте self-test. Так вы проверите, что умные уведомления дойдут именно до этого браузера.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={subscribe} disabled={isBusy || !canSubscribe}>

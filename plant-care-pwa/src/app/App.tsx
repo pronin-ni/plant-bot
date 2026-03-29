@@ -26,6 +26,7 @@ export function App() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const activeTab = useUiStore((s) => s.activeTab);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const openPlantDetail = useUiStore((s) => s.openPlantDetail);
   const selectedThemeId = useThemeStore((s) => s.selectedThemeId);
   const resolvedTheme = useThemeStore((s) => s.getResolvedTheme());
   const hasAutoAuthAttemptRef = useRef(false);
@@ -106,6 +107,29 @@ export function App() {
       setActiveTab('home');
     }
   }, [isAdmin, activeTab, setActiveTab]);
+
+  useEffect(() => {
+    if (!isAuthorized && !isGuest) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const rawPlantId = params.get('plantId');
+    const nextTab = params.get('tab');
+    const plantId = rawPlantId ? Number(rawPlantId) : null;
+    if (!plantId || !Number.isFinite(plantId) || plantId <= 0) {
+      return;
+    }
+    if (nextTab === 'home' || !nextTab) {
+      setActiveTab('home');
+    }
+    openPlantDetail(plantId);
+
+    params.delete('plantId');
+    params.delete('tab');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, [isAuthorized, isGuest, openPlantDetail, setActiveTab]);
 
   useEffect(() => {
     const evaluateOrientation = () => {

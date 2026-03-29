@@ -244,9 +244,21 @@ function historySourceBadge(item?: RecommendationHistoryItemDto | null): string 
   if (source.includes('APPLY')) return 'Вручную';
   if (source.includes('SEED')) return 'Стадия';
   if (source.includes('SCHEDULED') || source.includes('SYSTEM')) return 'Авто';
-  if (source.includes('REFRESH')) return 'Пересчёт';
-  if (source.includes('CREATE')) return 'Старт';
+  if (source.includes('REFRESH')) return 'Автоматически';
+  if (source.includes('CREATE')) return item?.manualOverrideActive ? 'Вручную' : 'Старт';
   return item.manualOverrideActive ? 'Вручную' : 'Авто';
+}
+
+function historyLooksManual(item?: RecommendationHistoryItemDto | null): boolean {
+  if (!item) return false;
+  return Boolean(item.manualOverrideActive) || (item.currentSource ?? '').toUpperCase().includes('MANUAL');
+}
+
+function historyLooksWeatherDriven(item?: RecommendationHistoryItemDto | null): boolean {
+  if (!item) return false;
+  return Boolean(item.factors?.some((factor) => factor.type === 'WEATHER'))
+    || Boolean(item.weatherContribution)
+    || (item.currentSource ?? '').toUpperCase().includes('WEATHER');
 }
 
 function historyDeltaLabel(item?: RecommendationHistoryItemDto | null): string | null {
@@ -265,6 +277,12 @@ function historyReasonLine(item?: RecommendationHistoryItemDto | null): string {
     return 'Здесь появятся заметные изменения режима ухода.';
   }
   if (item.eventType === 'INITIAL_RECOMMENDATION_APPLIED') {
+    if (historyLooksManual(item)) {
+      return 'Ручной режим сейчас активен и сохранён как текущий.';
+    }
+    if (historyLooksWeatherDriven(item)) {
+      return 'Режим подтверждён с учётом погоды.';
+    }
     return item.seedStage ? 'Стартовый режим проращивания сохранён как отправная точка.' : 'Стартовый режим ухода сохранён как отправная точка.';
   }
   if (item.eventType === 'MIGRATED_FROM_SEED') {
@@ -274,14 +292,14 @@ function historyReasonLine(item?: RecommendationHistoryItemDto | null): string {
     return 'Пользователь изменил режим ухода вручную.';
   }
   if (item.eventType === 'MANUAL_OVERRIDE_REMOVED') {
-    return 'Автоматический режим снова активен.';
+    return 'Теперь снова работает автоматический режим.';
   }
   if (item.eventType === 'SEED_STAGE_CHANGE' && item.seedStage) {
-    return `Режим ухода обновлён после перехода на стадию «${item.seedStage.toLowerCase()}».`;
+    return `Режим обновлён после перехода на стадию «${item.seedStage.toLowerCase()}».`;
   }
   const firstFactor = item.factors?.[0];
   if (firstFactor?.type === 'WEATHER') {
-    return 'Из-за погоды режим пересчитан автоматически.';
+    return 'Из-за погоды режим обновился автоматически.';
   }
   if (firstFactor?.type === 'MANUAL') {
     return 'Пользователь изменил режим ухода вручную.';
@@ -290,7 +308,7 @@ function historyReasonLine(item?: RecommendationHistoryItemDto | null): string {
     return firstFactor.impactText ?? 'Стадия роста повлияла на режим ухода.';
   }
   if (item.factors?.length) {
-    return item.factors[0]?.impactText ?? item.summary ?? 'Причина изменения режима будет показана здесь.';
+    return item.factors[0]?.impactText ?? item.summary ?? 'Здесь появится причина изменения режима.';
   }
   if (item.summary === 'Initial baseline' || item.summary === 'Seed baseline') {
     return item.seedStage ? 'Стартовый режим проращивания сохранён как отправная точка.' : 'Стартовый режим ухода сохранён как отправная точка.';
@@ -303,7 +321,13 @@ function historyTitle(item?: RecommendationHistoryItemDto | null): string {
     return 'История режима появится после первого заметного изменения.';
   }
   if (item.eventType === 'INITIAL_RECOMMENDATION_APPLIED') {
-    return item.seedStage ? 'Стартовый режим проращивания сохранён' : 'Исходный режим сохранён';
+    if (historyLooksManual(item)) {
+      return 'Ручной режим сохранён';
+    }
+    if (historyLooksWeatherDriven(item)) {
+      return 'Режим подтверждён с учётом погоды';
+    }
+    return item.seedStage ? 'Сохранён стартовый режим проращивания' : 'Сохранён стартовый режим';
   }
   if (item.eventType === 'MIGRATED_FROM_SEED') {
     return 'Растение переведено из режима проращивания';
@@ -318,7 +342,7 @@ function historyTitle(item?: RecommendationHistoryItemDto | null): string {
     if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
       return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
     }
-    return 'Режим обновлён вручную';
+    return 'Режим изменён вручную';
   }
   if (item.eventType === 'WEATHER_DRIVEN_CHANGE') {
     if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
@@ -327,7 +351,7 @@ function historyTitle(item?: RecommendationHistoryItemDto | null): string {
     if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
       return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
     }
-    return 'Режим обновлён из-за погоды';
+    return 'Режим изменился из-за погоды';
   }
   if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
     return `Интервал изменился с ${item.previousIntervalDays} до ${item.newIntervalDays} дней`;
@@ -335,7 +359,7 @@ function historyTitle(item?: RecommendationHistoryItemDto | null): string {
   if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
     return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
   }
-  return item.summary ?? 'Режим ухода обновлён';
+  return item.summary ?? 'Режим ухода изменился';
 }
 
 function historySignificanceLabel(value?: string | null): string | null {
@@ -348,10 +372,22 @@ function historySignificanceLabel(value?: string | null): string | null {
     case 'MINOR':
       return 'Небольшое';
     case 'INFO_ONLY':
-      return 'Справка';
+      return 'Для справки';
     default:
       return null;
   }
+}
+
+function historyValueDiffs(item?: RecommendationHistoryItemDto | null): string[] {
+  if (!item) return [];
+  const diffs: string[] = [];
+  if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
+    diffs.push(`${item.previousIntervalDays} → ${item.newIntervalDays} дн.`);
+  }
+  if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
+    diffs.push(`${item.previousWaterMl} → ${item.newWaterMl} мл`);
+  }
+  return diffs;
 }
 
 function historyEventLabel(item?: RecommendationHistoryItemDto | null): string | null {
@@ -364,7 +400,7 @@ function historyEventLabel(item?: RecommendationHistoryItemDto | null): string |
     case 'MANUAL_OVERRIDE_APPLIED':
       return 'Ручной режим';
     case 'MANUAL_OVERRIDE_REMOVED':
-      return 'Авто режим';
+      return 'Автоматически';
     case 'WEATHER_DRIVEN_CHANGE':
       return 'Погода';
     case 'SEASONAL_CHANGE':
@@ -2264,8 +2300,8 @@ function RecommendationHistorySection({
 }) {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const dedupedItems = dedupeHistoryItems(history?.items);
-  const latest = dedupedItems[0] ?? history?.latestVisibleChange ?? null;
-  const previewItems = dedupedItems.slice(1, 3);
+  const latest = history?.latestVisibleChange ?? dedupedItems[0] ?? null;
+  const previewItems = dedupedItems.filter((item) => item.id !== latest?.id).slice(0, 2);
   const fallbackUpdatedAt = formatRecommendationMoment(plant.recommendationGeneratedAt);
   const fallbackSummary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'История режима появится после первого заметного изменения.';
   const fallbackSource = recommendationBadge(recommendation?.source ?? plant.recommendationSource ?? null);
@@ -2323,6 +2359,11 @@ function RecommendationHistorySection({
                   <span className="rounded-full border border-ios-border/55 px-2 py-1">
                     {formatRecommendationMoment(latest.occurredAt) ?? 'Недавно'}
                   </span>
+                  {historyValueDiffs(latest).map((diff) => (
+                    <span key={`${latest.id}-${diff}`} className="theme-surface-info rounded-full border px-2 py-1 font-medium text-ios-text">
+                      {diff}
+                    </span>
+                  ))}
                   {latest.newIntervalDays != null ? (
                     <span className="rounded-full border border-ios-border/55 px-2 py-1">
                       {latest.newIntervalDays} дн.
@@ -2429,7 +2470,7 @@ function RecommendationHistorySection({
                     ) : null}
                     {item.manualOverrideActive != null ? (
                       <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                        {item.manualOverrideActive ? 'Ручной режим активен' : 'Авто режим активен'}
+                        {item.manualOverrideActive ? 'Ручной режим активен' : 'Автоматический режим'}
                       </span>
                     ) : null}
                     {item.userActionRequired ? (

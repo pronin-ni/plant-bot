@@ -4,6 +4,9 @@ import com.example.plantbot.controller.dto.pwa.PwaPushSubscriptionRequest;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WebPushSubscription;
+import com.example.plantbot.service.notification.SmartNotificationContext;
+import com.example.plantbot.service.notification.SmartNotificationFormatter;
+import com.example.plantbot.service.notification.SmartNotificationPayload;
 import com.example.plantbot.repository.WebPushSubscriptionRepository;
 import com.example.plantbot.service.recommendation.model.RecommendationExplainability;
 import com.example.plantbot.service.recommendation.model.RecommendationResult;
@@ -46,6 +49,7 @@ public class WebPushNotificationService {
 
   private final WebPushSubscriptionRepository subscriptionRepository;
   private final ObjectMapper objectMapper;
+  private final SmartNotificationFormatter smartNotificationFormatter;
 
   @Value("${web-push.enabled:false}")
   private boolean enabled;
@@ -152,6 +156,11 @@ public class WebPushNotificationService {
 
   @Transactional
   public boolean sendWateringReminder(Plant plant, RecommendationResult result) {
+    return sendWateringReminder(plant, result, null);
+  }
+
+  @Transactional
+  public boolean sendWateringReminder(Plant plant, RecommendationResult result, SmartNotificationContext notificationContext) {
     if (!isEnabled() || plant == null || plant.getUser() == null) {
       return false;
     }
@@ -163,6 +172,10 @@ public class WebPushNotificationService {
       return false;
     }
 
+    SmartNotificationPayload formatted = notificationContext == null
+        ? null
+        : smartNotificationFormatter.format(plant, notificationContext);
+
     int intervalDays = result == null || result.recommendedIntervalDays() == null
         ? 1
         : Math.max(1, result.recommendedIntervalDays());
@@ -171,27 +184,56 @@ public class WebPushNotificationService {
         : Math.max(1, result.recommendedWaterMl());
     String waterMl = String.valueOf(waterMlValue);
     LocalDate dueDate = plant.getLastWateredDate().plusDays(intervalDays);
-    String explainabilitySnippet = toNotificationExplainabilitySnippet(result == null ? null : result.explainability());
-    String body = plant.getName() + " • " + waterMl + " мл • до " + dueDate.format(DateTimeFormatter.ofPattern("dd.MM"));
+    String explainabilitySnippet = notificationContext == null
+        ? toNotificationExplainabilitySnippet(result == null ? null : result.explainability())
+        : toNotificationExplainabilitySnippet(notificationContext, result == null ? null : result.explainability());
+    String fallbackBody = plant.getName() + " • " + waterMl + " мл • до " + dueDate.format(DateTimeFormatter.ofPattern("dd.MM"));
     if (explainabilitySnippet != null && !explainabilitySnippet.isBlank()) {
-      body = body + " • " + explainabilitySnippet;
+      fallbackBody = fallbackBody + " • " + explainabilitySnippet;
     }
 
     Map<String, Object> payload = new HashMap<>();
-    payload.put("title", "Пора поливать растение");
-    payload.put("body", body);
-    payload.put("tag", "plant-watering-" + plant.getId());
-    payload.put("url", resolvePwaPublicUrl());
+    payload.put("title", formatted == null ? "Пора поливать растение" : formatted.title());
+    payload.put("body", formatted == null ? fallbackBody : formatted.body());
+    payload.put("tag", formatted == null ? "plant-watering-" + plant.getId() : formatted.tag());
+    payload.put("url", formatted == null ? resolvePwaPublicUrl() : resolvePwaAssetUrl(formatted.openTargetUrl()));
     payload.put("plantId", plant.getId());
     payload.put("icon", resolvePwaAssetUrl("icons/icon-192.svg"));
     payload.put("badge", resolvePwaAssetUrl("icons/icon-192.svg"));
     payload.put("vibrate", List.of(180, 60, 180));
-    payload.put("renotify", true);
-    payload.put("requireInteraction", true);
+    payload.put("renotify", formatted == null || formatted.renotify());
+    payload.put("requireInteraction", formatted == null || formatted.requireInteraction());
     payload.put("timestamp", System.currentTimeMillis());
 
     String payloadJson = toJson(payload);
     return countDelivered(sendPayload(subscriptions, payloadJson)) > 0;
+  }
+
+  String toNotificationExplainabilitySnippet(SmartNotificationContext notificationContext, RecommendationExplainability explainability) {
+    if (notificationContext != null) {
+      if (notificationContext.seedMode()) {
+        return notificationContext.primaryReason();
+      }
+      if (notificationContext.manualMode()) {
+        return "Сейчас действует ручной режим.";
+      }
+      if (notificationContext.fallbackMode()) {
+        return "Совет собран в резервном режиме.";
+      }
+      if (notificationContext.weatherAffected() && notificationContext.recommendationChanged()) {
+        return "Погода изменила режим ухода.";
+      }
+      if (notificationContext.weatherAffected()) {
+        return "Учтена текущая погода.";
+      }
+      if (notificationContext.recommendationChanged()) {
+        return "Режим ухода заметно изменился.";
+      }
+      if (notificationContext.primaryReason() != null && !notificationContext.primaryReason().isBlank()) {
+        return notificationContext.primaryReason();
+      }
+    }
+    return toNotificationExplainabilitySnippet(explainability);
   }
 
   String toNotificationExplainabilitySnippet(RecommendationExplainability explainability) {

@@ -3,11 +3,15 @@ package com.example.plantbot.service;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.PlantRepository;
+import com.example.plantbot.service.notification.SmartNotificationContext;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
 import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
 import com.example.plantbot.service.recommendation.mapper.RuntimeRecommendationAdapter;
 import com.example.plantbot.service.recommendation.model.RecommendationRequestContext;
 import com.example.plantbot.service.recommendation.model.RecommendationResult;
+import com.example.plantbot.service.notification.SmartNotificationDecision;
+import com.example.plantbot.service.notification.SmartNotificationDecisionService;
+import com.example.plantbot.service.notification.SmartNotificationContextService;
 import com.example.plantbot.service.recommendation.runtime.LegacyRuntimeRecommendationDelegate;
 import com.example.plantbot.util.WateringRecommendation;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +34,8 @@ public class NotificationScheduler {
   private final RuntimeRecommendationAdapter runtimeRecommendationAdapter;
   private final LegacyRuntimeRecommendationDelegate legacyRuntimeRecommendationDelegate;
   private final WebPushNotificationService webPushNotificationService;
+  private final SmartNotificationDecisionService smartNotificationDecisionService;
+  private final SmartNotificationContextService smartNotificationContextService;
 
   @Scheduled(cron = "${scheduler.daily-cron}")
   public void dailyCheck() {
@@ -45,22 +51,33 @@ public class NotificationScheduler {
       if (rec.waterLiters() <= 0.0) {
         continue;
       }
-      LocalDate dueDate = plant.getLastWateredDate().plusDays((long) Math.floor(rec.intervalDays()));
-      boolean due = !today.isBefore(dueDate);
-      boolean alreadyRemindedToday = today.equals(plant.getLastReminderDate());
-      if (due && !alreadyRemindedToday) {
-        boolean webPushSent = webPushNotificationService.sendWateringReminder(plant, result);
-        if (!webPushSent) {
-          log.info("Reminder not delivered: plantId={} userId={} webPushEnabled={} pushSubscriptions={}",
-              plant.getId(),
-              user != null ? user.getId() : null,
-              webPushNotificationService.isEnabled(),
-              user != null ? webPushNotificationService.countSubscriptions(user) : 0);
-        }
-        if (webPushSent) {
-          plant.setLastReminderDate(today);
-          plantRepository.save(plant);
-        }
+      SmartNotificationDecision decision = smartNotificationDecisionService.decide(plant, result, today).orElse(null);
+      if (decision == null) {
+        log.debug("Notification suppressed: plantId={} reason=no-decision", plant.getId());
+        continue;
+      }
+      SmartNotificationContext notificationContext = smartNotificationContextService.build(plant, result, decision);
+      log.info("Smart notification decision: plantId={} type={} priority={} actionRequired={} silent={} dueDate={} reason={} rationale={}",
+          plant.getId(),
+          decision.type(),
+          decision.priority(),
+          decision.actionRequired(),
+          decision.silent(),
+          decision.dueDate(),
+          notificationContext.primaryReason(),
+          decision.rationale());
+      boolean webPushSent = webPushNotificationService.sendWateringReminder(plant, result, notificationContext);
+      if (!webPushSent) {
+        log.info("Reminder not delivered: plantId={} userId={} type={} webPushEnabled={} pushSubscriptions={}",
+            plant.getId(),
+            user != null ? user.getId() : null,
+            decision.type(),
+            webPushNotificationService.isEnabled(),
+            user != null ? webPushNotificationService.countSubscriptions(user) : 0);
+      }
+      if (webPushSent) {
+        plant.setLastReminderDate(today);
+        plantRepository.save(plant);
       }
     }
   }

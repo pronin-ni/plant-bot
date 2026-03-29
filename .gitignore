@@ -2,11 +2,7 @@
 .gradle/
 build/
 out/
-.project
-.agents/skills
-data/
-docs/
-opencode.json
+
 # Java
 *.class
 *.jar
@@ -14,6 +10,8 @@ opencode.json
 *.ear
 hs_err_pid*
 for-stack.txt
+opencode.json
+
 # Runtime data
 data/
 *.db
@@ -21,7 +19,7 @@ data/
 *.sqlite3
 *.log
 
-# Env files
+# Environment files
 .env
 .env.local
 
@@ -29,13 +27,25 @@ data/
 .idea/
 *.iml
 .vscode/
+.project
+.classpath
+.factorypath
+.settings/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project helper output
+# Project helper
 bin/
-for-stack.txt
 
-for-stack.txt
+# Agent config
+.agents/
+
+# PWA
+plant-care-pwa/node_modules/
+plant-care-pwa/dist/
+plant-care-pwa/.vite/
+plant-care-pwa/preview-*.log
+plant-care-pwa/preview-*.pid
+plant-care-pwa/tsconfig.tsbuildinfo
