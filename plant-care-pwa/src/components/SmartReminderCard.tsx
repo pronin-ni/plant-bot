@@ -1,25 +1,16 @@
 import { BellRing, Clock3, Droplets } from 'lucide-react';
 
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
+import { buildExplainabilityViewModel, getExplainabilityReminderLine } from '@/lib/explainability';
 import type { PlantDto } from '@/types/api';
 
 export function SmartReminderCard({ plant }: { plant: PlantDto }) {
   const nextDate = plant.nextWateringDate ? parseDateOnly(plant.nextWateringDate) : null;
   const today = startOfLocalDay(new Date());
   const daysLeft = nextDate ? Math.floor((startOfLocalDay(nextDate).getTime() - today.getTime()) / 86_400_000) : null;
+  const explainability = buildExplainabilityViewModel({ plant });
 
-  const context = (() => {
-    if (daysLeft == null) {
-      return 'Собираем данные для напоминания.';
-    }
-    if (daysLeft <= 0) {
-      return 'Сегодня идеальный день для полива.';
-    }
-    if (daysLeft === 1) {
-      return 'Завтра полив. Проверьте влажность почвы вечером.';
-    }
-    return `До полива примерно ${daysLeft} дн.`;
-  })();
+  const context = getExplainabilityReminderLine(explainability, daysLeft);
 
   return (
     <div className="ios-blur-card p-4">

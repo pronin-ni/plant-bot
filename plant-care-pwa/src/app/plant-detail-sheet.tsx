@@ -35,6 +35,7 @@ import {
   success as hapticSuccess
 } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
+import { buildExplainabilityViewModel } from '@/lib/explainability';
 import type {
   CalendarEventDto,
   PlantCareAdviceDto,
@@ -169,6 +170,22 @@ function recommendationBadge(source?: string | null): string {
   return source ?? 'Неизвестно';
 }
 
+function humanizeWateringProfile(profile?: string | null): string | null {
+  const normalized = (profile ?? '').trim().toUpperCase();
+  switch (normalized) {
+    case 'INDOOR':
+      return 'домашний';
+    case 'OUTDOOR':
+      return 'уличный';
+    case 'OUTDOOR_ORNAMENTAL':
+      return 'уличный декоративный';
+    case 'OUTDOOR_GARDEN':
+      return 'садовый';
+    default:
+      return profile?.trim() ? profile.toLowerCase() : null;
+  }
+}
+
 function humanizeWateringMode(mode?: string | null): string {
   const normalized = (mode ?? '').toUpperCase();
   switch (normalized) {
@@ -186,36 +203,6 @@ function humanizeWateringMode(mode?: string | null): string {
   }
 }
 
-function humanizeWateringProfile(profile?: string | null): string | null {
-  const normalized = (profile ?? '').trim().toUpperCase();
-  switch (normalized) {
-    case 'INDOOR':
-      return 'домашний';
-    case 'OUTDOOR':
-      return 'уличный';
-    case 'OUTDOOR_ORNAMENTAL':
-      return 'уличный декоративный';
-    case 'OUTDOOR_GARDEN':
-      return 'садовый';
-    default:
-      return profile?.trim() ? profile.toLowerCase() : null;
-  }
-}
-
-function normalizeReasoningItem(item: string): string {
-  const trimmed = item.trim();
-  if (!trimmed) {
-    return '';
-  }
-  if (trimmed.startsWith('HYBRID:')) {
-    return trimmed.replace('HYBRID:', 'Гибридный режим:');
-  }
-  if (trimmed.includes('DEFAULT тип')) {
-    return trimmed.replace('DEFAULT тип', 'стандартному профилю');
-  }
-  return trimmed;
-}
-
 function formatAiAdviceSource(source: string | null): string {
   if (!source) {
     return 'AI';
@@ -224,38 +211,6 @@ function formatAiAdviceSource(source: string | null): string {
     return 'AI через OpenRouter';
   }
   return source;
-}
-
-function buildExplainabilityFactors(
-  plant: PlantDto,
-  recommendation: WateringRecommendationPreviewDto | null
-): string[] {
-  if (recommendation?.reasoning?.length) {
-    return recommendation.reasoning
-      .map(normalizeReasoningItem)
-      .filter(Boolean)
-      .slice(0, 4);
-  }
-
-  if (plant.placement === 'OUTDOOR') {
-    return [
-      recommendation?.weatherContextPreview?.precipitationLast24hMm != null
-        ? `осадки за 24 часа: ${recommendation.weatherContextPreview.precipitationLast24hMm} мм`
-        : 'учтены осадки и прогноз',
-      recommendation?.weatherContextPreview?.temperatureNowC != null
-        ? `температура около ${Math.round(recommendation.weatherContextPreview.temperatureNowC)}°C`
-        : 'учтена текущая температура',
-      plant.containerType ? `условие: ${plant.containerType.toLowerCase()}` : 'учтены условия участка',
-      plant.outdoorSoilType ? `почва: ${plant.outdoorSoilType.toLowerCase()}` : 'учтён тип почвы'
-    ].filter(Boolean);
-  }
-
-  return [
-    plant.type ? `тип растения: ${plant.type.toLowerCase()}` : 'учтён тип растения',
-    plant.potVolumeLiters != null ? `горшок: ${plant.potVolumeLiters.toFixed(1)} л` : 'учтён объём горшка',
-    plant.baseIntervalDays ? `базовый интервал: ${plant.baseIntervalDays} дн.` : 'учтён базовый интервал',
-    humanizeWateringProfile(plant.wateringProfile) ? `профиль: ${humanizeWateringProfile(plant.wateringProfile)}` : 'учтён домашний профиль'
-  ].filter(Boolean);
 }
 
 function recommendationUiState(
@@ -420,6 +375,23 @@ function historyEventLabel(item?: RecommendationHistoryItemDto | null): string |
       return 'Переход';
     default:
       return historySourceBadge(item);
+  }
+}
+
+function factorLabelTone(type?: string | null): string {
+  const normalized = (type ?? '').toUpperCase();
+  switch (normalized) {
+    case 'WEATHER':
+      return 'theme-badge-info';
+    case 'MANUAL':
+      return 'theme-badge-warning';
+    case 'AI':
+      return 'theme-badge-success';
+    case 'SEED_STAGE':
+    case 'GROWTH_STAGE':
+      return 'theme-badge-success';
+    default:
+      return 'theme-surface-subtle';
   }
 }
 
@@ -2048,17 +2020,17 @@ function WateringRecommendationCard({
 }) {
   const [manualInterval, setManualInterval] = useState(String(Math.max(1, plant.baseIntervalDays ?? 7)));
   const [manualWaterMl, setManualWaterMl] = useState(String(Math.max(50, plant.preferredWaterMl ?? 250)));
-  const isOutdoor = plant.placement === 'OUTDOOR';
+  const [expanded, setExpanded] = useState(false);
   const badge = recommendationBadge(recommendation?.source ?? null);
   const sourceTone = getPlantSourceTone(recommendation?.source ?? plant.recommendationSource);
   const SourceIcon = sourceTone.icon;
-  const factors = buildExplainabilityFactors(plant, recommendation);
-  const warnings = recommendation?.warnings?.filter(Boolean).slice(0, 3) ?? [];
-  const summary =
-    recommendation?.summary?.trim() ||
-    (isOutdoor
-      ? 'Режим собран из погодных условий, сезона и параметров участка.'
-      : 'Режим собран из профиля растения, условий размещения и базового интервала.');
+  const explainability = buildExplainabilityViewModel({ plant, recommendation });
+  const canRenderExplainability = Boolean(
+    recommendation
+      || explainability.summary.trim()
+      || explainability.topFactors.length
+      || explainability.warnings.length
+  );
 
   useEffect(() => {
     if (!recommendation) return;
@@ -2118,44 +2090,94 @@ function WateringRecommendationCard({
         </div>
       ) : null}
 
-      {(state === 'success' || state === 'fallback') && recommendation ? (
+      {canRenderExplainability && state !== 'loading' ? (
         <div className={`rounded-2xl border p-3 ${
-          state === 'fallback'
+          state === 'fallback' || explainability.mode === 'FALLBACK'
             ? 'theme-surface-warning'
             : 'theme-surface-success'
         }`}>
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-              Источник: {badge}
-            </span>
-            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-              Режим: {humanizeWateringMode(recommendation.wateringMode)}
-            </span>
-            <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-              Интервал: {recommendation.recommendedIntervalDays} дн.
-            </span>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-ios-text">{summary}</p>
-
-          <div className="theme-surface-subtle mt-3 rounded-xl border border-current/15 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Факторы влияния</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-ios-text">
-              {factors.map((item, idx) => (
-                <li key={`${item}-${idx}`} className="leading-5">
-                  • {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {warnings.length ? (
-            <div className="theme-surface-warning mt-3 rounded-xl border p-3">
-              <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
-              <ul className="mt-2 space-y-1 text-sm text-ios-text">
-                {warnings.map((item, idx) => (
-                  <li key={`${item}-${idx}`}>• {item}</li>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="line-clamp-2 text-sm leading-5 text-ios-text">{explainability.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+                {explainability.topFactors.map((item, idx) => (
+                  <span key={`${item}-${idx}`} className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
+                    {item}
+                  </span>
                 ))}
-              </ul>
+              </div>
+            </div>
+            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${sourceTone.className}`}>
+              <SourceIcon className="h-3.5 w-3.5" />
+              {sourceTone.shortLabel}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-ios-subtext">
+            <div className="flex flex-wrap gap-2">
+              <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
+                Источник: {badge}
+              </span>
+              <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
+                Режим: {humanizeWateringMode(recommendation?.wateringMode)}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="theme-surface-subtle inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-current/20 px-3 text-[11px] font-semibold text-ios-text"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? 'Скрыть детали' : 'Показать детали'}
+            </button>
+          </div>
+
+          {expanded ? (
+            <div className="mt-3 space-y-3">
+              <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Кратко</p>
+                <p className="mt-2 text-sm leading-5 text-ios-text">{explainability.summary}</p>
+              </div>
+
+              {recommendation?.reasoning?.length ? (
+                <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Почему режим такой</p>
+                  <ul className="mt-2 space-y-1.5 text-sm text-ios-text">
+                    {recommendation.reasoning.slice(0, 6).map((item, idx) => (
+                      <li key={`${item}-${idx}`} className="leading-5">
+                        • {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {explainability.allFactors.length ? (
+                <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Что влияет</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {explainability.allFactors.slice(0, 6).map((item, idx) => (
+                      <span
+                        key={`${item}-${idx}`}
+                        className="theme-surface-subtle rounded-full border border-current/20 px-2.5 py-1 text-[11px] text-ios-text"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {explainability.warnings.length ? (
+                <div className="theme-surface-warning rounded-xl border p-3">
+                  <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
+                  <ul className="mt-2 space-y-1 text-sm text-ios-text">
+                    {explainability.warnings.slice(0, 6).map((item, idx) => (
+                      <li key={`${item}-${idx}`} className="leading-5">
+                        • {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -2422,8 +2444,14 @@ function RecommendationHistorySection({
                       <p className="text-xs uppercase tracking-[0.12em] text-ios-subtext">Что повлияло</p>
                       {item.factors.map((factor) => (
                         <div key={`${item.id}-${factor.type}-${factor.label}`} className="rounded-2xl border border-ios-border/50 px-3 py-2">
-                          <p className="text-xs font-semibold text-ios-text">{factor.label}</p>
-                          <p className="mt-1 text-xs leading-5 text-ios-subtext">{factor.impactText}</p>
+                          <div className="flex items-start gap-2">
+                            <span className={`${factorLabelTone(factor.type)} rounded-full px-2 py-0.5 text-[10px] font-semibold`}>
+                              {factor.label}
+                            </span>
+                            <p className="min-w-0 text-xs leading-5 text-ios-subtext">
+                              {factor.impactText}
+                            </p>
+                          </div>
                         </div>
                       ))}
                     </div>

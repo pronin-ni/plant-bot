@@ -6,13 +6,13 @@ import { QuickWaterButton } from '@/components/QuickWaterButton';
 import {
   getPlantCategoryLabel,
   getPlantEnvironmentLabel,
-  getPlantRecommendationHint,
   getPlantReasonTone,
   getPlantSourceTone,
   getPlantStatusTone,
   seedStageLabel
 } from '@/components/plants/plantRecommendationUi';
 import { parseDateOnly, startOfLocalDay } from '@/lib/date';
+import { buildExplainabilityViewModel, getExplainabilityListLine } from '@/lib/explainability';
 import type { PlantDto } from '@/types/api';
 
 interface PlantCardProps {
@@ -71,7 +71,8 @@ export function PlantCard({
   const pill = getPlantStatusTone(daysLeft, plant.recommendationSource);
   const source = getPlantSourceTone(plant.recommendationSource);
   const SourceIcon = source.icon;
-  const hint = getPlantRecommendationHint(plant);
+  const explainability = buildExplainabilityViewModel({ plant });
+  const hint = getExplainabilityListLine(explainability);
   const cycleProgress = Math.max(8, Math.min(100, Math.round(progress)));
   const hintTone = getPlantReasonTone(plant.recommendationSource);
   const wateredToday = hasWateredToday(plant);
@@ -146,14 +147,14 @@ export function PlantCard({
         transition={{ delay: 0.06, duration: 0.22 }}
         className={`space-y-2 rounded-[22px] px-3 py-3 ${hintTone}`}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-ios-subtext">Почему сейчас</p>
-            <p className="mt-1 line-clamp-2 text-sm leading-5">
-              {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-ios-subtext">Почему сейчас</p>
+              <p className="mt-1 line-clamp-1 text-sm leading-5">
+                {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
+              </p>
+            </div>
           </div>
-        </div>
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[11px] text-ios-subtext">
             <span>{seedPlant ? 'Окно всходов' : 'Цикл полива'}</span>
