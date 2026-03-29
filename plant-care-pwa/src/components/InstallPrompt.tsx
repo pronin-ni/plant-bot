@@ -6,9 +6,26 @@ import { Button } from '@/components/ui/button';
 import { error as hapticError, impactLight, impactMedium, success as hapticSuccess, warning as hapticWarning } from '@/lib/haptics';
 import { detectInstallPlatform, isPwaStandalone, requestPwaInstall, subscribeInstallAvailability } from '@/lib/pwa';
 
+function isInstallPromptDismissed(): boolean {
+  if (isPwaStandalone()) {
+    return true;
+  }
+  const raw = localStorage.getItem('plant-pwa-install-dismissed-at');
+  if (!raw) {
+    return false;
+  }
+  const dismissedAt = Number(raw);
+  if (!dismissedAt) {
+    return false;
+  }
+  const now = Date.now();
+  const suppressWindowMs = 3 * 24 * 60 * 60 * 1000;
+  return now - dismissedAt < suppressWindowMs;
+}
+
 export function InstallPrompt() {
   const [canInstall, setCanInstall] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(isInstallPromptDismissed);
   const [installing, setInstalling] = useState(false);
   const platform = useMemo(() => detectInstallPlatform(), []);
 
@@ -17,12 +34,6 @@ export function InstallPrompt() {
       setCanInstall(false);
       return;
     }
-    const raw = localStorage.getItem('plant-pwa-install-dismissed-at');
-    const dismissedAt = raw ? Number(raw) : 0;
-    const now = Date.now();
-    // Блокируем показ только временно, чтобы подсказка не исчезала навсегда.
-    const suppressWindowMs = 3 * 24 * 60 * 60 * 1000;
-    setDismissed(Boolean(dismissedAt) && now - dismissedAt < suppressWindowMs);
     return subscribeInstallAvailability(setCanInstall);
   }, []);
 

@@ -350,7 +350,13 @@ export function OpenRouterSettings() {
       });
       setLastSavedAt(result.updatedAt ?? null);
 
-      await queryClient.invalidateQueries({ queryKey: ['openrouter-global-models'] });
+      queryClient.setQueryData(['openrouter-global-models', 'runtime'], {
+        textModel: nextText,
+        photoModel: nextPhoto,
+        hasApiKey: result.hasApiKey
+      });
+      await queryClient.invalidateQueries({ queryKey: ['openrouter-global-models', 'runtime'] });
+      await queryClient.refetchQueries({ queryKey: ['openrouter-global-models', 'runtime'], type: 'active' });
       setSuccessPulse(true);
       setTimeout(() => setSuccessPulse(false), prefersReducedMotion ? 300 : 1000);
       setStatus('Сохранено глобально для всех пользователей');
