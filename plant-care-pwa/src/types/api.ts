@@ -230,6 +230,53 @@ export interface CalendarSyncDto {
   httpsUrl: string;
 }
 
+export interface RecommendationHistoryFactorDto {
+  type: string;
+  label: string;
+  impactText: string;
+  direction: string;
+}
+
+export interface RecommendationHistoryItemDto {
+  id: number;
+  plantId: number;
+  occurredAt: string;
+  eventType: string | null;
+  source: string | null;
+  currentSource: string | null;
+  previousIntervalDays: number | null;
+  newIntervalDays: number | null;
+  previousWaterMl: number | null;
+  newWaterMl: number | null;
+  deltaIntervalDays: number | null;
+  deltaWaterMl: number | null;
+  summary: string | null;
+  reasoning: string[];
+  warnings: string[];
+  factors: RecommendationHistoryFactorDto[];
+  manualOverrideActive: boolean | null;
+  weatherContribution?: string | null;
+  aiContribution?: string | null;
+  seasonContribution?: string | null;
+  learningContribution?: string | null;
+  growthStage?: string | null;
+  previousGrowthStage?: string | null;
+  seedStage?: string | null;
+  previousSeedStage?: string | null;
+  meaningfulChange: boolean;
+  changeSignificance: string | null;
+  userActionRequired: boolean;
+}
+
+export interface RecommendationHistoryResponseDto {
+  plantId: number;
+  view: 'compact' | 'full';
+  limit: number;
+  latestVisibleChange: RecommendationHistoryItemDto | null;
+  items: RecommendationHistoryItemDto[];
+  hasMore: boolean;
+}
+
 export interface OpenRouterIdentifyResult {
   russianName?: string;
   latinName?: string;

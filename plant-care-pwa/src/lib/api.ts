@@ -39,6 +39,7 @@ import type {
   AuthValidationResponse,
   CalendarSyncDto,
   CalendarEventDto,
+  RecommendationHistoryResponseDto,
   PlantDto,
   PlantLearningDto,
   PlantStatsDto,
@@ -1245,6 +1246,18 @@ export async function uploadPlantPhoto(id: number, photoBase64: string): Promise
 
 export async function getCalendar(): Promise<Array<{ date: string; plantId: number; plantName: string }>> {
   return apiFetch<CalendarEventDto[]>('/api/calendar', {
+    method: 'GET'
+  });
+}
+
+export async function getRecommendationHistory(
+  plantId: number,
+  options?: { view?: 'compact' | 'full'; limit?: number }
+): Promise<RecommendationHistoryResponseDto> {
+  const params = new URLSearchParams();
+  params.set('view', options?.view ?? 'compact');
+  params.set('limit', String(options?.limit ?? 5));
+  return apiFetch<RecommendationHistoryResponseDto>(`/api/plants/${plantId}/recommendation-history?${params.toString()}`, {
     method: 'GET'
   });
 }

@@ -18,6 +18,7 @@ import {
   deletePlant,
   getPlantById,
   getPlantCareAdvice,
+  getRecommendationHistory,
   migrateSeedPlant,
   previewSeedMigration,
   recordSeedCareAction,
@@ -34,7 +35,14 @@ import {
   success as hapticSuccess
 } from '@/lib/haptics';
 import { useUiStore } from '@/lib/store';
-import type { CalendarEventDto, PlantCareAdviceDto, PlantDto, WateringRecommendationPreviewDto } from '@/types/api';
+import type {
+  CalendarEventDto,
+  PlantCareAdviceDto,
+  PlantDto,
+  RecommendationHistoryItemDto,
+  RecommendationHistoryResponseDto,
+  WateringRecommendationPreviewDto
+} from '@/types/api';
 
 function getProgress(plant: PlantDto): number {
   const last = parseDateOnly(plant.lastWateredDate);
@@ -275,6 +283,168 @@ function formatRecommendationMoment(iso?: string | null): string | null {
   });
 }
 
+function historySourceBadge(item?: RecommendationHistoryItemDto | null): string {
+  if (!item) return 'История';
+  const source = (item.source ?? '').toUpperCase();
+  if (source.includes('APPLY')) return 'Вручную';
+  if (source.includes('SEED')) return 'Стадия';
+  if (source.includes('SCHEDULED') || source.includes('SYSTEM')) return 'Авто';
+  if (source.includes('REFRESH')) return 'Пересчёт';
+  if (source.includes('CREATE')) return 'Старт';
+  return item.manualOverrideActive ? 'Вручную' : 'Авто';
+}
+
+function historyDeltaLabel(item?: RecommendationHistoryItemDto | null): string | null {
+  if (!item) return null;
+  if (item.deltaIntervalDays && item.deltaIntervalDays !== 0) {
+    return item.deltaIntervalDays > 0 ? `+${item.deltaIntervalDays} дн.` : `${item.deltaIntervalDays} дн.`;
+  }
+  if (item.deltaWaterMl && item.deltaWaterMl !== 0) {
+    return item.deltaWaterMl > 0 ? `+${item.deltaWaterMl} мл` : `${item.deltaWaterMl} мл`;
+  }
+  return null;
+}
+
+function historyReasonLine(item?: RecommendationHistoryItemDto | null): string {
+  if (!item) {
+    return 'Здесь появятся заметные изменения режима ухода.';
+  }
+  if (item.eventType === 'INITIAL_RECOMMENDATION_APPLIED') {
+    return item.seedStage ? 'Стартовый режим проращивания сохранён как отправная точка.' : 'Стартовый режим ухода сохранён как отправная точка.';
+  }
+  if (item.eventType === 'MIGRATED_FROM_SEED') {
+    return 'После выхода из режима проращивания растение перешло к обычной логике ухода.';
+  }
+  if (item.eventType === 'MANUAL_RECOMMENDATION_APPLIED' || item.eventType === 'MANUAL_OVERRIDE_APPLIED') {
+    return 'Пользователь изменил режим ухода вручную.';
+  }
+  if (item.eventType === 'MANUAL_OVERRIDE_REMOVED') {
+    return 'Автоматический режим снова активен.';
+  }
+  if (item.eventType === 'SEED_STAGE_CHANGE' && item.seedStage) {
+    return `Режим ухода обновлён после перехода на стадию «${item.seedStage.toLowerCase()}».`;
+  }
+  const firstFactor = item.factors?.[0];
+  if (firstFactor?.type === 'WEATHER') {
+    return 'Из-за погоды режим пересчитан автоматически.';
+  }
+  if (firstFactor?.type === 'MANUAL') {
+    return 'Пользователь изменил режим ухода вручную.';
+  }
+  if (firstFactor?.type === 'SEED_STAGE') {
+    return firstFactor.impactText ?? 'Стадия роста повлияла на режим ухода.';
+  }
+  if (item.factors?.length) {
+    return item.factors[0]?.impactText ?? item.summary ?? 'Причина изменения режима будет показана здесь.';
+  }
+  if (item.summary === 'Initial baseline' || item.summary === 'Seed baseline') {
+    return item.seedStage ? 'Стартовый режим проращивания сохранён как отправная точка.' : 'Стартовый режим ухода сохранён как отправная точка.';
+  }
+  return item.summary ?? 'Причина изменения режима будет показана здесь.';
+}
+
+function historyTitle(item?: RecommendationHistoryItemDto | null): string {
+  if (!item) {
+    return 'История режима появится после первого заметного изменения.';
+  }
+  if (item.eventType === 'INITIAL_RECOMMENDATION_APPLIED') {
+    return item.seedStage ? 'Стартовый режим проращивания сохранён' : 'Исходный режим сохранён';
+  }
+  if (item.eventType === 'MIGRATED_FROM_SEED') {
+    return 'Растение переведено из режима проращивания';
+  }
+  if (item.eventType === 'SEED_STAGE_CHANGE' && item.seedStage) {
+    return `Стадия изменилась: ${item.seedStage.toLowerCase()}`;
+  }
+  if (item.eventType === 'MANUAL_RECOMMENDATION_APPLIED' || item.eventType === 'MANUAL_OVERRIDE_APPLIED') {
+    if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
+      return `Интервал изменился с ${item.previousIntervalDays} до ${item.newIntervalDays} дней`;
+    }
+    if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
+      return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
+    }
+    return 'Режим обновлён вручную';
+  }
+  if (item.eventType === 'WEATHER_DRIVEN_CHANGE') {
+    if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
+      return `Интервал изменился с ${item.previousIntervalDays} до ${item.newIntervalDays} дней`;
+    }
+    if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
+      return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
+    }
+    return 'Режим обновлён из-за погоды';
+  }
+  if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
+    return `Интервал изменился с ${item.previousIntervalDays} до ${item.newIntervalDays} дней`;
+  }
+  if (item.previousWaterMl != null && item.newWaterMl != null && item.previousWaterMl !== item.newWaterMl) {
+    return `Объём изменился с ${item.previousWaterMl} до ${item.newWaterMl} мл`;
+  }
+  return item.summary ?? 'Режим ухода обновлён';
+}
+
+function historySignificanceLabel(value?: string | null): string | null {
+  const normalized = (value ?? '').toUpperCase();
+  switch (normalized) {
+    case 'MAJOR':
+      return 'Важное';
+    case 'MODERATE':
+      return 'Заметное';
+    case 'MINOR':
+      return 'Небольшое';
+    case 'INFO_ONLY':
+      return 'Справка';
+    default:
+      return null;
+  }
+}
+
+function historyEventLabel(item?: RecommendationHistoryItemDto | null): string | null {
+  const normalized = (item?.eventType ?? '').toUpperCase();
+  switch (normalized) {
+    case 'INITIAL_RECOMMENDATION_APPLIED':
+      return 'Старт';
+    case 'MANUAL_RECOMMENDATION_APPLIED':
+      return 'Вручную';
+    case 'MANUAL_OVERRIDE_APPLIED':
+      return 'Ручной режим';
+    case 'MANUAL_OVERRIDE_REMOVED':
+      return 'Авто режим';
+    case 'WEATHER_DRIVEN_CHANGE':
+      return 'Погода';
+    case 'SEASONAL_CHANGE':
+      return 'Сезон';
+    case 'SEED_STAGE_CHANGE':
+      return 'Стадия';
+    case 'MIGRATED_FROM_SEED':
+      return 'Переход';
+    default:
+      return historySourceBadge(item);
+  }
+}
+
+function dedupeHistoryItems(items: RecommendationHistoryItemDto[] | undefined): RecommendationHistoryItemDto[] {
+  const source = items ?? [];
+  const result: RecommendationHistoryItemDto[] = [];
+  const seen = new Set<string>();
+  for (const item of source) {
+    const key = [
+      item.eventType ?? '',
+      item.summary ?? '',
+      item.previousIntervalDays ?? '',
+      item.newIntervalDays ?? '',
+      item.previousWaterMl ?? '',
+      item.newWaterMl ?? ''
+    ].join('|');
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 export function PlantDetailSheet() {
   const queryClient = useQueryClient();
   const selectedPlantId = useUiStore((s) => s.selectedPlantId);
@@ -322,6 +492,14 @@ export function PlantDetailSheet() {
     retry: 1
   });
 
+  const historyQuery = useQuery({
+    queryKey: ['plant-recommendation-history', selectedPlantId, recommendationQuery.dataUpdatedAt ?? 0],
+    queryFn: () => getRecommendationHistory(selectedPlantId as number, { view: 'compact', limit: 5 }),
+    enabled: selectedPlantId !== null && (plantQuery.data?.wateringProfile === 'SEED_START' || recommendationQuery.isFetched),
+    staleTime: 60_000,
+    retry: 1
+  });
+
   const migrationPreviewQuery = useQuery({
     queryKey: ['seed-migration-preview', selectedPlantId],
     queryFn: () => previewSeedMigration(selectedPlantId as number),
@@ -346,6 +524,7 @@ export function PlantDetailSheet() {
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       await queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
     },
     onError: () => hapticError()
   });
@@ -367,6 +546,7 @@ export function PlantDetailSheet() {
       queryClient.setQueryData<CalendarEventDto[]>(['calendar'], (current) => updateCalendarAfterWatering(current, updatedPlant));
       void queryClient.invalidateQueries({ queryKey: ['plants'] });
       void queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      void queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant-care-advice', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       void queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
@@ -392,6 +572,7 @@ export function PlantDetailSheet() {
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       await queryClient.invalidateQueries({ queryKey: ['seed-migration-preview', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
     },
     onError: (_error, _variables, context) => {
       if (context?.previousPlant) {
@@ -419,6 +600,7 @@ export function PlantDetailSheet() {
       hapticSuccess();
       await queryClient.invalidateQueries({ queryKey: ['plants'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
     },
     onError: (_error, _variables, context) => {
       if (context?.previousPlant) {
@@ -442,6 +624,7 @@ export function PlantDetailSheet() {
       await queryClient.invalidateQueries({ queryKey: ['calendar'] });
       await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
       await queryClient.invalidateQueries({ queryKey: ['seed-migration-preview', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
     },
     onError: () => hapticError()
   });
@@ -715,6 +898,13 @@ export function PlantDetailSheet() {
                       });
                     }}
                   />
+                  <RecommendationHistorySection
+                    plant={plant}
+                    recommendation={null}
+                    history={historyQuery.data ?? null}
+                    loading={historyQuery.isLoading && !historyQuery.data}
+                    error={historyQuery.isError && !historyQuery.data}
+                  />
                   <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
 
                   <DangerZoneSection
@@ -745,7 +935,13 @@ export function PlantDetailSheet() {
                     }}
                   />
 
-                  <RecommendationHistorySection plant={plant} recommendation={recommendationQuery.data ?? null} />
+                  <RecommendationHistorySection
+                    plant={plant}
+                    recommendation={recommendationQuery.data ?? null}
+                    history={historyQuery.data ?? null}
+                    loading={historyQuery.isLoading && !historyQuery.data}
+                    error={historyQuery.isError && !historyQuery.data}
+                  />
 
                   <LeafDiagnosis plant={plant} />
 
@@ -2033,34 +2229,224 @@ function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
 
 function RecommendationHistorySection({
   plant,
-  recommendation
+  recommendation,
+  history,
+  loading,
+  error
 }: {
   plant: PlantDto;
   recommendation: WateringRecommendationPreviewDto | null;
+  history: RecommendationHistoryResponseDto | null;
+  loading: boolean;
+  error: boolean;
 }) {
-  const updatedAt = formatRecommendationMoment(plant.recommendationGeneratedAt);
-  const source = recommendationBadge(recommendation?.source ?? plant.recommendationSource ?? null);
-  const summary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'Последняя рекомендация сохранена для следующего обновления.';
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const dedupedItems = dedupeHistoryItems(history?.items);
+  const latest = dedupedItems[0] ?? history?.latestVisibleChange ?? null;
+  const previewItems = dedupedItems.slice(1, 3);
+  const fallbackUpdatedAt = formatRecommendationMoment(plant.recommendationGeneratedAt);
+  const fallbackSummary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'История режима появится после первого заметного изменения.';
+  const fallbackSource = recommendationBadge(recommendation?.source ?? plant.recommendationSource ?? null);
+  const timelineQuery = useQuery({
+    queryKey: ['plant-recommendation-history-full', plant.id, timelineOpen],
+    queryFn: () => getRecommendationHistory(plant.id, { view: 'full', limit: 20 }),
+    enabled: timelineOpen,
+    staleTime: 60_000,
+    retry: 1
+  });
+  const timelineItems = dedupeHistoryItems(timelineQuery.data?.items);
 
   return (
     <section className="theme-surface-1 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-ios-text">История рекомендаций</p>
-          <p className="mt-1 text-xs text-ios-subtext">Пока показываем последний сохранённый срез. Полная история будет здесь же.</p>
+          <p className="mt-1 text-xs text-ios-subtext">
+            Последние заметные изменения режима: что поменялось, когда и почему.
+          </p>
         </div>
-        <span className="rounded-full border border-ios-border/60 px-2.5 py-1 text-[11px] text-ios-subtext">{source}</span>
+        <span className="rounded-full border border-ios-border/60 px-2.5 py-1 text-[11px] text-ios-subtext">
+          {latest ? historySourceBadge(latest) : fallbackSource}
+        </span>
       </div>
 
-      <div className="theme-surface-subtle mt-3 rounded-2xl border p-3">
-        <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">Последняя рекомендация</p>
-        <p className="mt-2 text-sm leading-5 text-ios-text">{summary}</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
-          <span className="rounded-full border border-ios-border/55 px-2 py-1">Интервал: {plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7} дн.</span>
-          <span className="rounded-full border border-ios-border/55 px-2 py-1">Объём: {plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250} мл</span>
-          {updatedAt ? <span className="rounded-full border border-ios-border/55 px-2 py-1">Обновлено: {updatedAt}</span> : null}
-        </div>
-      </div>
+      {loading ? <p className="mt-3 text-sm text-ios-subtext">Собираем историю режима...</p> : null}
+      {error ? <p className="theme-banner-danger mt-3 rounded-2xl border px-3 py-2 text-xs">Не удалось загрузить историю режима.</p> : null}
+
+      {!loading && !error ? (
+        <>
+          <div className="theme-surface-subtle mt-3 rounded-2xl border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
+                  {latest ? 'Последнее изменение' : 'Пока без истории'}
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-5 text-ios-text">
+                  {latest ? historyTitle(latest) : fallbackSummary}
+                </p>
+                <p className="mt-2 text-sm leading-5 text-ios-subtext">
+                  {latest ? historyReasonLine(latest) : 'Когда режим изменится автоматически или вы примените его вручную, здесь появится понятная хроника изменений.'}
+                </p>
+              </div>
+              {latest && historyDeltaLabel(latest) ? (
+                <span className="theme-badge-info shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold">
+                  {historyDeltaLabel(latest)}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+              {latest ? (
+                <>
+                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                    {formatRecommendationMoment(latest.occurredAt) ?? 'Недавно'}
+                  </span>
+                  {latest.newIntervalDays != null ? (
+                    <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                      {latest.newIntervalDays} дн.
+                    </span>
+                  ) : null}
+                  {latest.newWaterMl != null ? (
+                    <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                      {latest.newWaterMl} мл
+                    </span>
+                  ) : null}
+                  {latest.factors.slice(0, 2).map((factor) => (
+                    <span key={`${latest.id}-${factor.type}`} className="rounded-full border border-ios-border/55 px-2 py-1">
+                      {factor.label}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                    Интервал: {plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7} дн.
+                  </span>
+                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                    Объём: {plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250} мл
+                  </span>
+                  {fallbackUpdatedAt ? (
+                    <span className="rounded-full border border-ios-border/55 px-2 py-1">Обновлено: {fallbackUpdatedAt}</span>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+
+          {previewItems.length ? (
+            <div className="mt-3 space-y-2">
+              {previewItems.map((item) => (
+                <div key={item.id} className="theme-surface-subtle rounded-2xl border px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm text-ios-text">{historyTitle(item)}</p>
+                    <span className="shrink-0 text-[11px] text-ios-subtext">
+                      {formatRecommendationMoment(item.occurredAt) ?? 'Недавно'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ios-subtext">{historyReasonLine(item)}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {dedupedItems.length ? (
+            <button
+              type="button"
+              className="theme-surface-subtle mt-3 inline-flex h-10 items-center justify-center rounded-full border px-4 text-sm font-medium text-ios-text"
+              onClick={() => setTimelineOpen(true)}
+            >
+              Показать историю
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
+      <Dialog
+        open={timelineOpen}
+        onOpenChange={setTimelineOpen}
+        title="История режима"
+        description="Хроника изменений полива: что поменялось, почему и было ли это автоматически или вручную."
+      >
+        {timelineQuery.isLoading ? <p className="text-sm text-ios-subtext">Собираем полную историю…</p> : null}
+        {timelineQuery.isError ? <p className="theme-banner-danger rounded-2xl border px-3 py-3 text-sm">Не удалось загрузить полную историю режима.</p> : null}
+        {!timelineQuery.isLoading && !timelineQuery.isError ? (
+          timelineItems.length ? (
+            <div className="space-y-3">
+              {timelineItems.map((item) => (
+                <div key={`timeline-${item.id}`} className="theme-surface-subtle rounded-3xl border p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-ios-text">{historyTitle(item)}</p>
+                      <p className="mt-1 text-xs text-ios-subtext">{formatRecommendationMoment(item.occurredAt) ?? 'Недавно'}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="rounded-full border border-ios-border/55 px-2.5 py-1 text-[11px] text-ios-subtext">
+                        {historyEventLabel(item)}
+                      </span>
+                      {historySignificanceLabel(item.changeSignificance) ? (
+                        <span className="rounded-full border border-ios-border/55 px-2.5 py-1 text-[11px] text-ios-subtext">
+                          {historySignificanceLabel(item.changeSignificance)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-sm leading-5 text-ios-text">{item.summary ?? 'Режим ухода обновлён.'}</p>
+                  <p className="mt-2 text-sm leading-5 text-ios-subtext">{historyReasonLine(item)}</p>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+                    {item.previousIntervalDays != null && item.newIntervalDays != null ? (
+                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                        {item.previousIntervalDays} → {item.newIntervalDays} дн.
+                      </span>
+                    ) : null}
+                    {item.previousWaterMl != null && item.newWaterMl != null ? (
+                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                        {item.previousWaterMl} → {item.newWaterMl} мл
+                      </span>
+                    ) : null}
+                    {item.manualOverrideActive != null ? (
+                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
+                        {item.manualOverrideActive ? 'Ручной режим активен' : 'Авто режим активен'}
+                      </span>
+                    ) : null}
+                    {item.userActionRequired ? (
+                      <span className="theme-badge-warning rounded-full px-2 py-1 text-[11px] font-semibold">
+                        Нужна проверка
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {item.factors.length ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs uppercase tracking-[0.12em] text-ios-subtext">Что повлияло</p>
+                      {item.factors.map((factor) => (
+                        <div key={`${item.id}-${factor.type}-${factor.label}`} className="rounded-2xl border border-ios-border/50 px-3 py-2">
+                          <p className="text-xs font-semibold text-ios-text">{factor.label}</p>
+                          <p className="mt-1 text-xs leading-5 text-ios-subtext">{factor.impactText}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {item.warnings.length ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs uppercase tracking-[0.12em] text-ios-subtext">Важно</p>
+                      {item.warnings.map((warning, index) => (
+                        <p key={`${item.id}-warning-${index}`} className="theme-banner-warning rounded-2xl border px-3 py-2 text-xs">
+                          {warning}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-ios-subtext">История режима пока пуста.</p>
+          )
+        ) : null}
+      </Dialog>
     </section>
   );
 }
