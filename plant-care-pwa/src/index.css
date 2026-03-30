@@ -269,3 +269,20 @@ html {
 html[data-motion-state='paused'] * {
   animation-play-state: paused !important;
 }
+
+body.sheet-open .ios-tabbar,
+body.sheet-open .android-bottom-nav,
+body.sheet-open [data-nav='bottom'],
+body.sheet-open nav[class*="bottom"],
+body.sheet-open nav[class*="tab"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.sheet-open .mt-auto > nav:last-child {
+  display: none !important;
+}

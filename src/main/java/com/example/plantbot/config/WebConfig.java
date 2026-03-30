@@ -22,7 +22,7 @@ public class WebConfig implements WebMvcConfigurer {
     String[] origins = allowedOrigins.split(",");
     registry.addMapping("/api/**")
         .allowedOriginPatterns(origins)
-        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         .allowedHeaders("*")
         .exposedHeaders("*");
   }

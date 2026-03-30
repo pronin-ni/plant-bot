@@ -1,5 +1,6 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.controller.dto.PlantUpdateRequest;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.util.WateringRecommendation;
@@ -26,6 +27,22 @@ public class PlantMutationService {
   private final WateringRecommendationService wateringRecommendationService;
   private final WateringLogService wateringLogService;
   private final PlatformTransactionManager transactionManager;
+
+  public Plant updatePlant(Plant plant, PlantUpdateRequest request) {
+    if (request == null) {
+      return plant;
+    }
+    if (request.potVolumeLiters() != null) {
+      plant.setPotVolumeLiters(request.potVolumeLiters());
+    }
+    if (request.preferredWaterMl() != null) {
+      plant.setPreferredWaterMl(request.preferredWaterMl());
+    }
+    if (request.baseIntervalDays() != null) {
+      plant.setBaseIntervalDays(request.baseIntervalDays());
+    }
+    return plantService.save(plant);
+  }
 
   public Plant markWatered(User user, Long plantId) {
     return markWatered(plantId, user == null ? null : user.getId());

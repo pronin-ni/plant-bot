@@ -94,7 +94,8 @@ import type {
   WateringSensorContextDto,
   WeatherProvidersResponse,
   WeatherCurrentDto,
-  WeatherForecastDto
+  WeatherForecastDto,
+  GrowthEntryDto
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -1163,6 +1164,17 @@ export async function previewWateringHaContext(payload: {
   });
 }
 
+export async function updatePlant(plantId: number, payload: {
+  potVolumeLiters?: number;
+  preferredWaterMl?: number;
+  baseIntervalDays?: number;
+}): Promise<PlantDto> {
+  return apiFetch<PlantDto>(`/api/plants/${plantId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function applyWateringRecommendation(plantId: number, payload: {
   source: 'AI' | 'HEURISTIC' | 'HYBRID' | 'FALLBACK' | 'MANUAL';
   recommendedIntervalDays: number;
@@ -1558,5 +1570,50 @@ export async function aiSearchPlants(payload: {
   return apiFetch<PlantAiSearchResponseDto>('/api/plants/ai-search', {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getGrowthEntries(
+  plantId: number,
+  options?: { limit?: number; before?: string }
+): Promise<GrowthEntryDto[]> {
+  const params = new URLSearchParams();
+  if (options?.limit) {
+    params.set('limit', String(options.limit));
+  }
+  if (options?.before) {
+    params.set('before', options.before);
+  }
+  const query = params.toString();
+  return apiFetch<GrowthEntryDto[]>(
+    query ? `/api/plants/${plantId}/growth?${query}` : `/api/plants/${plantId}/growth`,
+    { method: 'GET' }
+  );
+}
+
+export async function addGrowthEntry(
+  plantId: number,
+  payload: { photoBase64: string; note?: string; source?: 'MANUAL' | 'CAMERA' | 'AUTO' }
+): Promise<GrowthEntryDto> {
+  return apiFetch<GrowthEntryDto>(`/api/plants/${plantId}/growth`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateGrowthEntry(
+  plantId: number,
+  entryId: number,
+  payload: { note?: string }
+): Promise<GrowthEntryDto> {
+  return apiFetch<GrowthEntryDto>(`/api/plants/${plantId}/growth/${entryId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteGrowthEntry(plantId: number, entryId: number): Promise<void> {
+  return apiFetch<void>(`/api/plants/${plantId}/growth/${entryId}`, {
+    method: 'DELETE'
   });
 }

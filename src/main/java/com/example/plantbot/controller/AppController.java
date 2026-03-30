@@ -19,6 +19,7 @@ import com.example.plantbot.controller.dto.PlantAiRecommendResponse;
 import com.example.plantbot.controller.dto.PlantAiSearchRequest;
 import com.example.plantbot.controller.dto.PlantAiSearchResponse;
 import com.example.plantbot.controller.dto.PlantAiSearchSuggestionResponse;
+import com.example.plantbot.controller.dto.PlantUpdateRequest;
 import com.example.plantbot.controller.dto.PlantResponse;
 import com.example.plantbot.controller.dto.PlantStatsResponse;
 import com.example.plantbot.controller.dto.OpenRouterRuntimeSettingsResponse;
@@ -76,6 +77,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -381,6 +383,19 @@ public class AppController {
     if (updated == null) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Растение не найдено");
     }
+    return toPlantResponse(updated, user, false);
+  }
+
+  @PatchMapping("/plants/{id}")
+  public PlantResponse updatePlant(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication,
+      @PathVariable("id") Long plantId,
+      @RequestBody PlantUpdateRequest request
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    Plant plant = requireOwnedPlant(user, plantId);
+    Plant updated = plantMutationService.updatePlant(plant, request);
     return toPlantResponse(updated, user, false);
   }
 

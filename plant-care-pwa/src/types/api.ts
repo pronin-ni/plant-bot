@@ -718,3 +718,20 @@ export interface WeatherForecastDto {
   degraded?: boolean;
   statusMessage?: string | null;
 }
+
+export interface GrowthEntryDto {
+  id: number;
+  plantId: number;
+  imageUrl: string;
+  createdAt: string;
+  note?: string | null;
+  source: 'MANUAL' | 'CAMERA' | 'AUTO';
+  aiSummary?: string | null;
+  metadataJson?: string | null;
+}
+
+export interface GrowthEntryRequest {
+  photoBase64: string;
+  note?: string;
+  source?: 'MANUAL' | 'CAMERA' | 'AUTO';
+}

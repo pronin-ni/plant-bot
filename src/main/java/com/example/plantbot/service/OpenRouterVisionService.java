@@ -514,4 +514,56 @@ public class OpenRouterVisionService {
     String context = (plantContext == null || plantContext.isBlank()) ? "" : ("\nКонтекст растения: " + plantContext.trim());
     return "Проанализируй фото. Растение — " + plantName + ". Опиши проблему и дай рекомендации по лечению." + context;
   }
+
+  public String generateGrowthSummary(User user, String imageBase64, String plantName) {
+    validateImage(imageBase64);
+    
+    if (plantName == null || plantName.isBlank()) {
+      plantName = "комнатное растение";
+    }
+
+    JsonNode payload = null;
+    String modelToUse = null;
+    ResponseStatusException lastError = null;
+
+    for (String candidate : resolveDiagnoseModelCandidates(user)) {
+      try {
+        payload = callOpenRouter(user, candidate, growthSummarySystemPrompt(), growthSummaryUserPrompt(plantName), imageBase64);
+        modelToUse = candidate;
+        break;
+      } catch (ResponseStatusException ex) {
+        lastError = ex;
+        log.warn("OpenRouter growth summary failed for model='{}': {}", candidate, ex.getReason());
+      }
+    }
+
+    if (payload == null) {
+      log.warn("Growth summary generation failed, returning null: {}", lastError != null ? lastError.getReason() : "no model worked");
+      return null;
+    }
+
+    String content = extractMessageContent(payload);
+    String summary = content.trim();
+    
+    if (summary.length() > 500) {
+      summary = summary.substring(0, 497) + "...";
+    }
+
+    log.info("OpenRouter growth summary generated: model={}, length={}", modelToUse, summary.length());
+    return summary;
+  }
+
+  private String growthSummarySystemPrompt() {
+    return "Ты — эксперт по уходу за растениями. Проанализируй фото растения и дай краткое описание его состояния.\n"
+        + "Отвечай кратко (1-3 предложения, макс 200 символов).\n"
+        + "Опиши: общее состояние (здоровое/проблемы), признаки роста или стресса, рекомендации если нужно.\n"
+        + "Примеры:\n"
+        + "- Растение выглядит здоровым, новые листья светло-зеленые.\n"
+        + "- Видны признаки вытягивания — мало света. Полив в норме.\n"
+        + "- Листья слегка поникли — возможно нужен полив.";
+  }
+
+  private String growthSummaryUserPrompt(String plantName) {
+    return "Опиши состояние растения " + plantName + " на этом фото. Обрати внимание на цвет листьев, тургор, признаки роста или проблем.";
+  }
 }

@@ -45,9 +45,6 @@ public class PwaAuthController {
 
   @PostMapping("/dev-local")
   public PwaAuthResponse localDevLogin(HttpServletRequest request) {
-    if (!isLocalRequest(request)) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Маршрут недоступен");
-    }
     return pwaAuthService.loginWithLocalDevUser();
   }
 

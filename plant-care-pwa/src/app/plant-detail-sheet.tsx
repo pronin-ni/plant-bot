@@ -7,6 +7,7 @@ import { BottomSheet } from '@/components/common/bottom-sheet';
 import { Dialog } from '@/components/ui/dialog';
 import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
+import { GrowthTimeline } from '@/app/PlantDetail/GrowthTimeline';
 import { LeafDiagnosis } from '@/components/LeafDiagnosis';
 import { SeedStageActionsCard } from '@/components/seed/SeedStageActionsCard';
 import { seedActionLabel } from '@/components/seed/seedStageUi';
@@ -22,6 +23,7 @@ import {
   migrateSeedPlant,
   previewSeedMigration,
   recordSeedCareAction,
+  updatePlant,
   updateSeedStage,
   uploadPlantPhoto,
   waterPlant
@@ -475,6 +477,7 @@ export function PlantDetailSheet() {
   const [migrationAreaM2, setMigrationAreaM2] = useState('0.25');
   const [migrationWizardOpen, setMigrationWizardOpen] = useState(false);
   const [migrationWizardStep, setMigrationWizardStep] = useState(0);
+  const [manualEditOpen, setManualEditOpen] = useState(false);
 
   const plantQuery = useQuery({
     queryKey: ['plant', selectedPlantId],
@@ -535,6 +538,42 @@ export function PlantDetailSheet() {
       await queryClient.invalidateQueries({ queryKey: ['plant-recommendation-history', selectedPlantId] });
     },
     onError: () => hapticError()
+  });
+
+  const updatePlantMutation = useMutation({
+    mutationFn: ({ plantId, potVolumeLiters, preferredWaterMl, baseIntervalDays }: { 
+      plantId: number; 
+      potVolumeLiters?: number;
+      preferredWaterMl?: number;
+      baseIntervalDays?: number;
+    }) =>
+      updatePlant(plantId, { potVolumeLiters, preferredWaterMl, baseIntervalDays }),
+    onMutate: async ({ plantId, potVolumeLiters, preferredWaterMl, baseIntervalDays }) => {
+      await queryClient.cancelQueries({ queryKey: ['plant', plantId] });
+      const previousPlant = queryClient.getQueryData<PlantDto>(['plant', plantId]);
+      queryClient.setQueryData<PlantDto>(['plant', plantId], (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          ...(potVolumeLiters !== undefined && { potVolumeLiters }),
+          ...(preferredWaterMl !== undefined && { preferredWaterMl }),
+          ...(baseIntervalDays !== undefined && { baseIntervalDays })
+        };
+      });
+      return { previousPlant };
+    },
+    onSuccess: async () => {
+      hapticSuccess();
+      await queryClient.invalidateQueries({ queryKey: ['plants'] });
+      await queryClient.invalidateQueries({ queryKey: ['plant', selectedPlantId] });
+      await queryClient.invalidateQueries({ queryKey: ['plant-watering-recommendation', selectedPlantId] });
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousPlant) {
+        queryClient.setQueryData(['plant', context.previousPlant.id], context.previousPlant);
+      }
+      hapticError();
+    }
   });
 
   const refreshAdviceMutation = useMutation({
@@ -706,6 +745,17 @@ export function PlantDetailSheet() {
     setWateringPulse((prev) => prev + 1);
   };
 
+  useEffect(() => {
+    if (selectedPlantId !== null) {
+      document.body.classList.add('sheet-open');
+    } else {
+      document.body.classList.remove('sheet-open');
+    }
+    return () => {
+      document.body.classList.remove('sheet-open');
+    };
+  }, [selectedPlantId]);
+
   return (
     <BottomSheet open={selectedPlantId !== null} onClose={closePlantDetail}>
       {plantQuery.isLoading ? (
@@ -767,6 +817,13 @@ export function PlantDetailSheet() {
                     await waterMutation.mutateAsync(selectedPlantId);
                     triggerWateringPulse();
                   }}
+                  onOpenManualEdit={() => setManualEditOpen(true)}
+                  onAiRecompute={() => {
+                    if (!selectedPlantId || recommendationQuery.isFetching) return;
+                    impactLight();
+                    void recommendationQuery.refetch();
+                  }}
+                  isAiLoading={recommendationQuery.isFetching}
                 />
               )
             }
@@ -789,17 +846,6 @@ export function PlantDetailSheet() {
                     impactLight();
                     void recommendationQuery.refetch();
                   }}
-                  onManualApply={(intervalDays, waterMl) => {
-                    if (!selectedPlantId || applyManualRecommendationMutation.isPending) {
-                      return;
-                    }
-                    applyManualRecommendationMutation.mutate({
-                      plantId: selectedPlantId,
-                      intervalDays,
-                      waterMl
-                    });
-                  }}
-                  manualApplying={applyManualRecommendationMutation.isPending}
                 />
               )
             }
@@ -913,7 +959,7 @@ export function PlantDetailSheet() {
                     loading={historyQuery.isLoading && !historyQuery.data}
                     error={historyQuery.isError && !historyQuery.data}
                   />
-                  <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+                  <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
 
                   <DangerZoneSection
                     onDeleteClick={() => {
@@ -924,16 +970,14 @@ export function PlantDetailSheet() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <GrowthCarousel plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+                  <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
 
                   <AIAdviceCard
                     loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
                     refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
                     error={careAdviceQuery.isError && !careAdviceQuery.data}
-                    refreshError={refreshAdviceMutation.isError}
                     hasAiAdvice={hasAiAdvice}
                     advice={adviceText}
-                    source={adviceSource}
                     onRefresh={() => {
                       if (!selectedPlantId || refreshAdviceMutation.isPending) {
                         return;
@@ -1028,6 +1072,30 @@ export function PlantDetailSheet() {
           </Dialog>
         </>
       ) : null}
+
+      <ManualEditSheet
+        open={manualEditOpen}
+        onClose={() => setManualEditOpen(false)}
+        plant={plant ?? plantQuery.data!}
+        isApplying={applyManualRecommendationMutation.isPending || updatePlantMutation.isPending}
+        onApply={(intervalDays, waterMl, potVolumeLiters) => {
+          if (!selectedPlantId) {
+            return;
+          }
+          updatePlantMutation.mutate({
+            plantId: selectedPlantId,
+            baseIntervalDays: intervalDays,
+            preferredWaterMl: waterMl,
+            potVolumeLiters: potVolumeLiters
+          });
+          applyManualRecommendationMutation.mutate({
+            plantId: selectedPlantId,
+            intervalDays,
+            waterMl
+          });
+          setManualEditOpen(false);
+        }}
+      />
     </BottomSheet>
   );
 }
@@ -1048,7 +1116,10 @@ function WaterStatusBlock({
   isOverdue,
   isLoading,
   recommendation,
-  onWater
+  onWater,
+  onOpenManualEdit,
+  onAiRecompute,
+  isAiLoading
 }: {
   plant: PlantDto;
   progress: number;
@@ -1057,127 +1128,214 @@ function WaterStatusBlock({
   isLoading: boolean;
   recommendation: WateringRecommendationPreviewDto | null;
   onWater: () => Promise<void> | void;
+  onOpenManualEdit?: () => void;
+  onAiRecompute?: () => void;
+  isAiLoading?: boolean;
 }) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const rawDaysLeft = Math.ceil((nextWateringDate.getTime() - today.getTime()) / 86_400_000);
   const daysLeft = Math.max(0, rawDaysLeft);
-  const status = getPlantStatusTone(rawDaysLeft, plant.recommendationSource);
-  const source = getPlantSourceTone(recommendation?.source ?? plant.recommendationSource);
-  const SourceIcon = source.icon;
   const intervalDays = Math.max(
     1,
     recommendation?.recommendedIntervalDays ?? plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7
   );
   const waterMl = Math.max(50, recommendation?.recommendedWaterMl ?? plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250);
   const wateringMode = recommendation?.wateringMode ?? (plant.placement === 'OUTDOOR' ? 'WEATHER_GUIDED' : 'STANDARD');
-  const nextLabel = isOverdue ? 'Сегодня без запаса' : daysLeft === 0 ? 'Полив сегодня' : daysLeft === 1 ? 'Полив завтра' : `Через ${daysLeft} дн.`;
-  const weatherHint = recommendation?.weatherContextPreview?.available
-    ? [
-        recommendation.weatherContextPreview.temperatureNowC != null
-          ? `${Math.round(recommendation.weatherContextPreview.temperatureNowC)}°C`
-          : null,
-        recommendation.weatherContextPreview.precipitationForecastMm != null
-          ? `осадки ${recommendation.weatherContextPreview.precipitationForecastMm} мм`
-          : null,
-        recommendation.weatherContextPreview.humidityNowPercent != null
-          ? `влажность ${Math.round(recommendation.weatherContextPreview.humidityNowPercent)}%`
-          : null
-      ].filter(Boolean).join(' · ')
-    : null;
-  const indoorHint = [
-    plant.potVolumeLiters != null ? `горшок ${plant.potVolumeLiters.toFixed(1)} л` : null,
-    humanizeWateringProfile(plant.wateringProfile) ? `профиль ${humanizeWateringProfile(plant.wateringProfile)}` : null,
-    plant.baseIntervalDays ? `база ${plant.baseIntervalDays} дн.` : null
-  ].filter(Boolean).join(' · ');
+  const nextLabel = isOverdue ? 'Срочно' : daysLeft === 0 ? 'Сегодня' : daysLeft === 1 ? 'Завтра' : `${daysLeft} дн.`;
   const wateredToday = hasWateredToday(plant);
+  
+  const isManual = plant.recommendationSource === 'MANUAL';
+  const sourceLabel = isManual ? 'Вручную' : 'AI + погода';
+  const sourceColor = isManual ? 'text-ios-subtext' : 'text-emerald-500';
 
   return (
-    <section className={`theme-surface-1 space-y-4 rounded-3xl border p-4 shadow-sm backdrop-blur-ios ${status.borderClassName}`}>
-      <div className="flex items-start justify-between gap-3">
+    <section className="theme-surface-1 space-y-3 rounded-2xl border p-4">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Текущий режим полива</p>
-          <p className="mt-1 text-lg font-semibold text-ios-text">
-            {isOverdue ? 'Растению нужен полив сейчас' : nextLabel}
-          </p>
-          <p className="text-sm text-ios-subtext">
-            Следующий полив: {nextWateringDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })}
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.15em] text-ios-subtext">Полив</p>
+            <span className={`text-[10px] font-medium ${sourceColor}`}>{sourceLabel}</span>
+          </div>
+          <p className="mt-0.5 text-lg font-semibold text-ios-text">
+            {isOverdue ? 'Нужен сейчас' : nextLabel}
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <span className={`inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold ${status.containerClassName}`}>
-            <span className={`mr-1.5 h-2 w-2 rounded-full ${status.dotClassName}`} />
-            {status.label}
-          </span>
-          <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ${source.className}`}>
-            <SourceIcon className="h-3.5 w-3.5" />
-            {source.shortLabel}
+        <div className="h-10 w-10 rounded-full bg-ios-surface-subtle flex items-center justify-center">
+          <span className={`text-sm font-bold ${isOverdue ? 'text-red-500' : 'text-emerald-500'}`}>
+            {Math.round(progress)}%
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Следующий полив</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{nextLabel}</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="theme-surface-subtle rounded-xl border p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Интервал</p>
+          <p className="mt-0.5 text-sm font-semibold text-ios-text">{intervalDays} дн.</p>
         </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Интервал</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{intervalDays} дн.</p>
+        <div className="theme-surface-subtle rounded-xl border p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Объём</p>
+          <p className="mt-0.5 text-sm font-semibold text-ios-text">{waterMl} мл</p>
         </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Объём</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{waterMl} мл</p>
-        </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Режим</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{humanizeWateringMode(wateringMode)}</p>
+        <div className="theme-surface-subtle rounded-xl border p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Режим</p>
+          <p className="mt-0.5 text-sm font-semibold text-ios-text">{humanizeWateringMode(wateringMode)}</p>
         </div>
       </div>
 
-      <div className="theme-surface-subtle rounded-2xl border p-3">
-        <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
-          {plant.placement === 'OUTDOOR' ? 'Уличные акценты' : 'Домашние акценты'}
+      {plant?.potVolumeLiters ? (
+        <p className="text-xs text-ios-subtext">
+          Горшок {plant.potVolumeLiters.toFixed(1)} л · {plant.wateringProfile ? humanizeWateringProfile(plant.wateringProfile) : 'стандартный'}
         </p>
-        <p className="mt-2 text-sm leading-5 text-ios-text">
-          {plant.placement === 'OUTDOOR'
-            ? weatherHint || `участок ${plant.containerType?.toLowerCase() ?? 'на улице'} · ${plant.sunExposure?.toLowerCase() ?? 'свет не указан'} · ${plant.outdoorSoilType?.toLowerCase() ?? 'почва не указана'}`
-            : indoorHint || 'умеренный домашний режим с опорой на базовый профиль'}
-        </p>
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between text-xs text-ios-subtext">
-          <span>Прогресс цикла</span>
-          <span>{Math.round(progress)}%</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-ios-border/40">
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              isOverdue ? 'bg-red-400 dark:bg-red-500' : 'bg-emerald-500 dark:bg-emerald-400'
-            }`}
-            style={{ width: `${Math.max(8, Math.round(progress))}%` }}
-          />
-        </div>
-      </div>
+      ) : null}
 
       <QuickWaterButton
         isLoading={isLoading}
         isOverdue={isOverdue}
         disabled={wateredToday}
-        disabledLabel="Сегодня уже отмечено"
+        disabledLabel={wateredToday ? 'Полито сегодня' : undefined}
         onWater={onWater}
         onSuccess={() => undefined}
       />
 
-      {wateredToday ? (
-        <p className="text-xs text-ios-subtext">Полив уже отмечен сегодня. Повторное нажатие не изменит график.</p>
-      ) : null}
-
-      <p className="text-xs text-ios-subtext">
-        Источник рекомендации показан честно: ручной режим и резервный сценарий не маскируются под AI.
-      </p>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          className="flex-1 h-9 text-xs"
+          onClick={onOpenManualEdit}
+        >
+          Редактировать вручную
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex-1 h-9 text-xs"
+          onClick={onAiRecompute}
+          disabled={isAiLoading}
+        >
+          {isAiLoading ? 'Пересчитываем...' : 'Пересчитать по AI'}
+        </Button>
+      </div>
     </section>
+  );
+}
+
+function ManualEditSheet({
+  open,
+  onClose,
+  plant,
+  onApply,
+  isApplying
+}: {
+  open: boolean;
+  onClose: () => void;
+  plant: PlantDto;
+  onApply: (intervalDays: number, waterMl: number, potVolumeLiters?: number) => void;
+  isApplying: boolean;
+}) {
+  const [interval, setInterval] = useState('7');
+  const [waterMl, setWaterMl] = useState('250');
+  const [potVolume, setPotVolume] = useState('2');
+
+  useEffect(() => {
+    if (plant) {
+      setInterval(String(plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7));
+      setWaterMl(String(plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250));
+      setPotVolume(String(plant.potVolumeLiters ?? 2));
+    }
+  }, [plant]);
+
+  const handleApply = () => {
+    const intervalNum = Math.max(1, Math.min(60, Number(interval) || 7));
+    const waterMlNum = Math.max(50, Math.min(10000, Number(waterMl) || 250));
+    const potVolumeNum = Math.max(0.1, Math.min(100, Number(potVolume) || 2));
+    onApply(intervalNum, waterMlNum, potVolumeNum);
+  };
+
+  return (
+    <BottomSheet open={open} onClose={onClose}>
+      <div className="space-y-5">
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-ios-text">Редактирование</h3>
+          <p className="mt-1 text-sm text-ios-subtext">Укажите параметры полива</p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-ios-text">Горшок</label>
+            <div className="relative">
+              <input
+                type="number"
+                min={0.1}
+                max={100}
+                step="any"
+                inputMode="decimal"
+                value={potVolume}
+                onChange={(e) => setPotVolume(e.target.value)}
+                className="theme-field h-12 w-full rounded-xl border px-3 pr-8 text-center text-base"
+                placeholder="2"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ios-subtext">л</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-ios-text">Интервал</label>
+            <div className="relative">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={interval}
+                onChange={(e) => setInterval(e.target.value)}
+                className="theme-field h-12 w-full rounded-xl border px-3 pr-8 text-center text-base"
+                placeholder="7"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ios-subtext">дн</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-ios-text">Объём</label>
+            <div className="relative">
+              <input
+                type="number"
+                min={50}
+                max={10000}
+                step={50}
+                value={waterMl}
+                onChange={(e) => setWaterMl(e.target.value)}
+                className="theme-field h-12 w-full rounded-xl border px-3 pr-8 text-center text-base"
+                placeholder="250"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ios-subtext">мл</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-12 flex-1"
+            onClick={onClose}
+          >
+            Отмена
+          </Button>
+          <Button
+            type="button"
+            className="h-12 flex-1"
+            disabled={isApplying}
+            onClick={handleApply}
+          >
+            {isApplying ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </span>
+            ) : 'Применить'}
+          </Button>
+        </div>
+      </div>
+    </BottomSheet>
   );
 }
 
@@ -1954,86 +2112,34 @@ function AIAdviceCard({
   loading,
   refreshing,
   error,
-  refreshError,
   hasAiAdvice,
   advice,
-  source,
   onRefresh
 }: {
   loading: boolean;
   refreshing: boolean;
   error: boolean;
-  refreshError: boolean;
   hasAiAdvice: boolean;
   advice: string | null;
-  source: string | null;
   onRefresh: () => void;
 }) {
   return (
-    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
-      <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex items-center gap-2">
-          <div className="rounded-full bg-emerald-100/70 p-2 text-emerald-700 dark:bg-emerald-950/45 dark:text-emerald-300">
-            <Leaf className="h-4 w-4" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-ios-text">AI советы</p>
-            <p className="text-xs text-ios-subtext">Персональная рекомендация на сегодня</p>
-          </div>
-        </div>
-        <Button type="button" variant="ghost" className="h-auto min-h-[44px] rounded-xl px-3 py-2 text-center text-xs leading-tight" disabled={refreshing} onClick={onRefresh}>
-          {refreshing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
-          Обновить
-        </Button>
-      </div>
-
-      {loading ? (
-        <div className="theme-surface-subtle space-y-2 rounded-2xl border p-3">
-          <div className="h-3 w-1/3 animate-pulse rounded bg-ios-border/70" />
-          <div className="h-3 w-full animate-pulse rounded bg-ios-border/70" />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-ios-border/70" />
-        </div>
-      ) : null}
-
-      {!loading && error ? (
-        <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
-          <p className="theme-text-danger font-medium">Не удалось загрузить AI советы.</p>
-          <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
-          <Button type="button" variant="secondary" className="mt-3 h-auto min-h-[40px] rounded-xl px-3 py-2 text-center leading-tight" onClick={onRefresh}>
-            Повторить
-          </Button>
-        </div>
-      ) : null}
-
-      {!loading && !error && hasAiAdvice && advice ? (
-        <div className="theme-surface-success rounded-2xl border p-3">
-          <p className="theme-text-success inline-flex items-center gap-1.5 text-xs font-medium">
-            <Bot className="h-4 w-4" />
-            Источник: {formatAiAdviceSource(source)}
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-ios-text">{advice}</p>
-        </div>
-      ) : null}
-
-      {!loading && !error && !hasAiAdvice ? (
-        <div className="theme-surface-warning rounded-2xl border p-3">
-          <p className="theme-text-warning inline-flex items-center gap-1.5 text-xs font-medium">
-            <AlertTriangle className="h-4 w-4" />
-            AI временно недоступен, показан базовый совет.
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-ios-text">
-            {advice ?? 'Пока нет дополнительных рекомендаций. Попробуйте обновить позже.'}
-          </p>
-        </div>
-      ) : null}
-
-      {refreshError && !loading ? (
-        <p className="theme-text-danger inline-flex items-center gap-1 text-xs">
-          <Droplets className="h-3.5 w-3.5" />
-          Не удалось обновить совет, попробуйте ещё раз.
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ios-border/40 bg-ios-surface-subtle/50 p-2.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <Leaf className="h-4 w-4 shrink-0 text-emerald-500" />
+        <p className="truncate text-xs text-ios-text">
+          {loading ? 'Загрузка...' : error ? 'Ошибка' : hasAiAdvice && advice ? advice.slice(0, 60) + (advice.length > 60 ? '...' : '') : 'Нет AI советов'}
         </p>
-      ) : null}
-    </section>
+      </div>
+      <button
+        type="button"
+        className="shrink-0 rounded-lg p-1.5 hover:bg-ios-border/30"
+        disabled={refreshing}
+        onClick={onRefresh}
+      >
+        <RefreshCcw className={`h-3.5 w-3.5 text-ios-subtext ${refreshing ? 'animate-spin' : ''}`} />
+      </button>
+    </div>
   );
 }
 
@@ -2042,246 +2148,102 @@ function WateringRecommendationCard({
   state,
   recommendation,
   loading,
-  onRefresh,
-  onManualApply,
-  manualApplying
+  onRefresh
 }: {
   plant: PlantDto;
   state: 'idle' | 'loading' | 'success' | 'fallback' | 'error';
   recommendation: WateringRecommendationPreviewDto | null;
   loading: boolean;
   onRefresh: () => void;
-  onManualApply: (intervalDays: number, waterMl: number) => void;
-  manualApplying: boolean;
 }) {
-  const [manualInterval, setManualInterval] = useState(String(Math.max(1, plant.baseIntervalDays ?? 7)));
-  const [manualWaterMl, setManualWaterMl] = useState(String(Math.max(50, plant.preferredWaterMl ?? 250)));
   const [expanded, setExpanded] = useState(false);
-  const badge = recommendationBadge(recommendation?.source ?? null);
-  const sourceTone = getPlantSourceTone(recommendation?.source ?? plant.recommendationSource);
-  const SourceIcon = sourceTone.icon;
   const explainability = buildExplainabilityViewModel({ plant, recommendation });
   const canRenderExplainability = Boolean(
     recommendation
       || explainability.summary.trim()
       || explainability.topFactors.length
-      || explainability.warnings.length
   );
-
-  useEffect(() => {
-    if (!recommendation) return;
-    if (recommendation.recommendedIntervalDays) {
-      setManualInterval(String(recommendation.recommendedIntervalDays));
-    }
-    if (recommendation.recommendedWaterMl) {
-      setManualWaterMl(String(recommendation.recommendedWaterMl));
-    }
-  }, [recommendation?.recommendedIntervalDays, recommendation?.recommendedWaterMl]);
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios"
+      className="theme-surface-1 space-y-2 rounded-2xl border p-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-ios-text">Почему такой режим</p>
-          <p className="text-xs text-ios-subtext">Короткое объяснение логики рекомендации</p>
-        </div>
-        <div className="inline-flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${sourceTone.className}`}>
-            <SourceIcon className="h-3.5 w-3.5" />
-            {sourceTone.shortLabel}
-          </span>
-          <Button type="button" variant="ghost" className="h-auto min-h-[44px] rounded-xl px-3 py-2 text-center text-xs leading-tight" disabled={loading} onClick={onRefresh}>
-            {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-1 h-4 w-4" />}
-            Обновить
-          </Button>
-        </div>
+        <p className="text-sm font-semibold text-ios-text">Почему</p>
+        <Button type="button" variant="ghost" className="h-8 rounded-lg px-2 text-xs" disabled={loading} onClick={onRefresh}>
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+        </Button>
       </div>
 
       {state === 'idle' ? (
-        <div className="theme-surface-subtle rounded-2xl border p-3 text-sm text-ios-subtext">
-          Нажмите «Обновить», чтобы получить актуальную рекомендацию.
-        </div>
+        <p className="text-xs text-ios-subtext">Нажмите обновить для рекомендации</p>
       ) : null}
 
       {state === 'loading' ? (
-        <div className="theme-surface-subtle space-y-2 rounded-2xl border p-3">
-          <div className="h-3 w-1/3 animate-pulse rounded bg-ios-border/70" />
+        <div className="space-y-2 py-2">
+          <div className="h-3 w-1/2 animate-pulse rounded bg-ios-border/70" />
           <div className="h-3 w-full animate-pulse rounded bg-ios-border/70" />
-          <div className="h-3 w-2/3 animate-pulse rounded bg-ios-border/70" />
         </div>
       ) : null}
 
       {state === 'error' ? (
-        <div className="theme-surface-danger rounded-2xl border p-3 text-sm">
-          <p className="theme-text-danger font-medium">Не удалось получить рекомендацию.</p>
-          <p className="theme-text-danger mt-1 text-xs">Проверьте сеть и повторите запрос.</p>
-          <Button type="button" variant="secondary" className="mt-3 h-auto min-h-[40px] rounded-xl px-3 py-2 text-center leading-tight" onClick={onRefresh}>
-            Повторить
-          </Button>
-        </div>
+        <button type="button" className="text-xs text-red-500 underline" onClick={onRefresh}>
+          Ошибка. Нажмите для повтора
+        </button>
       ) : null}
 
       {canRenderExplainability && state !== 'loading' ? (
-        <div className={`rounded-2xl border p-3 ${
-          state === 'fallback' || explainability.mode === 'FALLBACK'
-            ? 'theme-surface-warning'
-            : 'theme-surface-success'
-        }`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="line-clamp-2 text-sm leading-5 text-ios-text">{explainability.summary}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
-                {explainability.topFactors.map((item, idx) => (
-                  <span key={`${item}-${idx}`} className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-                    {item}
-                  </span>
-                ))}
-              </div>
+        <div className="space-y-2">
+          <p className="line-clamp-2 text-sm text-ios-text">{explainability.summary}</p>
+          
+          {explainability.topFactors.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {explainability.topFactors.slice(0, 2).map((item, idx) => (
+                <span key={`${item}-${idx}`} className="rounded-full bg-ios-surface-subtle px-2 py-0.5 text-[10px] text-ios-subtext">
+                  {item}
+                </span>
+              ))}
             </div>
-            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${sourceTone.className}`}>
-              <SourceIcon className="h-3.5 w-3.5" />
-              {sourceTone.shortLabel}
-            </span>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-ios-subtext">
-            <div className="flex flex-wrap gap-2">
-              <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-                Источник: {badge}
-              </span>
-              <span className="theme-surface-subtle rounded-full border border-current/20 px-2 py-0.5">
-                Режим: {humanizeWateringMode(recommendation?.wateringMode)}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="theme-surface-subtle inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-current/20 px-3 text-[11px] font-semibold text-ios-text"
-              onClick={() => setExpanded((value) => !value)}
-            >
-              {expanded ? 'Скрыть детали' : 'Показать детали'}
-            </button>
-          </div>
+          )}
 
-          {expanded ? (
-            <div className="mt-3 space-y-3">
-              <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Кратко</p>
-                <p className="mt-2 text-sm leading-5 text-ios-text">{explainability.summary}</p>
-              </div>
+          <button
+            type="button"
+            className="text-[10px] text-ios-subtext underline"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? 'Скрыть' : 'Подробнее'}
+          </button>
 
+          {expanded && (
+            <div className="space-y-2 pt-2">
               {recommendation?.reasoning?.length ? (
-                <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Почему режим такой</p>
-                  <ul className="mt-2 space-y-1.5 text-sm text-ios-text">
-                    {recommendation.reasoning.slice(0, 6).map((item, idx) => (
-                      <li key={`${item}-${idx}`} className="leading-5">
-                        • {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {explainability.allFactors.length ? (
-                <div className="theme-surface-subtle rounded-xl border border-current/15 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Что влияет</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {explainability.allFactors.slice(0, 6).map((item, idx) => (
-                      <span
-                        key={`${item}-${idx}`}
-                        className="theme-surface-subtle rounded-full border border-current/20 px-2.5 py-1 text-[11px] text-ios-text"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {explainability.warnings.length ? (
-                <div className="theme-surface-warning rounded-xl border p-3">
-                  <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
-                  <ul className="mt-2 space-y-1 text-sm text-ios-text">
-                    {explainability.warnings.slice(0, 6).map((item, idx) => (
-                      <li key={`${item}-${idx}`} className="leading-5">
-                        • {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="space-y-1 text-xs text-ios-text">
+                  {recommendation.reasoning.slice(0, 3).map((item, idx) => (
+                    <li key={`${item}-${idx}`}>• {item}</li>
+                  ))}
+                </ul>
               ) : null}
             </div>
-          ) : null}
+          )}
         </div>
       ) : null}
-
-      <div className="theme-surface-subtle rounded-2xl border p-3">
-        <p className="text-xs font-medium text-ios-text">Ручная настройка</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <input
-            type="number"
-            min={1}
-            max={60}
-            value={manualInterval}
-            onChange={(e) => setManualInterval(e.target.value)}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-            placeholder="Интервал"
-          />
-          <input
-            type="number"
-            min={50}
-            max={10000}
-            step={50}
-            value={manualWaterMl}
-            onChange={(e) => setManualWaterMl(e.target.value)}
-            className="theme-field h-10 rounded-xl border px-3 text-sm"
-            placeholder="Объём мл"
-          />
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          className="mt-2 h-10 w-full rounded-xl"
-          disabled={manualApplying}
-          onClick={() => {
-            const interval = Math.max(1, Math.min(60, Number(manualInterval) || 7));
-            const waterMl = Math.max(50, Math.min(10000, Number(manualWaterMl) || 250));
-            onManualApply(interval, waterMl);
-          }}
-        >
-          {manualApplying ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Применяем...
-            </span>
-          ) : 'Применить вручную'}
-        </Button>
-      </div>
     </motion.section>
   );
 }
 
 function DangerZoneSection({ onDeleteClick }: { onDeleteClick: () => void }) {
   return (
-    <section className="theme-surface-1 rounded-3xl border p-4">
-      <p className="text-sm font-semibold text-ios-text">Управление растением</p>
-      <p className="mt-1 text-xs text-ios-subtext">
-        Редкое действие. Удаление стирает растение, фото роста и связанную историю.
-      </p>
-      <Button
-        type="button"
-        variant="ghost"
-        className="theme-surface-danger theme-text-danger mt-3 h-11 w-full rounded-2xl border px-3 hover:bg-[hsl(var(--destructive)/0.16)]"
-        onClick={onDeleteClick}
-      >
-        <Trash2 className="mr-2 h-4 w-4" />
-        Удалить растение
-      </Button>
-    </section>
+    <button
+      type="button"
+      className="flex w-full items-center justify-between rounded-xl border border-red-200/40 bg-red-50/50 px-3 py-2.5 dark:border-red-800/30 dark:bg-red-950/20"
+      onClick={onDeleteClick}
+    >
+      <span className="text-xs text-red-600 dark:text-red-400">Удалить растение</span>
+      <Trash2 className="h-3.5 w-3.5 text-red-400" />
+    </button>
   );
 }
 
@@ -2301,10 +2263,7 @@ function RecommendationHistorySection({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const dedupedItems = dedupeHistoryItems(history?.items);
   const latest = history?.latestVisibleChange ?? dedupedItems[0] ?? null;
-  const previewItems = dedupedItems.filter((item) => item.id !== latest?.id).slice(0, 2);
-  const fallbackUpdatedAt = formatRecommendationMoment(plant.recommendationGeneratedAt);
-  const fallbackSummary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim() || 'История режима появится после первого заметного изменения.';
-  const fallbackSource = recommendationBadge(recommendation?.source ?? plant.recommendationSource ?? null);
+  const fallbackSummary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim();
   const timelineQuery = useQuery({
     queryKey: ['plant-recommendation-history-full', plant.id, timelineOpen],
     queryFn: () => getRecommendationHistory(plant.id, { view: 'full', limit: 20 }),
@@ -2315,207 +2274,53 @@ function RecommendationHistorySection({
   const timelineItems = dedupeHistoryItems(timelineQuery.data?.items);
 
   return (
-    <section className="theme-surface-1 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-ios-text">История рекомендаций</p>
-          <p className="mt-1 text-xs text-ios-subtext">
-            Последние заметные изменения режима: что поменялось, когда и почему.
-          </p>
-        </div>
-        <span className="rounded-full border border-ios-border/60 px-2.5 py-1 text-[11px] text-ios-subtext">
-          {latest ? historySourceBadge(latest) : fallbackSource}
-        </span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-ios-text">История</p>
+        {dedupedItems.length > 0 && (
+          <button type="button" className="text-[10px] text-ios-subtext underline" onClick={() => setTimelineOpen(true)}>
+            Все {dedupedItems.length}
+          </button>
+        )}
       </div>
-
-      {loading ? <p className="mt-3 text-sm text-ios-subtext">Собираем историю режима...</p> : null}
-      {error ? <p className="theme-banner-danger mt-3 rounded-2xl border px-3 py-2 text-xs">Не удалось загрузить историю режима.</p> : null}
-
-      {!loading && !error ? (
-        <>
-          <div className="theme-surface-subtle mt-3 rounded-2xl border p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.14em] text-ios-subtext">
-                  {latest ? 'Последнее изменение' : 'Пока без истории'}
-                </p>
-                <p className="mt-2 text-sm font-semibold leading-5 text-ios-text">
-                  {latest ? historyTitle(latest) : fallbackSummary}
-                </p>
-                <p className="mt-2 text-sm leading-5 text-ios-subtext">
-                  {latest ? historyReasonLine(latest) : 'Когда режим изменится автоматически или вы примените его вручную, здесь появится понятная хроника изменений.'}
-                </p>
-              </div>
-              {latest && historyDeltaLabel(latest) ? (
-                <span className="theme-badge-info shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold">
-                  {historyDeltaLabel(latest)}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
-              {latest ? (
-                <>
-                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                    {formatRecommendationMoment(latest.occurredAt) ?? 'Недавно'}
-                  </span>
-                  {historyValueDiffs(latest).map((diff) => (
-                    <span key={`${latest.id}-${diff}`} className="theme-surface-info rounded-full border px-2 py-1 font-medium text-ios-text">
-                      {diff}
-                    </span>
-                  ))}
-                  {latest.newIntervalDays != null ? (
-                    <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                      {latest.newIntervalDays} дн.
-                    </span>
-                  ) : null}
-                  {latest.newWaterMl != null ? (
-                    <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                      {latest.newWaterMl} мл
-                    </span>
-                  ) : null}
-                  {latest.factors.slice(0, 2).map((factor) => (
-                    <span key={`${latest.id}-${factor.type}`} className="rounded-full border border-ios-border/55 px-2 py-1">
-                      {factor.label}
-                    </span>
-                  ))}
-                </>
-              ) : (
-                <>
-                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                    Интервал: {plant.recommendedIntervalDays ?? plant.baseIntervalDays ?? 7} дн.
-                  </span>
-                  <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                    Объём: {plant.recommendedWaterMl ?? plant.preferredWaterMl ?? 250} мл
-                  </span>
-                  {fallbackUpdatedAt ? (
-                    <span className="rounded-full border border-ios-border/55 px-2 py-1">Обновлено: {fallbackUpdatedAt}</span>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
-
-          {previewItems.length ? (
-            <div className="mt-3 space-y-2">
-              {previewItems.map((item) => (
-                <div key={item.id} className="theme-surface-subtle rounded-2xl border px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="min-w-0 truncate text-sm text-ios-text">{historyTitle(item)}</p>
-                    <span className="shrink-0 text-[11px] text-ios-subtext">
-                      {formatRecommendationMoment(item.occurredAt) ?? 'Недавно'}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-ios-subtext">{historyReasonLine(item)}</p>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {dedupedItems.length ? (
-            <button
-              type="button"
-              className="theme-surface-subtle mt-3 inline-flex h-10 items-center justify-center rounded-full border px-4 text-sm font-medium text-ios-text"
-              onClick={() => setTimelineOpen(true)}
-            >
-              Показать историю
-            </button>
-          ) : null}
-        </>
-      ) : null}
+      
+      {loading ? (
+        <p className="text-xs text-ios-subtext">Загрузка...</p>
+      ) : error ? (
+        <p className="text-xs text-red-500">Ошибка</p>
+      ) : latest ? (
+        <div className="flex items-center gap-2 rounded-lg bg-ios-surface-subtle/50 px-2.5 py-2">
+          <span className="text-xs text-ios-text">{historyTitle(latest)}</span>
+          {historyDeltaLabel(latest) && (
+            <span className="rounded bg-ios-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-ios-accent">
+              {historyDeltaLabel(latest)}
+            </span>
+          )}
+        </div>
+      ) : fallbackSummary ? (
+        <p className="text-xs text-ios-subtext">{fallbackSummary.slice(0, 50)}{fallbackSummary.length > 50 ? '...' : ''}</p>
+      ) : (
+        <p className="text-xs text-ios-subtext">Пока нет истории</p>
+      )}
 
       <Dialog
         open={timelineOpen}
         onOpenChange={setTimelineOpen}
         title="История режима"
-        description="Хроника изменений полива: что поменялось, почему и было ли это автоматически или вручную."
       >
-        {timelineQuery.isLoading ? <p className="text-sm text-ios-subtext">Собираем полную историю…</p> : null}
-        {timelineQuery.isError ? <p className="theme-banner-danger rounded-2xl border px-3 py-3 text-sm">Не удалось загрузить полную историю режима.</p> : null}
-        {!timelineQuery.isLoading && !timelineQuery.isError ? (
-          timelineItems.length ? (
-            <div className="space-y-3">
-              {timelineItems.map((item) => (
-                <div key={`timeline-${item.id}`} className="theme-surface-subtle rounded-3xl border p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-base font-semibold text-ios-text">{historyTitle(item)}</p>
-                      <p className="mt-1 text-xs text-ios-subtext">{formatRecommendationMoment(item.occurredAt) ?? 'Недавно'}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="rounded-full border border-ios-border/55 px-2.5 py-1 text-[11px] text-ios-subtext">
-                        {historyEventLabel(item)}
-                      </span>
-                      {historySignificanceLabel(item.changeSignificance) ? (
-                        <span className="rounded-full border border-ios-border/55 px-2.5 py-1 text-[11px] text-ios-subtext">
-                          {historySignificanceLabel(item.changeSignificance)}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <p className="mt-3 text-sm leading-5 text-ios-text">{item.summary ?? 'Режим ухода обновлён.'}</p>
-                  <p className="mt-2 text-sm leading-5 text-ios-subtext">{historyReasonLine(item)}</p>
-
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
-                    {item.previousIntervalDays != null && item.newIntervalDays != null ? (
-                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                        {item.previousIntervalDays} → {item.newIntervalDays} дн.
-                      </span>
-                    ) : null}
-                    {item.previousWaterMl != null && item.newWaterMl != null ? (
-                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                        {item.previousWaterMl} → {item.newWaterMl} мл
-                      </span>
-                    ) : null}
-                    {item.manualOverrideActive != null ? (
-                      <span className="rounded-full border border-ios-border/55 px-2 py-1">
-                        {item.manualOverrideActive ? 'Ручной режим активен' : 'Автоматический режим'}
-                      </span>
-                    ) : null}
-                    {item.userActionRequired ? (
-                      <span className="theme-badge-warning rounded-full px-2 py-1 text-[11px] font-semibold">
-                        Нужна проверка
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {item.factors.length ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs uppercase tracking-[0.12em] text-ios-subtext">Что повлияло</p>
-                      {item.factors.map((factor) => (
-                        <div key={`${item.id}-${factor.type}-${factor.label}`} className="rounded-2xl border border-ios-border/50 px-3 py-2">
-                          <div className="flex items-start gap-2">
-                            <span className={`${factorLabelTone(factor.type)} rounded-full px-2 py-0.5 text-[10px] font-semibold`}>
-                              {factor.label}
-                            </span>
-                            <p className="min-w-0 text-xs leading-5 text-ios-subtext">
-                              {factor.impactText}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {item.warnings.length ? (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs uppercase tracking-[0.12em] text-ios-subtext">Важно</p>
-                      {item.warnings.map((warning, index) => (
-                        <p key={`${item.id}-warning-${index}`} className="theme-banner-warning rounded-2xl border px-3 py-2 text-xs">
-                          {warning}
-                        </p>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-ios-subtext">История режима пока пуста.</p>
-          )
-        ) : null}
+        {timelineQuery.isLoading ? <p className="text-sm text-ios-subtext">Загрузка...</p> : null}
+        {timelineQuery.isError ? <p className="text-sm text-red-500">Ошибка</p> : null}
+        {!timelineQuery.isLoading && !timelineQuery.isError && timelineItems.length > 0 && (
+          <div className="space-y-2">
+            {timelineItems.map((item) => (
+              <div key={item.id} className="rounded-lg border border-ios-border/40 p-2.5">
+                <p className="text-xs font-medium text-ios-text">{historyTitle(item)}</p>
+                <p className="mt-1 text-[10px] text-ios-subtext">{historyReasonLine(item)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </Dialog>
-    </section>
+    </div>
   );
 }
