@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bot, Droplets, Leaf, Loader2, RefreshCcw, Sprout, Trash2, Trees, Warehouse } from 'lucide-react';
+import { AlertTriangle, Bot, Droplets, Leaf, Loader2, Plus, RefreshCcw, Sprout, Trash2, Trees, Warehouse } from 'lucide-react';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
 import { Dialog } from '@/components/ui/dialog';
@@ -9,6 +9,8 @@ import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
 import { GrowthTimeline } from '@/app/PlantDetail/GrowthTimeline';
 import { LeafDiagnosis } from '@/components/LeafDiagnosis';
+import { NotesList } from '@/components/NotesList';
+import { AddNoteSheet } from '@/components/AddNoteSheet';
 import { SeedStageActionsCard } from '@/components/seed/SeedStageActionsCard';
 import { seedActionLabel } from '@/components/seed/seedStageUi';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
@@ -16,9 +18,12 @@ import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
 import {
   apiFetch,
+  createPlantNote,
   deletePlant,
+  deletePlantNote,
   getPlantById,
   getPlantCareAdvice,
+  getPlantNotes,
   getRecommendationHistory,
   migrateSeedPlant,
   previewSeedMigration,
@@ -40,8 +45,10 @@ import { useUiStore } from '@/lib/store';
 import { buildExplainabilityViewModel } from '@/lib/explainability';
 import type {
   CalendarEventDto,
+  CreateNoteRequest,
   PlantCareAdviceDto,
   PlantDto,
+  PlantNoteDto,
   RecommendationHistoryItemDto,
   RecommendationHistoryResponseDto,
   WateringRecommendationPreviewDto
@@ -519,6 +526,16 @@ export function PlantDetailSheet() {
     retry: 1
   });
 
+  const notesQuery = useQuery({
+    queryKey: ['plant-notes', selectedPlantId],
+    queryFn: () => getPlantNotes(selectedPlantId as number),
+    enabled: selectedPlantId !== null,
+    staleTime: 30_000,
+    retry: 1
+  });
+
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
+
   const applyManualRecommendationMutation = useMutation({
     mutationFn: ({ plantId, intervalDays, waterMl }: { plantId: number; intervalDays: number; waterMl: number }) =>
       apiFetch(`/api/watering/recommendation/${plantId}/apply`, {
@@ -584,6 +601,25 @@ export function PlantDetailSheet() {
     onError: () => {
       hapticError();
     }
+  });
+
+  const createNoteMutation = useMutation({
+    mutationFn: (payload: CreateNoteRequest) => createPlantNote(selectedPlantId as number, payload),
+    onSuccess: () => {
+      hapticSuccess();
+      setAddNoteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['plant-notes', selectedPlantId] });
+    },
+    onError: () => hapticError()
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: (noteId: string) => deletePlantNote(selectedPlantId as number, noteId),
+    onSuccess: () => {
+      hapticSuccess();
+      void queryClient.invalidateQueries({ queryKey: ['plant-notes', selectedPlantId] });
+    },
+    onError: () => hapticError()
   });
 
   const waterMutation = useMutation({
@@ -997,6 +1033,43 @@ export function PlantDetailSheet() {
 
                   <LeafDiagnosis plant={plant} />
 
+                  {(() => {
+                    const notes = notesQuery.data ?? [];
+                    const lastFeeding = notes.find((n) => n.type === 'FEEDING');
+                    const daysSinceFeeding = lastFeeding
+                      ? Math.floor((Date.now() - new Date(lastFeeding.createdAt).getTime()) / 86_400_000)
+                      : null;
+
+                    return (
+                      <div className="rounded-2xl bg-ios-bg/50 p-4">
+                        <div className="mb-2 flex items-center justify-between px-0.5">
+                          <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-ios-subtext">Журнал ухода</h4>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-ios-accent transition-colors active:bg-ios-card/50"
+                            onClick={() => setAddNoteOpen(true)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Добавить
+                          </button>
+                        </div>
+
+                        {daysSinceFeeding !== null ? (
+                          <p className="mb-2 px-0.5 text-[11px] text-ios-subtext">
+                            Подкормка: {daysSinceFeeding === 0 ? 'сегодня' : `${daysSinceFeeding} дн. назад`}
+                          </p>
+                        ) : null}
+
+                        <NotesList
+                          notes={notes}
+                          onDelete={(noteId) => {
+                            deleteNoteMutation.mutate(noteId);
+                          }}
+                        />
+                      </div>
+                    );
+                  })()}
+
                   <DangerZoneSection
                     onDeleteClick={() => {
                       impactMedium();
@@ -1072,6 +1145,15 @@ export function PlantDetailSheet() {
           </Dialog>
         </>
       ) : null}
+
+      <AddNoteSheet
+        open={addNoteOpen}
+        onOpenChange={setAddNoteOpen}
+        saving={createNoteMutation.isPending}
+        onSave={(payload) => {
+          createNoteMutation.mutate(payload);
+        }}
+      />
 
       <ManualEditSheet
         open={manualEditOpen}

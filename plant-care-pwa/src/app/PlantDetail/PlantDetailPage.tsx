@@ -94,42 +94,46 @@ export function PlantDetailPage({
       />
 
       <motion.div
-        className="space-y-5"
+        className="space-y-5 md:grid md:grid-cols-2 md:gap-6 md:space-y-0"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: 'easeOut', delay: 0.04 }}
       >
-        {mainWatering ? (
-          <SectionBlock
-            eyebrow={mainSection?.eyebrow ?? 'Главное'}
-            title={mainSection?.title ?? 'Полив и следующий шаг'}
-            subtitle={mainSection?.subtitle ?? 'Сначала то, что нужно сделать сейчас.'}
-          >
-            {mainWatering}
-          </SectionBlock>
-        ) : null}
+        <div className="space-y-5">
+          {mainWatering ? (
+            <SectionBlock
+              eyebrow={mainSection?.eyebrow ?? 'Главное'}
+              title={mainSection?.title ?? 'Полив и следующий шаг'}
+              subtitle={mainSection?.subtitle ?? 'Сначала то, что нужно сделать сейчас.'}
+            >
+              {mainWatering}
+            </SectionBlock>
+          ) : null}
 
-        {explainability ? (
-          <SectionBlock
-            eyebrow={explainabilitySection?.eyebrow ?? 'Пояснение'}
-            title={explainabilitySection?.title ?? 'Почему такой режим'}
-            subtitle={explainabilitySection?.subtitle ?? 'Краткая логика рекомендации без перегруза.'}
-          >
-            {explainability}
-          </SectionBlock>
-        ) : null}
+          {explainability ? (
+            <SectionBlock
+              eyebrow={explainabilitySection?.eyebrow ?? 'Пояснение'}
+              title={explainabilitySection?.title ?? 'Почему такой режим'}
+              subtitle={explainabilitySection?.subtitle ?? 'Краткая логика рекомендации без перегруза.'}
+            >
+              {explainability}
+            </SectionBlock>
+          ) : null}
+        </div>
 
-        {secondary ? (
-          <SectionBlock
-            eyebrow={secondarySection?.eyebrow ?? 'Дополнительно'}
-            title={secondarySection?.title ?? 'Рост, диагностика и настройки'}
-            subtitle={secondarySection?.subtitle ?? 'Вторичные инструменты и более редкие действия.'}
-          >
-            {secondary}
-          </SectionBlock>
-        ) : null}
+        <div className="space-y-5">
+          {secondary ? (
+            <SectionBlock
+              eyebrow={secondarySection?.eyebrow ?? 'Дополнительно'}
+              title={secondarySection?.title ?? 'Рост, диагностика и настройки'}
+              subtitle={secondarySection?.subtitle ?? 'Вторичные инструменты и более редкие действия.'}
+            >
+              {secondary}
+            </SectionBlock>
+          ) : null}
 
-        {children}
+          {children}
+        </div>
       </motion.div>
     </motion.div>
   );

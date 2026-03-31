@@ -181,7 +181,7 @@ export function App() {
       <AnimatePresence mode="wait">
         <motion.section
           key={activeTab}
-          className={activeTab === 'ai' ? 'flex min-h-0 flex-1 flex-col overflow-hidden pb-5' : 'space-y-4 pb-5'}
+          className={activeTab === 'ai' ? 'mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 md:px-8' : 'mx-auto w-full max-w-[1200px] space-y-4 px-4 pb-5 md:px-8'}
           initial={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.985 } : { opacity: 0, x: 26 }}
           animate={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 1, scale: 1 } : { opacity: 1, x: 0 }}
           exit={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.99 } : { opacity: 0, x: -18 }}

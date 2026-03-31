@@ -95,7 +95,9 @@ import type {
   WeatherProvidersResponse,
   WeatherCurrentDto,
   WeatherForecastDto,
-  GrowthEntryDto
+  GrowthEntryDto,
+  PlantNoteDto,
+  CreateNoteRequest
 } from '@/types/api';
 import type {
   HomeAssistantConfigRequest,
@@ -1614,6 +1616,23 @@ export async function updateGrowthEntry(
 
 export async function deleteGrowthEntry(plantId: number, entryId: number): Promise<void> {
   return apiFetch<void>(`/api/plants/${plantId}/growth/${entryId}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function getPlantNotes(plantId: number): Promise<PlantNoteDto[]> {
+  return apiFetch<PlantNoteDto[]>(`/api/plants/${plantId}/notes`, { method: 'GET' });
+}
+
+export async function createPlantNote(plantId: number, payload: CreateNoteRequest): Promise<PlantNoteDto> {
+  return apiFetch<PlantNoteDto>(`/api/plants/${plantId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deletePlantNote(plantId: number, noteId: string): Promise<void> {
+  return apiFetch<void>(`/api/plants/${plantId}/notes/${noteId}`, {
     method: 'DELETE'
   });
 }

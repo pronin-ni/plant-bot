@@ -574,7 +574,7 @@ export function PlantsList() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ type: 'spring', stiffness: 330, damping: 28, mass: 1 }}
-              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
             >
               {plants.map((plant, index) => {
                 const isPlantOverdue = getDaysLeft(plant) <= 0;

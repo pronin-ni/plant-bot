@@ -9,7 +9,7 @@ This document provides guidelines for AI coding agents working on this codebase.
 - **Type**: Full-stack monorepo (Java Spring Boot + React PWA)
 - **Tech Stack**: 
   - Backend: Java 17, Spring Boot 3.2, JPA/Hibernate, SQLite
-  - Frontend: React 19, TypeScript, Vite 7, Tailwind CSS, TanStack Query
+  - Frontend: React 19, TypeScript, Vite 7, Tailwind CSS, TanStack Query, Zustand
 - **Structure**: `src/` (backend) + `plant-care-pwa/` (frontend)
 
 ---
@@ -25,12 +25,14 @@ This document provides guidelines for AI coding agents working on this codebase.
 # Run application
 ./gradlew bootRun
 
-# Run tests
+# Run all tests
 ./gradlew test
 
-# Run single test
+# Run single test (class)
 ./gradlew test --tests "com.example.plantbot.service.SeedLifecycleServiceTest"
-./gradlew test --tests "com.example.plantbot.controller.AppControllerLegacyAiRecommendTest"
+
+# Run single test (method)
+./gradlew test --tests "com.example.plantbot.service.SeedLifecycleServiceTest.testMethodName"
 
 # Run tests with verbose output
 ./gradlew test --info
@@ -50,11 +52,17 @@ npm install
 # Run development server
 npm run dev
 
-# Build for production
+# Build for production (includes TypeScript check)
 npm run build
 
 # Preview production build
 npm run preview
+
+# Run tests (Vitest)
+npx vitest
+
+# Run single test
+npx vitest run -t "test name"
 ```
 
 ---
@@ -64,45 +72,37 @@ npm run preview
 ### Backend (Java)
 
 1. **Package organization**: `com.example.plantbot.{controller,service,repository,domain,config,security,util}`
-2. **Imports**: 
-   - Use fully qualified imports (no wildcard `.*`)
-   - Order: java.* → javax.* → org.* → com.*
-   - Static imports last
+2. **Imports**: Fully qualified (no wildcards), order: java.* → javax.* → org.* → com.*, static last
 3. **Lombok**: Use `@Slf4j`, `@RequiredArgsConstructor`, `@Data` sparingly
 4. **DTOs**: Create in `controller/dto/` package
-5. **Entities**: Place in `domain/` package, use JPA annotations
+5. **Entities**: Place in `domain/` package with JPA annotations
 6. **Methods**: Small, focused, <50 lines
-7. **Error handling**: Use `@ExceptionHandler` in controllers, log with `log.error()`
+7. **Error handling**: `@ExceptionHandler` in controllers, log with `log.error()`
 8. **Testing**: JUnit 5, Mockito for mocking
 
 ### Frontend (React/TypeScript)
 
-1. **File naming**: 
-   - Components: `PascalCase.tsx` (e.g., `PlantCard.tsx`)
-   - Utils/hooks: `camelCase.ts` (e.g., `usePlants.ts`)
-2. **Imports**: Use absolute paths with `@/` alias (e.g., `@/lib/api`)
-3. **Component structure**: 
+1. **File naming**: Components: `PascalCase.tsx`, Utils/hooks: `camelCase.ts`
+2. **Imports**: Use `@/` alias (e.g., `@/lib/api`), React/React Query first, then UI, then types
+3. **Component structure**:
    ```tsx
-   import { useState, useEffect } from 'react';
+   import { useState } from 'react';
    import { useQuery, useMutation } from '@tanstack/react-query';
    import { Button } from '@/components/ui/button';
    import type { PlantDto } from '@/types/api';
 
-   interface Props {
-     plantId: number;
-     onClose: () => void;
-   }
+   interface Props { plantId: number; onClose: () => void; }
 
    export function PlantDetail({ plantId, onClose }: Props) {
-     // hooks first
-     // then render
+     // hooks first, then render
    }
    ```
-4. **State management**: Zustand for global state, React Query for server state
+4. **State**: Zustand for global state, React Query for server state
 5. **Styling**: Tailwind CSS, use `cn()` utility from `lib/utils.ts`
-6. **Types**: Define in `types/api.ts` for API DTOs, interfaces in component files for local types
-7. **No comments**: Avoid comments unless explaining complex logic
-8. **Error handling**: Use `onError` callbacks in mutations, show user feedback via haptics/toast
+6. **Types**: API DTOs in `types/api.ts`, local interfaces in component files
+7. **No comments**: Avoid unless explaining complex logic
+8. **Error handling**: `onError` callbacks in mutations, user feedback via haptics/toast
+9. **TypeScript**: Strict mode, `noUnusedParameters: true`, `noFallthroughCasesInSwitch: true`
 
 ---
 
@@ -121,23 +121,21 @@ npm run preview
 
 ---
 
-## API Development Guidelines
+## API Development
 
-1. **Backend endpoints**: Add to `AppController.java` following REST conventions
-2. **DTOs**: Create request/response DTOs in `controller/dto/`
+1. **Endpoints**: Add to `AppController.java` following REST conventions
+2. **DTOs**: Request/response DTOs in `controller/dto/`
 3. **CORS**: Update `WebConfig.java` if adding new HTTP methods
-4. **Frontend API**: Add functions to `lib/api.ts`
-5. **Types**: Add TypeScript interfaces to `types/api.ts`
-6. **Breaking changes**: Update both backend and frontend together
+4. **Frontend API**: Add functions to `lib/api.ts`, types to `types/api.ts`
+5. **Breaking changes**: Update both backend and frontend together
 
 ---
 
 ## Database
 
 - **Engine**: SQLite with Hibernate community dialect
-- **Schema**: Auto-generated from entities (hibernate.ddl_auto: update)
-- **Migrations**: Not currently using Flyway/Liquibase - schema changes via entity modifications
-- **Dev auth**: Enable with `APP_DEV_AUTH_ENABLED=true` or set in `application.yml`
+- **Schema**: Auto-generated from entities (`hibernate.ddl_auto: update`)
+- **Migrations**: None (schema changes via entity modifications)
 
 ---
 
@@ -161,43 +159,24 @@ public class PlantService {
 ```tsx
 const mutation = useMutation({
   mutationFn: (data: InputType) => apiCall(data),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['plants'] });
-    hapticSuccess();
-  },
-  onError: () => {
-    hapticError();
-  }
+  onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['plants'] }); hapticSuccess(); },
+  onError: () => { hapticError(); }
 });
 ```
 
 ---
 
-## Testing Strategy
-
-- **Backend**: Unit tests in `src/test/java/`, integration tests for controllers
-- **Frontend**: Vitest configured but no tests currently written
-- **Manual testing**: Use Playwright for E2E testing (already installed in project)
-
----
-
 ## Environment Variables
 
-Required for running:
-- `TELEGRAM_AUTH_TOKEN`
-- `APP_SECURITY_JWT_SECRET`
-
-Optional:
-- `OPENROUTER_API_KEY`
-- `OPENWEATHER_API_KEY`
-- `WEB_PUSH_VAPID_*`
+Required: `TELEGRAM_AUTH_TOKEN`, `APP_SECURITY_JWT_SECRET`
+Optional: `OPENROUTER_API_KEY`, `OPENWEATHER_API_KEY`, `WEB_PUSH_VAPID_*`
 
 ---
 
 ## Important Notes
 
-1. **Do NOT commit secrets** - Use `.env` files, never commit `.env`
+1. **Do NOT commit secrets** - Use `.env` files
 2. **API contracts** - Frontend and backend must stay in sync
 3. **Mobile-first** - Test UI on 320px minimum width
-4. **Demo mode** - Frontend can run with demo data (no backend required) via demoMode in api.ts
-5. **Dev auth** - Disabled by default in production (`APP_DEV_AUTH_ENABLED:false`)
+4. **Demo mode** - Frontend runs with demo data via `demoMode` in api.ts
+5. **Dev auth** - Disabled by default (`APP_DEV_AUTH_ENABLED:false`)

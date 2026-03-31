@@ -735,3 +735,21 @@ export interface GrowthEntryRequest {
   note?: string;
   source?: 'MANUAL' | 'CAMERA' | 'AUTO';
 }
+
+export type NoteType = 'GENERAL' | 'FEEDING' | 'ISSUE';
+
+export interface PlantNoteDto {
+  id: string;
+  type: NoteType;
+  title?: string | null;
+  amount?: string | null;
+  text: string;
+  createdAt: string;
+}
+
+export interface CreateNoteRequest {
+  type: NoteType;
+  title?: string;
+  amount?: string;
+  text: string;
+}
