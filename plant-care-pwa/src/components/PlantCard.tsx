@@ -33,25 +33,14 @@ function CategoryIcon({ plant, className }: { plant: PlantDto; className?: strin
 }
 
 function nextWateringLabel(daysLeft: number, nextWateringText: string): string {
-  if (daysLeft < 0) {
-    return `С задержкой на ${Math.abs(daysLeft)} дн.`;
-  }
-  if (daysLeft === 0) {
-    return 'Сегодня';
-  }
-  if (daysLeft === 1) {
-    return 'Завтра';
-  }
-  return nextWateringText
-    .replace(/^Полив\s+/i, '')
-    .replace(/^Пора\s+/i, '')
-    .replace(/^Просрочено\s+/i, '');
+  if (daysLeft < 0) return `просрочено ${Math.abs(daysLeft)} дн.`;
+  if (daysLeft === 0) return 'сегодня';
+  if (daysLeft === 1) return 'завтра';
+  return nextWateringText.replace(/^Полив\s+/i, '').replace(/^Пора\s+/i, '').replace(/^Просрочено\s+/i, '');
 }
 
 function hasWateredToday(plant: PlantDto): boolean {
-  if (!plant.lastWateredDate) {
-    return false;
-  }
+  if (!plant.lastWateredDate) return false;
   return startOfLocalDay(parseDateOnly(plant.lastWateredDate)).getTime() === startOfLocalDay(new Date()).getTime();
 }
 
@@ -77,18 +66,14 @@ export function PlantCard({
   const hintTone = getPlantReasonTone(plant.recommendationSource);
   const wateredToday = hasWateredToday(plant);
   const seedPlant = isSeedPlant(plant);
-  const seedWindow = plant.expectedGerminationDaysMin != null && plant.expectedGerminationDaysMax != null
-    ? `${plant.expectedGerminationDaysMin}-${plant.expectedGerminationDaysMax} дн.`
-    : 'окно не задано';
-  const seedCheckLabel = plant.recommendedCheckIntervalHours ? `Проверять каждые ${plant.recommendedCheckIntervalHours} ч` : 'Проверка по ситуации';
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 12, scale: 0.985 }}
+      initial={{ opacity: 0, y: 8, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      whileTap={{ scale: 0.988 }}
-      className={`group theme-surface-1 relative flex flex-col gap-3 overflow-hidden rounded-[28px] border p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgb(15_23_42/0.14)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))] ${pill.borderClassName}`}
+      whileTap={{ scale: 0.995 }}
+      className={`group theme-surface-1 relative flex flex-row items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgb(15_23_42/0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--ring))] ${pill.borderClassName}`}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -99,84 +84,62 @@ export function PlantCard({
         }
       }}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(circle_at_top_right,hsl(var(--accent)/0.12),transparent_48%)] opacity-90" />
-      <div className="relative flex gap-3.5">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[22px] bg-[hsl(var(--secondary)/0.92)] shadow-inner">
-          {plant.photoUrl ? (
-            <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
-          ) : (
-            <PlantAvatar
-              name={plant.name}
-              plant={plant}
-              className="h-full w-full rounded-[22px] border-0 shadow-none"
-              labelClassName="bottom-1.5 left-1.5 h-6 min-w-6 px-1.5 text-[10px]"
-              framed={false}
-            />
-          )}
-        </div>
-        <div className="min-w-0 flex-1 space-y-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1">
-              <p className="line-clamp-2 text-[15px] font-semibold leading-5 text-ios-text sm:text-base">{plant.name}</p>
-              <p className="inline-flex items-center gap-1 text-xs font-medium text-ios-subtext">
-                <CategoryIcon plant={plant} className="h-3.5 w-3.5" />
-                {getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}
-              </p>
-            </div>
-            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${pill.containerClassName}`}>
-              <span className={`h-2 w-2 rounded-full ${pill.dotClassName}`} />
-              {pill.label}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${source.className}`}>
-              <SourceIcon className="h-3.5 w-3.5" />
-              {seedPlant ? seedStageLabel(plant.seedStage) : source.shortLabel}
-            </span>
-            <span className="text-xs text-ios-subtext">
-              {seedPlant ? seedCheckLabel : `Следующий полив: ${nextWateringLabel(daysLeft, nextWateringText)}`}
-            </span>
-          </div>
-        </div>
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[hsl(var(--secondary)/0.92)]">
+        {plant.photoUrl ? (
+          <img src={plant.photoUrl} alt={plant.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" loading="lazy" />
+        ) : (
+          <PlantAvatar
+            name={plant.name}
+            plant={plant}
+            className="h-full w-full rounded-lg border-0 shadow-none"
+            labelClassName="bottom-0.5 left-0.5 h-4 min-w-4 px-1 text-[8px]"
+            framed={false}
+          />
+        )}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.06, duration: 0.22 }}
-        className={`space-y-2 rounded-[22px] px-3 py-3 ${hintTone}`}
-      >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-[0.12em] text-ios-subtext">Почему сейчас</p>
-              <p className="mt-1 line-clamp-1 text-sm leading-5">
-                {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
-              </p>
-            </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-1 text-sm font-semibold text-ios-text">{plant.name}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ios-subtext">
+              <CategoryIcon plant={plant} className="h-3 w-3" />
+              <span className="truncate">{getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}</span>
+            </p>
           </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-ios-subtext">
-            <span>{seedPlant ? 'Окно всходов' : 'Цикл полива'}</span>
-            <span>{seedPlant ? seedWindow : `${Math.max(0, Math.min(100, cycleProgress))}%`}</span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pill.containerClassName}`}>
+            <span className={`h-2 w-2 rounded-full ${pill.dotClassName}`} />
+            {pill.label}
+          </span>
+        </div>
+
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${source.className}`}>
+            <SourceIcon className="h-3 w-3" />
+            {seedPlant ? seedStageLabel(plant.seedStage) : source.shortLabel}
+          </span>
+          <span className="truncate text-[11px] text-ios-subtext">
+            {seedPlant ? '' : nextWateringLabel(daysLeft, nextWateringText)}
+          </span>
+        </div>
+
+        <div className={`mt-1.5 flex items-center gap-2 rounded-md px-2 py-1 ${hintTone}`}>
+          <p className="min-w-0 flex-1 truncate text-[11px] leading-3 text-ios-text">
+            {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
+          </p>
+          <div className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                cycleProgress > 70
-                  ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500'
-                  : cycleProgress > 40
-                    ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500'
-                    : 'bg-gradient-to-r from-red-500 via-orange-500 to-red-500'
+                cycleProgress > 70 ? 'bg-emerald-500' : cycleProgress > 40 ? 'bg-amber-500' : 'bg-red-500'
               }`}
               style={{ width: `${cycleProgress}%` }}
             />
           </div>
         </div>
-      </motion.div>
+      </div>
 
       <div
-        className="mt-auto"
+        className="shrink-0"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -184,17 +147,17 @@ export function PlantCard({
         {seedPlant ? (
           <button
             type="button"
-            className="theme-surface-subtle h-11 w-full rounded-2xl border px-3 text-sm font-medium text-ios-text"
+            className="theme-surface-subtle h-10 rounded-lg border px-3 text-xs font-medium text-ios-text"
             onClick={onOpen}
           >
-            Открыть режим проращивания
+            Открыть
           </button>
         ) : (
           <QuickWaterButton
             isLoading={isWatering}
             isOverdue={daysLeft <= 0}
             disabled={wateredToday}
-            disabledLabel="Уже полито сегодня"
+            disabledLabel="Полито"
             onWater={onWater}
           />
         )}

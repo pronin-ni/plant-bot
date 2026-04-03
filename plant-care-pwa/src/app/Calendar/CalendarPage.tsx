@@ -526,11 +526,8 @@ export function CalendarPage() {
               ))}
             </div>
           ) : (
-            <div className="theme-surface-subtle rounded-2xl border border-dashed px-4 py-5 text-center">
-              <p className="text-sm font-medium text-ios-text">Ближайших поливов пока нет</p>
-              <p className="mt-1 text-xs leading-5 text-ios-subtext">
-                Когда появятся новые задачи ухода, они будут показаны здесь списком.
-              </p>
+            <div className="theme-surface-subtle flex min-h-[80px] items-center justify-center rounded-2xl border border-dashed px-4 py-3 text-center">
+              <p className="text-xs text-ios-subtext">Ближайших поливов пока нет</p>
             </div>
           )}
         </section>

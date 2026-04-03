@@ -434,30 +434,28 @@ export function PlantsList() {
 
   return (
     <PlatformPullToRefresh onRefresh={refreshAll}>
-      <section className="space-y-5 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
+      <section className="w-full space-y-3 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:bg-[radial-gradient(circle_at_18%_0%,rgba(52,199,89,0.10),transparent_38%),radial-gradient(circle_at_80%_10%,rgba(96,165,250,0.10),transparent_38%)]">
         <motion.header
-          className="ios-blur-card rounded-[30px] p-5 shadow-[0_20px_44px_rgba(15,23,42,0.08)]"
+          className="ios-blur-card rounded-xl px-3 py-2 shadow-[0_8px_20px_rgba(15,23,42,0.05)]"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 340, damping: 30 }}
         >
-          <div className="theme-surface-2 rounded-[24px] border px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ios-subtext">Сегодня</p>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div className="theme-surface-subtle rounded-2xl px-3 py-2.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]">
-                <p className="text-[12px] text-ios-subtext">Нужно полить</p>
-                <p className={`mt-1 text-2xl font-semibold ${needWaterCount > 0 ? 'theme-text-warning' : 'theme-text-success'}`}>
-                  <AnimatedCount value={needWaterCount} />
-                </p>
-              </div>
-              <div className="theme-surface-subtle rounded-2xl px-3 py-2.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]">
-                <p className="text-[12px] text-ios-subtext">Просрочено</p>
-                <p className={`mt-1 text-2xl font-semibold ${overdueCount > 0 ? 'theme-text-danger' : 'text-ios-text'}`}>
-                  <AnimatedCount value={overdueCount} />
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-baseline gap-2">
+              <span className={`text-xl font-semibold ${needWaterCount > 0 ? 'theme-text-warning' : 'theme-text-success'}`}>
+                <AnimatedCount value={needWaterCount} />
+              </span>
+              <span className="text-[11px] text-ios-subtext">нужно полить</span>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ios-subtext">
+            <div className="flex items-baseline gap-2">
+              <span className={`text-xl font-semibold ${overdueCount > 0 ? 'theme-text-danger' : 'text-ios-text'}`}>
+                <AnimatedCount value={overdueCount} />
+              </span>
+              <span className="text-[11px] text-ios-subtext">просрочено</span>
+            </div>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-ios-subtext">
               <span>{plantsQuery.data?.length ?? 0} растений в коллекции</span>
               {lastSyncAt ? <span>Обновлено в {formatTimeRu(lastSyncAt)}</span> : null}
               {rescuedCount > 0 ? <span>Спасено: {rescuedCount}</span> : null}
@@ -468,24 +466,23 @@ export function PlantsList() {
                   {isFiniteNumber(weatherData?.tempC) ? ` ${Math.round(weatherData.tempC)}°C` : ''}
                 </span>
               ) : null}
-            </div>
           </div>
         </motion.header>
 
-        <div className="ios-blur-card space-y-3 rounded-[28px] p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+        <div className="ios-blur-card rounded-xl p-2 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
           <div className="flex items-center gap-2">
-            <div className="theme-surface-subtle flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3">
+            <div className="theme-surface-subtle flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3">
               <Search className="h-4 w-4 shrink-0 text-ios-subtext" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Поиск по названию"
-                className="h-11 min-w-0 flex-1 bg-transparent text-sm text-ios-text outline-none placeholder:text-ios-subtext"
+                placeholder="Поиск"
+                className="h-10 min-w-0 flex-1 bg-transparent text-sm text-ios-text outline-none placeholder:text-ios-subtext"
               />
             </div>
             <button
               type="button"
-              className="theme-surface-subtle touch-target inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border text-ios-subtext transition-transform duration-150 active:scale-95"
+              className="theme-surface-subtle touch-target inline-flex h-10 w-10 items-center justify-center rounded-lg border text-ios-subtext transition-transform duration-150 active:scale-95"
               disabled={plantsQuery.isFetching || weatherQuery.isFetching}
               onClick={() => {
                 impactLight();
@@ -496,7 +493,7 @@ export function PlantsList() {
               <RefreshCw className="h-4 w-4" />
             </button>
           </div>
-          <div className="theme-surface-subtle rounded-[20px] border p-1">
+          <div className="theme-surface-subtle rounded-lg border p-0.5">
             <CategoryTabs
               value={categoryFilter}
               embedded
@@ -510,7 +507,7 @@ export function PlantsList() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className={`touch-target inline-flex min-h-11 items-center rounded-full border px-3 text-xs font-semibold transition-transform duration-150 active:scale-[0.98] ${
+              className={`touch-target inline-flex h-9 items-center rounded-full border px-2.5 text-[11px] font-medium transition-transform duration-150 active:scale-[0.98] ${
                 onlyOverdue
                   ? 'theme-surface-danger theme-text-danger'
                   : 'theme-surface-subtle text-ios-subtext'
@@ -524,8 +521,8 @@ export function PlantsList() {
             >
               Просроченные
             </button>
-            <div className="theme-surface-subtle inline-flex min-h-11 flex-1 items-center gap-2 rounded-full border px-3 sm:flex-none">
-              <SlidersHorizontal className="h-4 w-4 text-ios-subtext" />
+            <div className="theme-surface-subtle inline-flex h-9 flex-1 items-center gap-2 rounded-full border px-3 lg:flex-none">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-ios-subtext" />
               <select
                 value={sortMode}
                 onChange={(event) => {
@@ -534,7 +531,7 @@ export function PlantsList() {
                   localStorage.setItem(sortStorageKey, next);
                   selection();
                 }}
-                className="h-8 min-w-0 flex-1 bg-transparent text-xs font-semibold text-ios-text outline-none sm:min-w-[138px] sm:flex-none"
+                className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-ios-text outline-none lg:min-w-[120px]"
               >
                 <option value="needs_water">По поливу</option>
                 <option value="created_desc">Сначала новые</option>
@@ -543,7 +540,7 @@ export function PlantsList() {
               </select>
             </div>
             {weatherCity ? (
-              <span className="theme-badge-info w-full truncate rounded-full px-3 py-1.5 text-[11px] sm:ml-auto sm:inline-flex sm:w-auto sm:items-center sm:gap-1.5">
+              <span className="theme-badge-info ml-auto hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] lg:flex">
                 {translateWeather(weatherData?.icon, weatherData?.description) ?? weatherStatusLabel(weatherData?.source)}
               </span>
             ) : null}
@@ -574,7 +571,7 @@ export function PlantsList() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ type: 'spring', stiffness: 330, damping: 28, mass: 1 }}
-              className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              className="flex w-full flex-col gap-3"
             >
               {plants.map((plant, index) => {
                 const isPlantOverdue = getDaysLeft(plant) <= 0;
@@ -620,33 +617,38 @@ export function PlantsList() {
               })}
             </motion.div>
           ) : (
-            <motion.div
-              key="plants-empty-filtered"
-              className="ios-blur-card flex min-h-[220px] flex-col items-center justify-center gap-2 p-5 text-center"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            >
-              <Sprout className="h-8 w-8 text-ios-accent" />
-              <h3 className="text-lg font-semibold text-ios-text">Ничего не найдено</h3>
-              <p className="max-w-xs text-sm text-ios-subtext">
+          <motion.div
+            key="plants-empty-filtered"
+            className="ios-blur-card flex min-h-[140px] flex-col items-center justify-center gap-3 p-4 text-center"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+          >
+            <Sprout className="h-6 w-6 text-ios-accent" />
+            <div>
+              <h3 className="text-sm font-semibold text-ios-text">Ничего не найдено</h3>
+              <p className="mt-1 text-xs text-ios-subtext">
                 {hasActiveFilters
-                  ? 'Измените фильтры или очистите поиск, чтобы увидеть больше растений.'
-                  : 'Добавьте новое растение, чтобы начать вести коллекцию.'}
+                  ? 'Измените фильтры или поиск'
+                  : 'Добавьте растение'}
               </p>
+            </div>
+            {hasActiveFilters ? null : (
               <Button
                 variant="secondary"
+                size="sm"
                 className="mt-1 rounded-xl bg-ios-accent/15 text-ios-accent hover:bg-ios-accent/25"
                 onClick={() => {
                   impactLight();
                   setActiveTab('add');
                 }}
               >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Добавить растение
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Добавить
               </Button>
-            </motion.div>
+            )}
+          </motion.div>
           )}
         </AnimatePresence>
       </section>

@@ -17,6 +17,7 @@ import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.PhotoUrlSignerService;
+import com.example.plantbot.service.PlantAvatarService;
 import com.example.plantbot.service.PlantCatalogService;
 import com.example.plantbot.service.PlantMutationService;
 import com.example.plantbot.service.PlantPresetCatalogService;
@@ -72,6 +73,7 @@ class AppControllerLegacyAiRecommendTest {
   @Mock private OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   @Mock private OpenRouterUserSettingsService openRouterUserSettingsService;
   @Mock private OpenRouterModelCatalogService openRouterModelCatalogService;
+  @Mock private PlantAvatarService plantAvatarService;
   @Mock private WeatherService weatherService;
   @Mock private SeedLifecycleService seedLifecycleService;
   @Mock private RecommendationSnapshotService recommendationSnapshotService;
@@ -102,6 +104,7 @@ class AppControllerLegacyAiRecommendTest {
         openRouterPlantAdvisorService,
         openRouterUserSettingsService,
         openRouterModelCatalogService,
+        plantAvatarService,
         weatherService,
         seedLifecycleService,
         recommendationSnapshotService,

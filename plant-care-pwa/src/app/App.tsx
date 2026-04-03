@@ -178,47 +178,48 @@ export function App() {
       <OfflineStatusBar />
       <PlatformTopNav tab={activeTab} />
 
-      <AnimatePresence mode="wait">
-        <motion.section
-          key={activeTab}
-          className={activeTab === 'ai' ? 'mx-auto flex w-full max-w-[1200px] min-h-0 flex-1 flex-col overflow-hidden px-4 pb-5 md:px-8' : 'mx-auto w-full max-w-[1200px] space-y-4 px-4 pb-5 md:px-8'}
-          initial={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.985 } : { opacity: 0, x: 26 }}
-          animate={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 1, scale: 1 } : { opacity: 1, x: 0 }}
-          exit={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.99 } : { opacity: 0, x: -18 }}
-          transition={prefersReducedMotion
-            ? { duration: 0.01 }
-            : isAndroid
-              ? { duration: 0.26, ease: [0.2, 0, 0, 1] }
-              : { type: 'spring', stiffness: 380, damping: 31, mass: 1 }}
-        >
-          {activeTab === 'home' ? (
-            <HomeScreen />
-          ) : null}
+      {activeTab === 'ai' ? (
+        <AiScreen />
+      ) : (
+        <div className="app-shell-content">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              className="mx-auto w-full max-w-[1200px]"
+              initial={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.985 } : { opacity: 0, x: 26 }}
+              animate={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 1, scale: 1 } : { opacity: 1, x: 0 }}
+              exit={prefersReducedMotion ? { opacity: 1 } : isAndroid ? { opacity: 0, scale: 0.99 } : { opacity: 0, x: -18 }}
+              transition={prefersReducedMotion
+                ? { duration: 0.01 }
+                : isAndroid
+                  ? { duration: 0.26, ease: [0.2, 0, 0, 1] }
+                  : { type: 'spring', stiffness: 380, damping: 31, mass: 1 }}
+            >
+              {activeTab === 'home' ? (
+                <HomeScreen />
+              ) : null}
 
-          {activeTab === 'calendar' ? (
-            <CalendarScreen />
-          ) : null}
+              {activeTab === 'calendar' ? (
+                <CalendarScreen />
+              ) : null}
 
-          {activeTab === 'add' ? (
-            <AddPlantScreen />
-          ) : null}
+              {activeTab === 'add' ? (
+                <AddPlantScreen />
+              ) : null}
 
-          {activeTab === 'ai' ? (
-            <AiScreen />
-          ) : null}
+              {activeTab === 'settings' ? (
+                <SettingsScreen />
+              ) : null}
 
-          {activeTab === 'settings' ? (
-            <SettingsScreen />
-          ) : null}
-
-          {activeTab === 'admin' ? (
-            <AdminGuard>
-              <AdminScreen />
-            </AdminGuard>
-          ) : null}
-
-        </motion.section>
-      </AnimatePresence>
+              {activeTab === 'admin' ? (
+                <AdminGuard>
+                  <AdminScreen />
+                </AdminGuard>
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      )}
 
       <div className="mt-auto pt-2">
         <PlatformBottomNav />

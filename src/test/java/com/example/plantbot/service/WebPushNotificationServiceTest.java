@@ -1,6 +1,7 @@
 package com.example.plantbot.service;
 
 import com.example.plantbot.repository.WebPushSubscriptionRepository;
+import com.example.plantbot.service.notification.SmartNotificationFormatter;
 import com.example.plantbot.service.recommendation.model.RecommendationExecutionMode;
 import com.example.plantbot.service.recommendation.model.RecommendationExplainability;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,9 +21,12 @@ class WebPushNotificationServiceTest {
   @Mock
   private WebPushSubscriptionRepository subscriptionRepository;
 
+  @Mock
+  private SmartNotificationFormatter smartNotificationFormatter;
+
   @Test
   void notificationSnippetUsesMeaningfulSummaryAndFiltersTechnicalOne() {
-    WebPushNotificationService service = new WebPushNotificationService(subscriptionRepository, new ObjectMapper());
+    WebPushNotificationService service = new WebPushNotificationService(subscriptionRepository, new ObjectMapper(), smartNotificationFormatter);
 
     String normal = service.toNotificationExplainabilitySnippet(
         new RecommendationExplainability(
@@ -61,7 +65,7 @@ class WebPushNotificationServiceTest {
 
   @Test
   void notificationSnippetFallsBackToManualWeatherAndLearningContributions() {
-    WebPushNotificationService service = new WebPushNotificationService(subscriptionRepository, new ObjectMapper());
+    WebPushNotificationService service = new WebPushNotificationService(subscriptionRepository, new ObjectMapper(), smartNotificationFormatter);
 
     String manual = service.toNotificationExplainabilitySnippet(
         new RecommendationExplainability(

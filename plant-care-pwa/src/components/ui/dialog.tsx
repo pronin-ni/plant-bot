@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect } from 'react';
 import type { PropsWithChildren, ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
@@ -13,6 +14,20 @@ interface DialogProps extends PropsWithChildren {
 
 export function Dialog({ open, onOpenChange, title, description, className, children }: DialogProps) {
   const isAndroid = typeof document !== 'undefined' && document.documentElement.classList.contains('android');
+
+  useEffect(() => {
+    if (open) {
+      document.body.classList.add('sheet-open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    };
+  }, [open]);
 
   return (
     <AnimatePresence>

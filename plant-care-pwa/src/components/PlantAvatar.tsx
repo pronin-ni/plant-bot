@@ -6,10 +6,14 @@ import type { PlantDto } from '@/types/api';
 
 interface PlantAvatarProps {
   name: string;
-  plant?: Pick<PlantDto, 'category' | 'placement'>;
+  plant?: Pick<PlantDto, 'category' | 'placement' | 'avatar'>;
   className?: string;
   labelClassName?: string;
   framed?: boolean;
+}
+
+function svgToDataUri(svg: string): string {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function LeafMotif({ accent, ink }: { accent: string; ink: string }) {
@@ -76,6 +80,21 @@ export function PlantAvatar({
   labelClassName,
   framed = true
 }: PlantAvatarProps) {
+  if (plant?.avatar?.svg) {
+    return (
+      <div
+        className={cn(
+          'relative isolate overflow-hidden',
+          framed && 'rounded-[24px] border border-white/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_12px_30px_rgba(15,23,42,0.10)]',
+          className
+        )}
+        aria-label={`Аватар растения ${name}`}
+      >
+        <img src={svgToDataUri(plant.avatar.svg)} alt={name} className="h-full w-full object-cover" loading="lazy" />
+      </div>
+    );
+  }
+
   const descriptor = getPlantAvatarDescriptor(name, plant);
   const style = {
     '--plant-avatar-base': descriptor.palette.base,

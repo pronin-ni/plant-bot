@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bot, Droplets, Leaf, Loader2, Plus, RefreshCcw, Sprout, Trash2, Trees, Warehouse } from 'lucide-react';
+import { AlertTriangle, Bot, Droplets, FileText, Leaf, Loader2, Plus, RefreshCcw, Sprout, Trash2, Trees, Warehouse } from 'lucide-react';
 
 import { BottomSheet } from '@/components/common/bottom-sheet';
+import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { Dialog } from '@/components/ui/dialog';
 import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
@@ -1006,8 +1007,6 @@ export function PlantDetailSheet() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
-
                   <AIAdviceCard
                     loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
                     refreshing={refreshAdviceMutation.isPending || careAdviceQuery.isFetching}
@@ -1023,52 +1022,59 @@ export function PlantDetailSheet() {
                     }}
                   />
 
-                  <RecommendationHistorySection
-                    plant={plant}
-                    recommendation={recommendationQuery.data ?? null}
-                    history={historyQuery.data ?? null}
-                    loading={historyQuery.isLoading && !historyQuery.data}
-                    error={historyQuery.isError && !historyQuery.data}
-                  />
+                  <CollapsibleSection
+                    title="AI-диагностика"
+                    icon={<Bot className="h-3.5 w-3.5 text-ios-accent" />}
+                    defaultCollapsed={true}
+                  >
+                    <LeafDiagnosis plant={plant} />
+                  </CollapsibleSection>
 
-                  <LeafDiagnosis plant={plant} />
+                  <div className="flex items-center justify-between rounded-2xl bg-ios-bg/50 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-ios-accent" />
+                      <span className="text-xs font-semibold uppercase tracking-[0.15em] text-ios-subtext">Журнал</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full bg-ios-accent/10 px-3 py-1.5 text-xs font-medium text-ios-accent transition-colors active:bg-ios-accent/20"
+                      onClick={() => setAddNoteOpen(true)}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Заметка
+                    </button>
+                  </div>
 
-                  {(() => {
-                    const notes = notesQuery.data ?? [];
-                    const lastFeeding = notes.find((n) => n.type === 'FEEDING');
-                    const daysSinceFeeding = lastFeeding
-                      ? Math.floor((Date.now() - new Date(lastFeeding.createdAt).getTime()) / 86_400_000)
-                      : null;
+                  <CollapsibleSection
+                    title="Журнал"
+                    icon={<FileText className="h-3.5 w-3.5 text-ios-accent" />}
+                    defaultCollapsed={true}
+                  >
+                    {(() => {
+                      const notes = notesQuery.data ?? [];
+                      const lastFeeding = notes.find((n) => n.type === 'FEEDING');
+                      const daysSinceFeeding = lastFeeding
+                        ? Math.floor((Date.now() - new Date(lastFeeding.createdAt).getTime()) / 86_400_000)
+                        : null;
 
-                    return (
-                      <div className="rounded-2xl bg-ios-bg/50 p-4">
-                        <div className="mb-2 flex items-center justify-between px-0.5">
-                          <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-ios-subtext">Журнал ухода</h4>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-ios-accent transition-colors active:bg-ios-card/50"
-                            onClick={() => setAddNoteOpen(true)}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Добавить
-                          </button>
-                        </div>
+                      return (
+                        <>
+                          {daysSinceFeeding !== null ? (
+                            <p className="mb-2 px-0.5 text-[11px] text-ios-subtext">
+                              Подкормка: {daysSinceFeeding === 0 ? 'сегодня' : `${daysSinceFeeding} дн. назад`}
+                            </p>
+                          ) : null}
 
-                        {daysSinceFeeding !== null ? (
-                          <p className="mb-2 px-0.5 text-[11px] text-ios-subtext">
-                            Подкормка: {daysSinceFeeding === 0 ? 'сегодня' : `${daysSinceFeeding} дн. назад`}
-                          </p>
-                        ) : null}
-
-                        <NotesList
-                          notes={notes}
-                          onDelete={(noteId) => {
-                            deleteNoteMutation.mutate(noteId);
-                          }}
-                        />
-                      </div>
-                    );
-                  })()}
+                          <NotesList
+                            notes={notes}
+                            onDelete={(noteId) => {
+                              deleteNoteMutation.mutate(noteId);
+                            }}
+                          />
+                        </>
+                      );
+                    })()}
+                  </CollapsibleSection>
 
                   <DangerZoneSection
                     onDeleteClick={() => {
@@ -1089,6 +1095,18 @@ export function PlantDetailSheet() {
               photoMutation.mutate({ id: selectedPlantId, dataUrl });
             }}
           >
+            {isSeedPlant ? null : (
+              <>
+                <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+                <RecommendationHistorySection
+                  plant={plant}
+                  recommendation={recommendationQuery.data ?? null}
+                  history={historyQuery.data ?? null}
+                  loading={historyQuery.isLoading && !historyQuery.data}
+                  error={historyQuery.isError && !historyQuery.data}
+                />
+              </>
+            )}
           </PlantDetailPage>
 
           <Dialog
@@ -1287,16 +1305,17 @@ function WaterStatusBlock({
           className="flex-1 h-9 text-xs"
           onClick={onOpenManualEdit}
         >
-          Редактировать вручную
+          Ручной режим
         </Button>
         <Button
           type="button"
-          variant="ghost"
-          className="flex-1 h-9 text-xs"
+          variant="default"
+          className="flex-1 h-9 text-xs gap-1.5"
           onClick={onAiRecompute}
           disabled={isAiLoading}
         >
-          {isAiLoading ? 'Пересчитываем...' : 'Пересчитать по AI'}
+          <Bot className="h-3.5 w-3.5" />
+          {isAiLoading ? '...' : 'AI'}
         </Button>
       </div>
     </section>
@@ -2246,6 +2265,11 @@ function WateringRecommendationCard({
       || explainability.topFactors.length
   );
 
+  const isManualMode = recommendation?.source === 'MANUAL';
+  const modeLabel = isManualMode ? 'Ручной' : 'Авто';
+  const modeColor = isManualMode ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+  const modeBg = isManualMode ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30';
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
@@ -2254,7 +2278,14 @@ function WateringRecommendationCard({
       className="theme-surface-1 space-y-2 rounded-2xl border p-3"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-ios-text">Почему</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-ios-text">Почему</p>
+          {recommendation && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${modeBg} ${modeColor}`}>
+              {modeLabel}
+            </span>
+          )}
+        </div>
         <Button type="button" variant="ghost" className="h-8 rounded-lg px-2 text-xs" disabled={loading} onClick={onRefresh}>
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
         </Button>
@@ -2369,7 +2400,10 @@ function RecommendationHistorySection({
       {loading ? (
         <p className="text-xs text-ios-subtext">Загрузка...</p>
       ) : error ? (
-        <p className="text-xs text-red-500">Ошибка</p>
+        <div className="flex items-center gap-1.5 rounded-lg border border-red-200/40 bg-red-50/50 px-2.5 py-2 dark:border-red-800/30 dark:bg-red-950/20">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+          <p className="text-xs text-red-500">Не удалось загрузить</p>
+        </div>
       ) : latest ? (
         <div className="flex items-center gap-2 rounded-lg bg-ios-surface-subtle/50 px-2.5 py-2">
           <span className="text-xs text-ios-text">{historyTitle(latest)}</span>

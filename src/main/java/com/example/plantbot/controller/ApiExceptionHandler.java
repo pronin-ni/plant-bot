@@ -7,12 +7,14 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 @Slf4j
@@ -68,6 +70,20 @@ public class ApiExceptionHandler {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON).body(Map.of(
         "message", ex.getMessage() == null ? "Ресурс не найден" : ex.getMessage(),
         "status", HttpStatus.NOT_FOUND.value()
+    ));
+  }
+
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ResponseEntity<?> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
+    String message = ex.getBindingResult().getFieldErrors().stream()
+        .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+        .collect(Collectors.joining("; "));
+    if (!acceptsJson(request)) {
+      return ResponseEntity.badRequest().build();
+    }
+    return ResponseEntity.badRequest().contentType(MediaType.APPLICATION_JSON).body(Map.of(
+        "message", message.isBlank() ? "Ошибка валидации" : message,
+        "status", HttpStatus.BAD_REQUEST.value()
     ));
   }
 

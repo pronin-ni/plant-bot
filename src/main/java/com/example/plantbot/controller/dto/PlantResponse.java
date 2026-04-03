@@ -66,6 +66,7 @@ public record PlantResponse(Long id,
                             Double confidenceScore,
                             Instant recommendationGeneratedAt,
                             PlantType type,
+                            PlantAvatarResponse avatar,
                             String photoUrl,
                             Instant createdAt) {
 }

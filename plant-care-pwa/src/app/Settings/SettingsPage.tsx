@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -328,6 +328,21 @@ export function SettingsPage() {
 
   const [activeDetail, setActiveDetail] = useState<SettingsDetailId | null>(null);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    const isOpen = activeDetail !== null || logoutConfirmOpen;
+    if (isOpen) {
+      document.body.classList.add('sheet-open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    };
+  }, [activeDetail, logoutConfirmOpen]);
 
   const handleRefresh = async () => {
     impactLight();

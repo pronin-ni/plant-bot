@@ -129,11 +129,25 @@ body::before {
 .app-shell {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  height: 100dvh;
   max-width: 430px;
-  min-height: 100dvh;
   margin-inline: auto;
-  padding: max(env(safe-area-inset-top), 10px) 16px calc(max(env(safe-area-inset-bottom), 14px) + 92px);
+  padding: max(env(safe-area-inset-top), 10px) 0 0;
+}
+
+/* Scroll container for main content */
+.app-shell-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .app-shell-content {
+    padding: 0 20px 20px;
+  }
 }
 
 .app-shell-chat {
@@ -281,12 +295,22 @@ body::before {
   line-height: 1.32;
 }
 
-/* Desktop fallback: более спокойная композиция, без излишней mobile-плотности. */
-@media (min-width: 900px) and (hover: hover) {
-  .web .app-shell {
+/* Responsive layout: wider screens get more space */
+@media (min-width: 600px) {
+  .app-shell {
     max-width: 520px;
-    padding-left: 20px;
-    padding-right: 20px;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-shell {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 900px) and (hover: hover) {
+  .app-shell {
+    max-width: 680px;
   }
 
   .web .ios-tabbar {

@@ -49,3 +49,4 @@ plant-care-pwa/.vite/
 plant-care-pwa/preview-*.log
 plant-care-pwa/preview-*.pid
 plant-care-pwa/tsconfig.tsbuildinfo
+.playwright-mcp

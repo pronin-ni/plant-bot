@@ -56,8 +56,15 @@ export interface PlantDto {
   confidenceScore?: number | null;
   recommendationGeneratedAt?: string | null;
   type?: string;
+  avatar?: PlantAvatarDto | null;
   photoUrl?: string;
   createdAt?: string;
+}
+
+export interface PlantAvatarDto {
+  cacheKey: string;
+  svg: string;
+  source: 'AI' | 'FALLBACK';
 }
 
 

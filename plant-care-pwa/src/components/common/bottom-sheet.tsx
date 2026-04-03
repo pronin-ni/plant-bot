@@ -15,6 +15,17 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
     if (open && contentRef.current) {
       contentRef.current.scrollTop = 0;
     }
+    if (open) {
+      document.body.classList.add('sheet-open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('sheet-open');
+      document.body.style.overflow = '';
+    };
   }, [open]);
 
   return (
@@ -23,7 +34,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
         <>
           <motion.button
             type="button"
-            className="fixed inset-0 z-40 bg-black/28 backdrop-blur-[3px]"
+            className="fixed inset-0 z-40 bg-black/28 backdrop-blur-[3px] md:bg-black/50"
             aria-label="Закрыть лист"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -32,7 +43,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[430px] rounded-t-[30px] border border-ios-border/50 bg-ios-card/58 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-8px_36px_rgba(0,0,0,0.14)] backdrop-blur-[30px] md:inset-auto md:left-1/2 md:top-1/2 md:max-h-[90vh] md:max-w-[720px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[26px] android:rounded-t-[28px] android:bg-[#FFFBFE] android:border-[#E7E0EC] android:backdrop-blur-0 android:shadow-[0_-2px_10px_rgba(0,0,0,0.18)]"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[430px] rounded-t-[30px] border border-ios-border/50 bg-ios-card/58 p-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-8px_36px_rgba(0,0,0,0.14)] backdrop-blur-[30px] md:max-w-[640px] md:rounded-[26px] android:rounded-t-[28px] android:bg-[#FFFBFE] android:border-[#E7E0EC] android:backdrop-blur-0 android:shadow-[0_-2px_10px_rgba(0,0,0,0.18)]"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -57,7 +68,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div ref={contentRef} className="overflow-y-auto pr-1">
+            <div ref={contentRef} className="overflow-y-auto pr-1 max-h-[70vh]">
               {children}
             </div>
           </motion.div>

@@ -9,6 +9,7 @@ import com.example.plantbot.controller.dto.ChatAskRequest;
 import com.example.plantbot.controller.dto.ChatAskResponse;
 import com.example.plantbot.controller.dto.CreatePlantRequest;
 import com.example.plantbot.controller.dto.PhotoUploadResponse;
+import com.example.plantbot.controller.dto.PlantAvatarResponse;
 import com.example.plantbot.controller.dto.PlantPresetSuggestionResponse;
 import com.example.plantbot.controller.dto.PlantCareAdviceResponse;
 import com.example.plantbot.controller.dto.PlantProfileSuggestionResponse;
@@ -42,6 +43,7 @@ import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
 import com.example.plantbot.service.PlantMutationService;
+import com.example.plantbot.service.PlantAvatarService;
 import com.example.plantbot.service.PlantService;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.SeedLifecycleService;
@@ -133,6 +135,7 @@ public class AppController {
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
+  private final PlantAvatarService plantAvatarService;
   private final WeatherService weatherService;
   private final SeedLifecycleService seedLifecycleService;
   private final RecommendationSnapshotService recommendationSnapshotService;
@@ -363,13 +366,14 @@ public class AppController {
       recommendationPersistencePlanApplier.apply(plant, persistencePlan);
     }
     plant = plantService.save(plant);
+    PlantAvatarResponse avatar = plantAvatarService.ensureAvatar(plant.getName());
     if (persistencePlan != null && persistencePlan.snapshotPayload() != null) {
       recommendationSnapshotService.saveFromPayload(plant, persistencePlan.snapshotPayload());
     } else {
       recommendationSnapshotService.saveInitialOnCreate(plant);
     }
     aiTextCacheInvalidationService.invalidateUserDraftFeatures(user, "plant_created_from_wizard");
-    return toPlantResponse(plant, user, false);
+    return toPlantResponse(plant, user, false, avatar);
   }
 
   @PutMapping("/plants/{id}/water")
@@ -780,6 +784,10 @@ public class AppController {
   }
 
   private PlantResponse toPlantResponse(Plant plant, User user, boolean lightweight) {
+    return toPlantResponse(plant, user, lightweight, plantAvatarService.resolveCachedOrFallback(plant.getName()));
+  }
+
+  private PlantResponse toPlantResponse(Plant plant, User user, boolean lightweight, PlantAvatarResponse avatar) {
     if (user.getCalendarToken() == null || user.getCalendarToken().isBlank()) {
       user = userService.save(user);
     }
@@ -857,6 +865,7 @@ public class AppController {
         confidenceScore,
         recommendationGeneratedAt,
         plant.getType(),
+        avatar,
         plant.getPhotoUrl() == null || plant.getPhotoUrl().isBlank() ? null : buildPlantPhotoUrl(plant),
         plant.getCreatedAt()
     );

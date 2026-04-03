@@ -74,17 +74,19 @@ export function DayCard({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="theme-surface-subtle rounded-2xl border border-dashed px-4 py-5 text-center text-sm text-ios-subtext"
+            className="theme-surface-subtle flex min-h-[100px] items-center justify-center gap-3 rounded-2xl border border-dashed px-4 py-3 text-center"
           >
             <motion.span
-              className="mx-auto mb-2.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-ios-accent/15 text-ios-accent"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ios-accent/15 text-ios-accent"
               animate={{ rotate: [0, 8, -8, 0], y: [0, -2, 0] }}
               transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 2.2 }}
             >
               <Sprout className="h-4 w-4" />
             </motion.span>
-            <p className="text-sm font-medium leading-6 text-ios-text">Сегодня все счастливы 🌿</p>
-            <p className="mt-1 text-xs leading-5 text-ios-subtext">Отдохните или проверьте камеру роста.</p>
+            <div className="text-left">
+              <p className="text-xs font-medium text-ios-text">Все счастливы 🌿</p>
+              <p className="mt-0.5 text-[11px] text-ios-subtext">Отдохните</p>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="list" className="space-y-2" layout>

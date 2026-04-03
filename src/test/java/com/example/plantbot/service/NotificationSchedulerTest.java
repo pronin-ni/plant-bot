@@ -12,6 +12,8 @@ import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.WeatherConfidence;
 import com.example.plantbot.domain.WeatherProvider;
 import com.example.plantbot.repository.PlantRepository;
+import com.example.plantbot.service.notification.SmartNotificationDecisionService;
+import com.example.plantbot.service.notification.SmartNotificationContextService;
 import com.example.plantbot.service.recommendation.facade.RecommendationFacade;
 import com.example.plantbot.service.recommendation.mapper.LocationContextResolver;
 import com.example.plantbot.service.recommendation.mapper.PlantRecommendationContextMapper;
@@ -67,6 +69,10 @@ class NotificationSchedulerTest {
   @Mock
   private WebPushNotificationService webPushNotificationService;
   @Mock
+  private SmartNotificationDecisionService smartNotificationDecisionService;
+  @Mock
+  private SmartNotificationContextService smartNotificationContextService;
+  @Mock
   private OutdoorWeatherContextService outdoorWeatherContextService;
 
   private NotificationScheduler scheduler;
@@ -87,7 +93,9 @@ class NotificationSchedulerTest {
         recommendationFacade,
         new RuntimeRecommendationAdapter(),
         legacyRuntimeRecommendationDelegate,
-        webPushNotificationService
+        webPushNotificationService,
+        smartNotificationDecisionService,
+        smartNotificationContextService
     );
 
     when(outdoorWeatherContextService.resolve(any(), nullable(String.class), nullable(String.class))).thenReturn(
