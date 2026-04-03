@@ -78,7 +78,7 @@ public class OpenRouterModelAvailabilityCheckService {
           "Текстовая модель не выбрана",
           checkedAt,
           null,
-          FailureType.MODEL_UNAVAILABLE
+          OpenRouterFailureType.MODEL_UNAVAILABLE
       );
     }
 
@@ -90,7 +90,7 @@ public class OpenRouterModelAvailabilityCheckService {
           "OpenRouter API ключ не настроен",
           checkedAt,
           null,
-          FailureType.INVALID_KEY
+          OpenRouterFailureType.INVALID_KEY
       );
     }
 
@@ -105,7 +105,7 @@ public class OpenRouterModelAvailabilityCheckService {
       );
       String content = extractContent(body);
       if (content.isBlank()) {
-        return unavailable(model, checkedAt, "OpenRouter вернул пустой ответ для text-модели", FailureType.TEMPORARY_ERROR);
+          return unavailable(model, checkedAt, "OpenRouter вернул пустой ответ для text-модели", OpenRouterFailureType.TEMPORARY_ERROR);
       }
       return new ModelCheckResult(
           model,
@@ -115,13 +115,13 @@ public class OpenRouterModelAvailabilityCheckService {
           checkedAt,
           null
       );
-    } catch (HttpStatusCodeException ex) {
-      return classifyHttpFailure(model, checkedAt, ex, false);
-    } catch (ResourceAccessException ex) {
-      return error(model, checkedAt, "Сетевой сбой при проверке text-модели: " + ex.getMessage(), FailureType.NETWORK_ERROR);
-    } catch (Exception ex) {
-      return error(model, checkedAt, "Ошибка проверки text-модели: " + ex.getMessage(), FailureType.TEMPORARY_ERROR);
-    }
+      } catch (HttpStatusCodeException ex) {
+        return classifyHttpFailure(model, checkedAt, ex, false);
+      } catch (ResourceAccessException ex) {
+        return degraded(model, checkedAt, "Сетевой сбой при проверке text-модели: " + ex.getMessage(), OpenRouterFailureType.NETWORK_ERROR);
+      } catch (Exception ex) {
+        return degraded(model, checkedAt, "Ошибка проверки text-модели: " + ex.getMessage(), OpenRouterFailureType.TEMPORARY_ERROR);
+      }
   }
 
   public ModelCheckResult runVisionCheck(User user, String model) {
@@ -133,7 +133,7 @@ public class OpenRouterModelAvailabilityCheckService {
           "Vision модель не выбрана",
           checkedAt,
           null,
-          FailureType.MODEL_UNAVAILABLE
+          OpenRouterFailureType.MODEL_UNAVAILABLE
       );
     }
 
@@ -145,7 +145,7 @@ public class OpenRouterModelAvailabilityCheckService {
           "OpenRouter API ключ не настроен",
           checkedAt,
           null,
-          FailureType.INVALID_KEY
+          OpenRouterFailureType.INVALID_KEY
       );
     }
 
@@ -166,7 +166,7 @@ public class OpenRouterModelAvailabilityCheckService {
       );
       String content = extractContent(body);
       if (content.isBlank()) {
-        return unavailable(model, checkedAt, "OpenRouter вернул пустой ответ для vision-модели", FailureType.TEMPORARY_ERROR);
+          return unavailable(model, checkedAt, "OpenRouter вернул пустой ответ для vision-модели", OpenRouterFailureType.TEMPORARY_ERROR);
       }
       return new ModelCheckResult(
           model,
@@ -176,13 +176,13 @@ public class OpenRouterModelAvailabilityCheckService {
           checkedAt,
           null
       );
-    } catch (HttpStatusCodeException ex) {
-      return classifyHttpFailure(model, checkedAt, ex, true);
-    } catch (ResourceAccessException ex) {
-      return error(model, checkedAt, "Сетевой сбой при проверке vision-модели: " + ex.getMessage(), FailureType.NETWORK_ERROR);
-    } catch (Exception ex) {
-      return error(model, checkedAt, "Ошибка проверки vision-модели: " + ex.getMessage(), FailureType.TEMPORARY_ERROR);
-    }
+      } catch (HttpStatusCodeException ex) {
+        return classifyHttpFailure(model, checkedAt, ex, true);
+      } catch (ResourceAccessException ex) {
+        return degraded(model, checkedAt, "Сетевой сбой при проверке vision-модели: " + ex.getMessage(), OpenRouterFailureType.NETWORK_ERROR);
+      } catch (Exception ex) {
+        return degraded(model, checkedAt, "Ошибка проверки vision-модели: " + ex.getMessage(), OpenRouterFailureType.TEMPORARY_ERROR);
+      }
   }
 
   private JsonNode callOpenRouter(String apiKey, String model, List<Map<String, Object>> messages) {
@@ -225,21 +225,21 @@ public class OpenRouterModelAvailabilityCheckService {
     String lowerBody = body == null ? "" : body.toLowerCase();
 
     if (code == 401 || code == 403) {
-      return unavailable(model, checkedAt, "Ключ отклонён OpenRouter при проверке " + suffix, FailureType.INVALID_KEY);
+        return unavailable(model, checkedAt, "Ключ отклонён OpenRouter при проверке " + suffix, OpenRouterFailureType.INVALID_KEY);
     }
     if (code == 429) {
-      return error(model, checkedAt, "Лимит запросов OpenRouter исчерпан при проверке " + suffix, FailureType.RATE_LIMIT);
+      return degraded(model, checkedAt, "Лимит запросов OpenRouter исчерпан при проверке " + suffix, OpenRouterFailureType.RATE_LIMIT);
     }
     if (code == 404 || lowerBody.contains("model") || lowerBody.contains("provider route") || lowerBody.contains("no endpoints")) {
-      return unavailable(model, checkedAt, "Выбранная модель недоступна для проверки: HTTP " + code, FailureType.MODEL_UNAVAILABLE);
+      return unavailable(model, checkedAt, "Выбранная модель недоступна для проверки: HTTP " + code, OpenRouterFailureType.MODEL_UNAVAILABLE);
     }
     if (code >= 500) {
-      return error(model, checkedAt, "Временная ошибка OpenRouter при проверке " + suffix + ": HTTP " + code, FailureType.TEMPORARY_ERROR);
+      return degraded(model, checkedAt, "Временная ошибка OpenRouter при проверке " + suffix + ": HTTP " + code, OpenRouterFailureType.TEMPORARY_ERROR);
     }
-    return error(model, checkedAt, "Ошибка проверки " + suffix + ": HTTP " + code, FailureType.TEMPORARY_ERROR);
+    return degraded(model, checkedAt, "Ошибка проверки " + suffix + ": HTTP " + code, OpenRouterFailureType.TEMPORARY_ERROR);
   }
 
-  private ModelCheckResult unavailable(String model, Instant checkedAt, String message, FailureType type) {
+  private ModelCheckResult unavailable(String model, Instant checkedAt, String message, OpenRouterFailureType type) {
     return new ModelCheckResult(
         model,
         OpenRouterModelAvailabilityStatus.UNAVAILABLE,
@@ -250,10 +250,10 @@ public class OpenRouterModelAvailabilityCheckService {
     );
   }
 
-  private ModelCheckResult error(String model, Instant checkedAt, String message, FailureType type) {
+  private ModelCheckResult degraded(String model, Instant checkedAt, String message, OpenRouterFailureType type) {
     return new ModelCheckResult(
         model,
-        OpenRouterModelAvailabilityStatus.ERROR,
+        OpenRouterModelAvailabilityStatus.DEGRADED,
         message,
         checkedAt,
         null,
@@ -273,21 +273,13 @@ public class OpenRouterModelAvailabilityCheckService {
     return null;
   }
 
-  public enum FailureType {
-    INVALID_KEY,
-    MODEL_UNAVAILABLE,
-    RATE_LIMIT,
-    TEMPORARY_ERROR,
-    NETWORK_ERROR
-  }
-
   public record ModelCheckResult(
       String model,
       OpenRouterModelAvailabilityStatus status,
       String message,
       Instant checkedAt,
       Instant successfulAt,
-      FailureType failureType
+      OpenRouterFailureType failureType
   ) {
   }
 }

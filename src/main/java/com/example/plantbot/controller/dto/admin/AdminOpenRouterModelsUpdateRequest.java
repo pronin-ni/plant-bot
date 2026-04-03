@@ -5,6 +5,15 @@ public record AdminOpenRouterModelsUpdateRequest(
     String photoModel,
     Integer textModelCheckIntervalMinutes,
     Integer photoModelCheckIntervalMinutes,
+    Boolean healthChecksEnabled,
+    Integer retryCount,
+    Integer retryBaseDelayMs,
+    Integer retryMaxDelayMs,
+    Integer requestTimeoutMs,
+    Integer degradedFailureThreshold,
+    Integer unavailableFailureThreshold,
+    Integer unavailableCooldownMinutes,
+    Integer recoveryRecheckIntervalMinutes,
     Boolean aiTextCacheEnabled,
     Integer aiTextCacheTtlDays
 ) {

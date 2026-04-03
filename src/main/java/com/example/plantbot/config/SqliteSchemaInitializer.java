@@ -177,6 +177,15 @@ public class SqliteSchemaInitializer {
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_last_notified_unavailable_at", "photo_model_last_notified_unavailable_at TIMESTAMP");
     addGlobalSettingsColumnIfMissing(statement, columns, "text_model_check_interval_minutes", "text_model_check_interval_minutes INTEGER");
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_check_interval_minutes", "photo_model_check_interval_minutes INTEGER");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_health_checks_enabled", "openrouter_health_checks_enabled BOOLEAN DEFAULT 1");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_retry_count", "openrouter_retry_count INTEGER DEFAULT 2");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_retry_base_delay_ms", "openrouter_retry_base_delay_ms INTEGER DEFAULT 600");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_retry_max_delay_ms", "openrouter_retry_max_delay_ms INTEGER DEFAULT 4000");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_request_timeout_ms", "openrouter_request_timeout_ms INTEGER DEFAULT 15000");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_degraded_failure_threshold", "openrouter_degraded_failure_threshold INTEGER DEFAULT 2");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_unavailable_failure_threshold", "openrouter_unavailable_failure_threshold INTEGER DEFAULT 4");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_unavailable_cooldown_minutes", "openrouter_unavailable_cooldown_minutes INTEGER DEFAULT 15");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_recovery_recheck_interval_minutes", "openrouter_recovery_recheck_interval_minutes INTEGER DEFAULT 5");
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_enabled", "ai_text_cache_enabled BOOLEAN DEFAULT 1");
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_ttl_days", "ai_text_cache_ttl_days INTEGER DEFAULT 7");
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_last_cleanup_at", "ai_text_cache_last_cleanup_at TIMESTAMP");

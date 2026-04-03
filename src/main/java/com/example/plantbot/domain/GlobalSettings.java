@@ -82,6 +82,33 @@ public class GlobalSettings {
   @Column(name = "photo_model_check_interval_minutes")
   private Integer photoModelCheckIntervalMinutes;
 
+  @Column(name = "openrouter_health_checks_enabled")
+  private Boolean openrouterHealthChecksEnabled = true;
+
+  @Column(name = "openrouter_retry_count")
+  private Integer openrouterRetryCount;
+
+  @Column(name = "openrouter_retry_base_delay_ms")
+  private Integer openrouterRetryBaseDelayMs;
+
+  @Column(name = "openrouter_retry_max_delay_ms")
+  private Integer openrouterRetryMaxDelayMs;
+
+  @Column(name = "openrouter_request_timeout_ms")
+  private Integer openrouterRequestTimeoutMs;
+
+  @Column(name = "openrouter_degraded_failure_threshold")
+  private Integer openrouterDegradedFailureThreshold;
+
+  @Column(name = "openrouter_unavailable_failure_threshold")
+  private Integer openrouterUnavailableFailureThreshold;
+
+  @Column(name = "openrouter_unavailable_cooldown_minutes")
+  private Integer openrouterUnavailableCooldownMinutes;
+
+  @Column(name = "openrouter_recovery_recheck_interval_minutes")
+  private Integer openrouterRecoveryRecheckIntervalMinutes;
+
   @Column(name = "ai_text_cache_enabled", nullable = false)
   private boolean aiTextCacheEnabled = true;
 

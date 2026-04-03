@@ -208,28 +208,7 @@ public class AdminController {
     String effectivePhotoModel = firstNonBlank(models.photoRecognitionModel(), openRouterModelCatalogService.resolveDynamicPhotoFallback(admin));
     log.info("Admin openrouter models requested: userId={} telegramId={} textModel={} photoModel={}",
         admin.getId(), admin.getTelegramId(), effectiveTextModel, effectivePhotoModel);
-    return new AdminOpenRouterModelsResponse(
-        effectiveTextModel,
-        effectivePhotoModel,
-        openRouterGlobalSettingsService.hasApiKey(settings),
-        settings.isAiTextCacheEnabled(),
-        settings.getAiTextCacheTtlDays(),
-        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
-        settings.getAiTextCacheLastCleanupAt(),
-        settings.getUpdatedAt(),
-        settings.getTextModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getTextModelAvailabilityStatus().name(),
-        settings.getTextModelLastCheckedAt(),
-        settings.getTextModelLastSuccessfulAt(),
-        settings.getTextModelLastErrorMessage(),
-        settings.getTextModelLastNotifiedUnavailableAt(),
-        settings.getTextModelCheckIntervalMinutes(),
-        settings.getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getPhotoModelAvailabilityStatus().name(),
-        settings.getPhotoModelLastCheckedAt(),
-        settings.getPhotoModelLastSuccessfulAt(),
-        settings.getPhotoModelLastErrorMessage(),
-        settings.getPhotoModelLastNotifiedUnavailableAt(),
-        settings.getPhotoModelCheckIntervalMinutes()
-    );
+    return toAdminOpenRouterModelsResponse(settings, effectiveTextModel, effectivePhotoModel, openRouterGlobalSettingsService.hasApiKey(settings));
   }
 
   @PutMapping("/openrouter/models")
@@ -248,28 +227,7 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         result.hasApiKey());
-    return new AdminOpenRouterModelsResponse(
-        effectiveTextModel,
-        effectivePhotoModel,
-        result.hasApiKey(),
-        result.settings().isAiTextCacheEnabled(),
-        result.settings().getAiTextCacheTtlDays(),
-        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
-        result.settings().getAiTextCacheLastCleanupAt(),
-        result.settings().getUpdatedAt(),
-        result.settings().getTextModelAvailabilityStatus() == null ? "UNKNOWN" : result.settings().getTextModelAvailabilityStatus().name(),
-        result.settings().getTextModelLastCheckedAt(),
-        result.settings().getTextModelLastSuccessfulAt(),
-        result.settings().getTextModelLastErrorMessage(),
-        result.settings().getTextModelLastNotifiedUnavailableAt(),
-        result.settings().getTextModelCheckIntervalMinutes(),
-        result.settings().getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : result.settings().getPhotoModelAvailabilityStatus().name(),
-        result.settings().getPhotoModelLastCheckedAt(),
-        result.settings().getPhotoModelLastSuccessfulAt(),
-        result.settings().getPhotoModelLastErrorMessage(),
-        result.settings().getPhotoModelLastNotifiedUnavailableAt(),
-        result.settings().getPhotoModelCheckIntervalMinutes()
-    );
+    return toAdminOpenRouterModelsResponse(result.settings(), effectiveTextModel, effectivePhotoModel, result.hasApiKey());
   }
 
   @PostMapping("/openrouter/check")
@@ -318,6 +276,45 @@ public class AdminController {
       }
     }
     return null;
+  }
+
+  private AdminOpenRouterModelsResponse toAdminOpenRouterModelsResponse(
+      com.example.plantbot.domain.GlobalSettings settings,
+      String effectiveTextModel,
+      String effectivePhotoModel,
+      boolean hasApiKey
+  ) {
+    return new AdminOpenRouterModelsResponse(
+        effectiveTextModel,
+        effectivePhotoModel,
+        hasApiKey,
+        Boolean.TRUE.equals(settings.getOpenrouterHealthChecksEnabled()),
+        settings.getOpenrouterRetryCount(),
+        settings.getOpenrouterRetryBaseDelayMs(),
+        settings.getOpenrouterRetryMaxDelayMs(),
+        settings.getOpenrouterRequestTimeoutMs(),
+        settings.getOpenrouterDegradedFailureThreshold(),
+        settings.getOpenrouterUnavailableFailureThreshold(),
+        settings.getOpenrouterUnavailableCooldownMinutes(),
+        settings.getOpenrouterRecoveryRecheckIntervalMinutes(),
+        settings.isAiTextCacheEnabled(),
+        settings.getAiTextCacheTtlDays(),
+        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
+        settings.getAiTextCacheLastCleanupAt(),
+        settings.getUpdatedAt(),
+        settings.getTextModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getTextModelAvailabilityStatus().name(),
+        settings.getTextModelLastCheckedAt(),
+        settings.getTextModelLastSuccessfulAt(),
+        settings.getTextModelLastErrorMessage(),
+        settings.getTextModelLastNotifiedUnavailableAt(),
+        settings.getTextModelCheckIntervalMinutes(),
+        settings.getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getPhotoModelAvailabilityStatus().name(),
+        settings.getPhotoModelLastCheckedAt(),
+        settings.getPhotoModelLastSuccessfulAt(),
+        settings.getPhotoModelLastErrorMessage(),
+        settings.getPhotoModelLastNotifiedUnavailableAt(),
+        settings.getPhotoModelCheckIntervalMinutes()
+    );
   }
 
   @PostMapping("/openrouter/test")

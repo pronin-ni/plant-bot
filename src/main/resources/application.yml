@@ -54,6 +54,15 @@ openrouter:
     acquire-timeout-ms: ${OPENROUTER_RESILIENCE_ACQUIRE_TIMEOUT_MS:250}
     circuit-breaker-failure-threshold: ${OPENROUTER_RESILIENCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD:5}
     circuit-breaker-open-seconds: ${OPENROUTER_RESILIENCE_CIRCUIT_BREAKER_OPEN_SECONDS:90}
+    request-timeout-ms: ${OPENROUTER_RESILIENCE_REQUEST_TIMEOUT_MS:15000}
+    retry-count: ${OPENROUTER_RESILIENCE_RETRY_COUNT:2}
+    retry-base-delay-ms: ${OPENROUTER_RESILIENCE_RETRY_BASE_DELAY_MS:600}
+    retry-max-delay-ms: ${OPENROUTER_RESILIENCE_RETRY_MAX_DELAY_MS:4000}
+    degraded-failure-threshold: ${OPENROUTER_RESILIENCE_DEGRADED_FAILURE_THRESHOLD:2}
+    unavailable-failure-threshold: ${OPENROUTER_RESILIENCE_UNAVAILABLE_FAILURE_THRESHOLD:4}
+    unavailable-cooldown-minutes: ${OPENROUTER_RESILIENCE_UNAVAILABLE_COOLDOWN_MINUTES:15}
+    recovery-recheck-interval-minutes: ${OPENROUTER_RESILIENCE_RECOVERY_RECHECK_INTERVAL_MINUTES:5}
+    health-checks-enabled: ${OPENROUTER_RESILIENCE_HEALTH_CHECKS_ENABLED:true}
 
 openmeteo:
   enabled: ${OPENMETEO_ENABLED:true}

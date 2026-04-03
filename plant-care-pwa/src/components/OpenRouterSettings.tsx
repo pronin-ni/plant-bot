@@ -28,6 +28,12 @@ const CHECK_INTERVAL_OPTIONS = [
   { value: 360, label: '6 часов' }
 ];
 
+const RETRY_COUNT_OPTIONS = [0, 1, 2, 3, 4, 5];
+const RETRY_DELAY_OPTIONS = [250, 500, 750, 1000, 1500, 2000, 3000, 5000];
+const REQUEST_TIMEOUT_OPTIONS = [5000, 8000, 10000, 15000, 20000, 30000, 45000];
+const FAILURE_THRESHOLD_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+const COOLDOWN_OPTIONS = [1, 3, 5, 10, 15, 30, 60, 180, 360];
+
 const AI_TEXT_CACHE_TTL_OPTIONS = [
   { value: 1, label: '1 день' },
   { value: 3, label: '3 дня' },
@@ -59,6 +65,8 @@ function statusTone(status?: string | null): string {
   switch ((status ?? '').toUpperCase()) {
     case 'AVAILABLE':
       return 'theme-badge-success';
+    case 'DEGRADED':
+      return 'theme-badge-warning';
     case 'UNAVAILABLE':
     case 'ERROR':
       return 'theme-badge-danger';
@@ -72,6 +80,8 @@ function statusLabel(status?: string | null): string {
   switch ((status ?? '').toUpperCase()) {
     case 'AVAILABLE':
       return 'Доступна';
+    case 'DEGRADED':
+      return 'Нестабильна';
     case 'UNAVAILABLE':
       return 'Недоступна';
     case 'ERROR':
@@ -87,10 +97,20 @@ function intervalLabel(minutes?: number | null): string {
   return found?.label ?? `${minutes} мин`;
 }
 
+function millisLabel(value?: number | null): string {
+  if (!value || value <= 0) {
+    return '—';
+  }
+  return value >= 1000 ? `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} сек` : `${value} мс`;
+}
+
 function statusDescription(status?: string | null, errorMessage?: string | null): string {
   const normalized = (status ?? '').toUpperCase();
   if (normalized === 'AVAILABLE') {
     return 'Модель отвечает корректно и может использоваться в рабочих сценариях.';
+  }
+  if (normalized === 'DEGRADED') {
+    return 'Модель отвечает нестабильно: приложение повторяет временные сбои и при возможности использует fallback-модель.';
   }
   if (normalized === 'UNKNOWN') {
     return 'Проверка ещё не выполнялась или статус пока не обновлён.';
@@ -121,6 +141,9 @@ function statusDescription(status?: string | null, errorMessage?: string | null)
 
 function statusWarningTitle(status?: string | null): string | null {
   const normalized = (status ?? '').toUpperCase();
+  if (normalized === 'DEGRADED') {
+    return 'Модель нестабильна';
+  }
   if (normalized === 'UNAVAILABLE') {
     return 'Модель недоступна';
   }
@@ -184,12 +207,30 @@ export function OpenRouterSettings() {
   const [photoModel, setPhotoModel] = useState('');
   const [textCheckIntervalMinutes, setTextCheckIntervalMinutes] = useState(15);
   const [photoCheckIntervalMinutes, setPhotoCheckIntervalMinutes] = useState(15);
+  const [healthChecksEnabled, setHealthChecksEnabled] = useState(true);
+  const [retryCount, setRetryCount] = useState(2);
+  const [retryBaseDelayMs, setRetryBaseDelayMs] = useState(600);
+  const [retryMaxDelayMs, setRetryMaxDelayMs] = useState(4000);
+  const [requestTimeoutMs, setRequestTimeoutMs] = useState(15000);
+  const [degradedFailureThreshold, setDegradedFailureThreshold] = useState(2);
+  const [unavailableFailureThreshold, setUnavailableFailureThreshold] = useState(4);
+  const [unavailableCooldownMinutes, setUnavailableCooldownMinutes] = useState(15);
+  const [recoveryRecheckIntervalMinutes, setRecoveryRecheckIntervalMinutes] = useState(5);
   const [aiTextCacheEnabled, setAiTextCacheEnabled] = useState(true);
   const [aiTextCacheTtlDays, setAiTextCacheTtlDays] = useState(7);
   const [savedTextModel, setSavedTextModel] = useState('');
   const [savedPhotoModel, setSavedPhotoModel] = useState('');
   const [savedTextCheckIntervalMinutes, setSavedTextCheckIntervalMinutes] = useState(15);
   const [savedPhotoCheckIntervalMinutes, setSavedPhotoCheckIntervalMinutes] = useState(15);
+  const [savedHealthChecksEnabled, setSavedHealthChecksEnabled] = useState(true);
+  const [savedRetryCount, setSavedRetryCount] = useState(2);
+  const [savedRetryBaseDelayMs, setSavedRetryBaseDelayMs] = useState(600);
+  const [savedRetryMaxDelayMs, setSavedRetryMaxDelayMs] = useState(4000);
+  const [savedRequestTimeoutMs, setSavedRequestTimeoutMs] = useState(15000);
+  const [savedDegradedFailureThreshold, setSavedDegradedFailureThreshold] = useState(2);
+  const [savedUnavailableFailureThreshold, setSavedUnavailableFailureThreshold] = useState(4);
+  const [savedUnavailableCooldownMinutes, setSavedUnavailableCooldownMinutes] = useState(15);
+  const [savedRecoveryRecheckIntervalMinutes, setSavedRecoveryRecheckIntervalMinutes] = useState(5);
   const [savedAiTextCacheEnabled, setSavedAiTextCacheEnabled] = useState(true);
   const [savedAiTextCacheTtlDays, setSavedAiTextCacheTtlDays] = useState(7);
   const [aiTextCacheEntryCount, setAiTextCacheEntryCount] = useState(0);
@@ -236,10 +277,28 @@ export function OpenRouterSettings() {
       setPhotoModel(nextPhoto);
       setTextCheckIntervalMinutes(globalModels.textModelCheckIntervalMinutes ?? 15);
       setPhotoCheckIntervalMinutes(globalModels.photoModelCheckIntervalMinutes ?? 15);
+      setHealthChecksEnabled(globalModels.healthChecksEnabled ?? true);
+      setRetryCount(globalModels.retryCount ?? 2);
+      setRetryBaseDelayMs(globalModels.retryBaseDelayMs ?? 600);
+      setRetryMaxDelayMs(globalModels.retryMaxDelayMs ?? 4000);
+      setRequestTimeoutMs(globalModels.requestTimeoutMs ?? 15000);
+      setDegradedFailureThreshold(globalModels.degradedFailureThreshold ?? 2);
+      setUnavailableFailureThreshold(globalModels.unavailableFailureThreshold ?? 4);
+      setUnavailableCooldownMinutes(globalModels.unavailableCooldownMinutes ?? 15);
+      setRecoveryRecheckIntervalMinutes(globalModels.recoveryRecheckIntervalMinutes ?? 5);
       setSavedTextModel(nextText);
       setSavedPhotoModel(nextPhoto);
       setSavedTextCheckIntervalMinutes(globalModels.textModelCheckIntervalMinutes ?? 15);
       setSavedPhotoCheckIntervalMinutes(globalModels.photoModelCheckIntervalMinutes ?? 15);
+      setSavedHealthChecksEnabled(globalModels.healthChecksEnabled ?? true);
+      setSavedRetryCount(globalModels.retryCount ?? 2);
+      setSavedRetryBaseDelayMs(globalModels.retryBaseDelayMs ?? 600);
+      setSavedRetryMaxDelayMs(globalModels.retryMaxDelayMs ?? 4000);
+      setSavedRequestTimeoutMs(globalModels.requestTimeoutMs ?? 15000);
+      setSavedDegradedFailureThreshold(globalModels.degradedFailureThreshold ?? 2);
+      setSavedUnavailableFailureThreshold(globalModels.unavailableFailureThreshold ?? 4);
+      setSavedUnavailableCooldownMinutes(globalModels.unavailableCooldownMinutes ?? 15);
+      setSavedRecoveryRecheckIntervalMinutes(globalModels.recoveryRecheckIntervalMinutes ?? 5);
       setAiTextCacheEnabled(globalModels.aiTextCacheEnabled ?? true);
       setAiTextCacheTtlDays(globalModels.aiTextCacheTtlDays ?? 7);
       setSavedAiTextCacheEnabled(globalModels.aiTextCacheEnabled ?? true);
@@ -312,6 +371,15 @@ export function OpenRouterSettings() {
         photoModel: nextRequestedPhoto,
         textModelCheckIntervalMinutes: textCheckIntervalMinutes,
         photoModelCheckIntervalMinutes: photoCheckIntervalMinutes,
+        healthChecksEnabled,
+        retryCount,
+        retryBaseDelayMs,
+        retryMaxDelayMs,
+        requestTimeoutMs,
+        degradedFailureThreshold,
+        unavailableFailureThreshold,
+        unavailableCooldownMinutes,
+        recoveryRecheckIntervalMinutes,
         aiTextCacheEnabled,
         aiTextCacheTtlDays
       });
@@ -322,10 +390,28 @@ export function OpenRouterSettings() {
       setPhotoModel(nextPhoto);
       setTextCheckIntervalMinutes(result.textModelCheckIntervalMinutes ?? 15);
       setPhotoCheckIntervalMinutes(result.photoModelCheckIntervalMinutes ?? 15);
+      setHealthChecksEnabled(result.healthChecksEnabled ?? true);
+      setRetryCount(result.retryCount ?? 2);
+      setRetryBaseDelayMs(result.retryBaseDelayMs ?? 600);
+      setRetryMaxDelayMs(result.retryMaxDelayMs ?? 4000);
+      setRequestTimeoutMs(result.requestTimeoutMs ?? 15000);
+      setDegradedFailureThreshold(result.degradedFailureThreshold ?? 2);
+      setUnavailableFailureThreshold(result.unavailableFailureThreshold ?? 4);
+      setUnavailableCooldownMinutes(result.unavailableCooldownMinutes ?? 15);
+      setRecoveryRecheckIntervalMinutes(result.recoveryRecheckIntervalMinutes ?? 5);
       setSavedTextModel(nextText);
       setSavedPhotoModel(nextPhoto);
       setSavedTextCheckIntervalMinutes(result.textModelCheckIntervalMinutes ?? 15);
       setSavedPhotoCheckIntervalMinutes(result.photoModelCheckIntervalMinutes ?? 15);
+      setSavedHealthChecksEnabled(result.healthChecksEnabled ?? true);
+      setSavedRetryCount(result.retryCount ?? 2);
+      setSavedRetryBaseDelayMs(result.retryBaseDelayMs ?? 600);
+      setSavedRetryMaxDelayMs(result.retryMaxDelayMs ?? 4000);
+      setSavedRequestTimeoutMs(result.requestTimeoutMs ?? 15000);
+      setSavedDegradedFailureThreshold(result.degradedFailureThreshold ?? 2);
+      setSavedUnavailableFailureThreshold(result.unavailableFailureThreshold ?? 4);
+      setSavedUnavailableCooldownMinutes(result.unavailableCooldownMinutes ?? 15);
+      setSavedRecoveryRecheckIntervalMinutes(result.recoveryRecheckIntervalMinutes ?? 5);
       setAiTextCacheEnabled(result.aiTextCacheEnabled ?? true);
       setAiTextCacheTtlDays(result.aiTextCacheTtlDays ?? 7);
       setSavedAiTextCacheEnabled(result.aiTextCacheEnabled ?? true);
@@ -446,6 +532,15 @@ export function OpenRouterSettings() {
     normalizeModelId(photoModel) !== normalizeModelId(savedPhotoModel) ||
     textCheckIntervalMinutes !== savedTextCheckIntervalMinutes ||
     photoCheckIntervalMinutes !== savedPhotoCheckIntervalMinutes ||
+    healthChecksEnabled !== savedHealthChecksEnabled ||
+    retryCount !== savedRetryCount ||
+    retryBaseDelayMs !== savedRetryBaseDelayMs ||
+    retryMaxDelayMs !== savedRetryMaxDelayMs ||
+    requestTimeoutMs !== savedRequestTimeoutMs ||
+    degradedFailureThreshold !== savedDegradedFailureThreshold ||
+    unavailableFailureThreshold !== savedUnavailableFailureThreshold ||
+    unavailableCooldownMinutes !== savedUnavailableCooldownMinutes ||
+    recoveryRecheckIntervalMinutes !== savedRecoveryRecheckIntervalMinutes ||
     aiTextCacheEnabled !== savedAiTextCacheEnabled ||
     aiTextCacheTtlDays !== savedAiTextCacheTtlDays;
 
@@ -682,6 +777,24 @@ export function OpenRouterSettings() {
           Можно задать отдельный интервал проверки для text и vision моделей и вручную проверить их прямо сейчас.
         </p>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ios-subtext">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={healthChecksEnabled}
+              onChange={(event) => {
+                setHealthChecksEnabled(event.target.checked);
+                impactLight();
+              }}
+              className="h-4 w-4 rounded border-ios-border/60 text-ios-accent"
+            />
+            Автопроверка моделей включена
+          </label>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">
+            Recovery check: {intervalLabel(recoveryRecheckIntervalMinutes)}
+          </span>
+        </div>
+
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="theme-surface-subtle rounded-2xl border p-3">
             <div className="flex items-start justify-between gap-2">
@@ -782,6 +895,78 @@ export function OpenRouterSettings() {
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="theme-surface-1 rounded-2xl border p-3">
+        <p className="text-sm font-semibold text-ios-text">Повторы и восстановление</p>
+        <p className="mt-1 text-[12px] text-ios-subtext">
+          Здесь настраивается, сколько раз повторять временный сбой, когда считать модель нестабильной и когда пробовать её вернуть в работу.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Повторов временного сбоя</span>
+            <select value={retryCount} onChange={(event) => setRetryCount(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {RETRY_COUNT_OPTIONS.map((option) => <option key={`retry-count-${option}`} value={option}>{option}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Стартовая пауза между повторами</span>
+            <select value={retryBaseDelayMs} onChange={(event) => setRetryBaseDelayMs(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {RETRY_DELAY_OPTIONS.map((option) => <option key={`retry-base-${option}`} value={option}>{millisLabel(option)}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Максимальная пауза повтора</span>
+            <select value={retryMaxDelayMs} onChange={(event) => setRetryMaxDelayMs(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {RETRY_DELAY_OPTIONS.map((option) => <option key={`retry-max-${option}`} value={option}>{millisLabel(option)}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Таймаут одного OpenRouter запроса</span>
+            <select value={requestTimeoutMs} onChange={(event) => setRequestTimeoutMs(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {REQUEST_TIMEOUT_OPTIONS.map((option) => <option key={`timeout-${option}`} value={option}>{millisLabel(option)}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Ошибок до статуса «Нестабильна»</span>
+            <select value={degradedFailureThreshold} onChange={(event) => setDegradedFailureThreshold(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {FAILURE_THRESHOLD_OPTIONS.map((option) => <option key={`degraded-threshold-${option}`} value={option}>{option}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Ошибок до временного отключения</span>
+            <select value={unavailableFailureThreshold} onChange={(event) => setUnavailableFailureThreshold(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {FAILURE_THRESHOLD_OPTIONS.map((option) => <option key={`unavailable-threshold-${option}`} value={option}>{option}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Пауза перед новой попыткой после отключения</span>
+            <select value={unavailableCooldownMinutes} onChange={(event) => setUnavailableCooldownMinutes(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {COOLDOWN_OPTIONS.map((option) => <option key={`unavailable-cooldown-${option}`} value={option}>{intervalLabel(option)}</option>)}
+            </select>
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-[12px] text-ios-subtext">Интервал recovery-проверки</span>
+            <select value={recoveryRecheckIntervalMinutes} onChange={(event) => setRecoveryRecheckIntervalMinutes(Number(event.target.value))} className="theme-field h-11 w-full rounded-ios-button border px-3 text-sm outline-none">
+              {COOLDOWN_OPTIONS.map((option) => <option key={`recovery-check-${option}`} value={option}>{intervalLabel(option)}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-ios-subtext">
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">Retry: {retryCount}</span>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">Base delay: {millisLabel(retryBaseDelayMs)}</span>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">Max delay: {millisLabel(retryMaxDelayMs)}</span>
+          <span className="theme-surface-subtle rounded-full border px-2 py-1">Timeout: {millisLabel(requestTimeoutMs)}</span>
         </div>
       </div>
 

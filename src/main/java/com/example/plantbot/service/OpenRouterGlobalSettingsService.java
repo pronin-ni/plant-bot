@@ -6,6 +6,7 @@ import com.example.plantbot.repository.AiTextCacheEntryRepository;
 import com.example.plantbot.repository.GlobalSettingsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,10 +24,45 @@ public class OpenRouterGlobalSettingsService {
   private static final int DEFAULT_AI_TEXT_CACHE_TTL_DAYS = 7;
   private static final int MIN_AI_TEXT_CACHE_TTL_DAYS = 1;
   private static final int MAX_AI_TEXT_CACHE_TTL_DAYS = 30;
+  private static final int DEFAULT_OPENROUTER_RETRY_COUNT = 2;
+  private static final int DEFAULT_OPENROUTER_RETRY_BASE_DELAY_MS = 600;
+  private static final int DEFAULT_OPENROUTER_RETRY_MAX_DELAY_MS = 4000;
+  private static final int DEFAULT_OPENROUTER_REQUEST_TIMEOUT_MS = 15000;
+  private static final int DEFAULT_OPENROUTER_DEGRADED_FAILURE_THRESHOLD = 2;
+  private static final int DEFAULT_OPENROUTER_UNAVAILABLE_FAILURE_THRESHOLD = 4;
+  private static final int DEFAULT_OPENROUTER_UNAVAILABLE_COOLDOWN_MINUTES = 15;
+  private static final int DEFAULT_OPENROUTER_RECOVERY_RECHECK_INTERVAL_MINUTES = 5;
 
   private final GlobalSettingsRepository globalSettingsRepository;
   private final AiTextCacheEntryRepository aiTextCacheEntryRepository;
   private final OpenRouterApiKeyCryptoService cryptoService;
+
+  @Value("${openrouter.resilience.retry-count:2}")
+  private int defaultRetryCount;
+
+  @Value("${openrouter.resilience.retry-base-delay-ms:600}")
+  private int defaultRetryBaseDelayMs;
+
+  @Value("${openrouter.resilience.retry-max-delay-ms:4000}")
+  private int defaultRetryMaxDelayMs;
+
+  @Value("${openrouter.resilience.request-timeout-ms:15000}")
+  private int defaultRequestTimeoutMs;
+
+  @Value("${openrouter.resilience.degraded-failure-threshold:2}")
+  private int defaultDegradedFailureThreshold;
+
+  @Value("${openrouter.resilience.unavailable-failure-threshold:4}")
+  private int defaultUnavailableFailureThreshold;
+
+  @Value("${openrouter.resilience.unavailable-cooldown-minutes:15}")
+  private int defaultUnavailableCooldownMinutes;
+
+  @Value("${openrouter.resilience.recovery-recheck-interval-minutes:5}")
+  private int defaultRecoveryRecheckIntervalMinutes;
+
+  @Value("${openrouter.resilience.health-checks-enabled:true}")
+  private boolean defaultHealthChecksEnabled;
 
   @Transactional
   public GlobalSettings getOrCreate() {
@@ -37,6 +73,33 @@ public class OpenRouterGlobalSettingsService {
     });
     if (settings.getAiTextCacheTtlDays() == null) {
       settings.setAiTextCacheTtlDays(DEFAULT_AI_TEXT_CACHE_TTL_DAYS);
+    }
+    if (settings.getOpenrouterHealthChecksEnabled() == null) {
+      settings.setOpenrouterHealthChecksEnabled(defaultHealthChecksEnabled);
+    }
+    if (settings.getOpenrouterRetryCount() == null) {
+      settings.setOpenrouterRetryCount(defaultRetryCount);
+    }
+    if (settings.getOpenrouterRetryBaseDelayMs() == null) {
+      settings.setOpenrouterRetryBaseDelayMs(defaultRetryBaseDelayMs);
+    }
+    if (settings.getOpenrouterRetryMaxDelayMs() == null) {
+      settings.setOpenrouterRetryMaxDelayMs(defaultRetryMaxDelayMs);
+    }
+    if (settings.getOpenrouterRequestTimeoutMs() == null) {
+      settings.setOpenrouterRequestTimeoutMs(defaultRequestTimeoutMs);
+    }
+    if (settings.getOpenrouterDegradedFailureThreshold() == null) {
+      settings.setOpenrouterDegradedFailureThreshold(defaultDegradedFailureThreshold);
+    }
+    if (settings.getOpenrouterUnavailableFailureThreshold() == null) {
+      settings.setOpenrouterUnavailableFailureThreshold(defaultUnavailableFailureThreshold);
+    }
+    if (settings.getOpenrouterUnavailableCooldownMinutes() == null) {
+      settings.setOpenrouterUnavailableCooldownMinutes(defaultUnavailableCooldownMinutes);
+    }
+    if (settings.getOpenrouterRecoveryRecheckIntervalMinutes() == null) {
+      settings.setOpenrouterRecoveryRecheckIntervalMinutes(defaultRecoveryRecheckIntervalMinutes);
     }
     if (migrateLegacyPlainApiKey(settings)) {
       settings = globalSettingsRepository.save(settings);
@@ -55,6 +118,47 @@ public class OpenRouterGlobalSettingsService {
   public int resolveAiTextCacheTtlDays() {
     Integer configured = getOrCreate().getAiTextCacheTtlDays();
     return normalizeAiTextCacheTtlDays(configured);
+  }
+
+  public boolean resolveHealthChecksEnabled() {
+    return Boolean.TRUE.equals(getOrCreate().getOpenrouterHealthChecksEnabled());
+  }
+
+  public int resolveRetryCount() {
+    return normalizeRetryCount(getOrCreate().getOpenrouterRetryCount());
+  }
+
+  public int resolveRetryBaseDelayMs() {
+    return normalizeRetryBaseDelayMs(getOrCreate().getOpenrouterRetryBaseDelayMs());
+  }
+
+  public int resolveRetryMaxDelayMs() {
+    GlobalSettings settings = getOrCreate();
+    return normalizeRetryMaxDelayMs(settings.getOpenrouterRetryMaxDelayMs(), settings.getOpenrouterRetryBaseDelayMs());
+  }
+
+  public int resolveRequestTimeoutMs() {
+    return normalizeRequestTimeoutMs(getOrCreate().getOpenrouterRequestTimeoutMs());
+  }
+
+  public int resolveDegradedFailureThreshold() {
+    return normalizeDegradedFailureThreshold(getOrCreate().getOpenrouterDegradedFailureThreshold());
+  }
+
+  public int resolveUnavailableFailureThreshold() {
+    GlobalSettings settings = getOrCreate();
+    return normalizeUnavailableFailureThreshold(
+        settings.getOpenrouterUnavailableFailureThreshold(),
+        settings.getOpenrouterDegradedFailureThreshold()
+    );
+  }
+
+  public int resolveUnavailableCooldownMinutes() {
+    return normalizeUnavailableCooldownMinutes(getOrCreate().getOpenrouterUnavailableCooldownMinutes());
+  }
+
+  public int resolveRecoveryRecheckIntervalMinutes() {
+    return normalizeRecoveryRecheckIntervalMinutes(getOrCreate().getOpenrouterRecoveryRecheckIntervalMinutes());
   }
 
   @Transactional
@@ -149,6 +253,79 @@ public class OpenRouterGlobalSettingsService {
         && !Objects.equals(settings.getPhotoModelCheckIntervalMinutes(), request.photoModelCheckIntervalMinutes())) {
       settings.setPhotoModelCheckIntervalMinutes(normalizeCheckInterval(request.photoModelCheckIntervalMinutes()));
       changedFields.add("photoModelCheckIntervalMinutes");
+    }
+
+    if (request != null && request.healthChecksEnabled() != null
+        && !Objects.equals(settings.getOpenrouterHealthChecksEnabled(), request.healthChecksEnabled())) {
+      settings.setOpenrouterHealthChecksEnabled(request.healthChecksEnabled());
+      changedFields.add("openrouterHealthChecksEnabled");
+    }
+
+    if (request != null && request.retryCount() != null) {
+      Integer normalized = normalizeRetryCount(request.retryCount());
+      if (!Objects.equals(settings.getOpenrouterRetryCount(), normalized)) {
+        settings.setOpenrouterRetryCount(normalized);
+        changedFields.add("openrouterRetryCount");
+      }
+    }
+
+    if (request != null && request.retryBaseDelayMs() != null) {
+      Integer normalized = normalizeRetryBaseDelayMs(request.retryBaseDelayMs());
+      if (!Objects.equals(settings.getOpenrouterRetryBaseDelayMs(), normalized)) {
+        settings.setOpenrouterRetryBaseDelayMs(normalized);
+        changedFields.add("openrouterRetryBaseDelayMs");
+      }
+    }
+
+    if (request != null && request.retryMaxDelayMs() != null) {
+      Integer normalized = normalizeRetryMaxDelayMs(request.retryMaxDelayMs(), settings.getOpenrouterRetryBaseDelayMs());
+      if (!Objects.equals(settings.getOpenrouterRetryMaxDelayMs(), normalized)) {
+        settings.setOpenrouterRetryMaxDelayMs(normalized);
+        changedFields.add("openrouterRetryMaxDelayMs");
+      }
+    }
+
+    if (request != null && request.requestTimeoutMs() != null) {
+      Integer normalized = normalizeRequestTimeoutMs(request.requestTimeoutMs());
+      if (!Objects.equals(settings.getOpenrouterRequestTimeoutMs(), normalized)) {
+        settings.setOpenrouterRequestTimeoutMs(normalized);
+        changedFields.add("openrouterRequestTimeoutMs");
+      }
+    }
+
+    if (request != null && request.degradedFailureThreshold() != null) {
+      Integer normalized = normalizeDegradedFailureThreshold(request.degradedFailureThreshold());
+      if (!Objects.equals(settings.getOpenrouterDegradedFailureThreshold(), normalized)) {
+        settings.setOpenrouterDegradedFailureThreshold(normalized);
+        changedFields.add("openrouterDegradedFailureThreshold");
+      }
+    }
+
+    if (request != null && request.unavailableFailureThreshold() != null) {
+      Integer normalized = normalizeUnavailableFailureThreshold(
+          request.unavailableFailureThreshold(),
+          settings.getOpenrouterDegradedFailureThreshold()
+      );
+      if (!Objects.equals(settings.getOpenrouterUnavailableFailureThreshold(), normalized)) {
+        settings.setOpenrouterUnavailableFailureThreshold(normalized);
+        changedFields.add("openrouterUnavailableFailureThreshold");
+      }
+    }
+
+    if (request != null && request.unavailableCooldownMinutes() != null) {
+      Integer normalized = normalizeUnavailableCooldownMinutes(request.unavailableCooldownMinutes());
+      if (!Objects.equals(settings.getOpenrouterUnavailableCooldownMinutes(), normalized)) {
+        settings.setOpenrouterUnavailableCooldownMinutes(normalized);
+        changedFields.add("openrouterUnavailableCooldownMinutes");
+      }
+    }
+
+    if (request != null && request.recoveryRecheckIntervalMinutes() != null) {
+      Integer normalized = normalizeRecoveryRecheckIntervalMinutes(request.recoveryRecheckIntervalMinutes());
+      if (!Objects.equals(settings.getOpenrouterRecoveryRecheckIntervalMinutes(), normalized)) {
+        settings.setOpenrouterRecoveryRecheckIntervalMinutes(normalized);
+        changedFields.add("openrouterRecoveryRecheckIntervalMinutes");
+      }
     }
 
     if (request != null && request.aiTextCacheEnabled() != null
@@ -263,6 +440,64 @@ public class OpenRouterGlobalSettingsService {
       return 0;
     }
     return Math.min(minutes, 24 * 60);
+  }
+
+  private Integer normalizeRetryCount(Integer count) {
+    if (count == null) {
+      return defaultRetryCount;
+    }
+    return Math.max(0, Math.min(count, 5));
+  }
+
+  private Integer normalizeRetryBaseDelayMs(Integer value) {
+    if (value == null) {
+      return defaultRetryBaseDelayMs;
+    }
+    return Math.max(100, Math.min(value, 30_000));
+  }
+
+  private Integer normalizeRetryMaxDelayMs(Integer value, Integer baseDelay) {
+    int normalizedBase = normalizeRetryBaseDelayMs(baseDelay);
+    if (value == null) {
+      return Math.max(normalizedBase, defaultRetryMaxDelayMs);
+    }
+    return Math.max(normalizedBase, Math.min(value, 60_000));
+  }
+
+  private Integer normalizeRequestTimeoutMs(Integer value) {
+    if (value == null) {
+      return defaultRequestTimeoutMs;
+    }
+    return Math.max(1_000, Math.min(value, 120_000));
+  }
+
+  private Integer normalizeDegradedFailureThreshold(Integer value) {
+    if (value == null) {
+      return defaultDegradedFailureThreshold;
+    }
+    return Math.max(1, Math.min(value, 20));
+  }
+
+  private Integer normalizeUnavailableFailureThreshold(Integer value, Integer degradedThreshold) {
+    int normalizedDegraded = normalizeDegradedFailureThreshold(degradedThreshold);
+    if (value == null) {
+      return Math.max(normalizedDegraded + 1, defaultUnavailableFailureThreshold);
+    }
+    return Math.max(normalizedDegraded + 1, Math.min(value, 30));
+  }
+
+  private Integer normalizeUnavailableCooldownMinutes(Integer value) {
+    if (value == null) {
+      return defaultUnavailableCooldownMinutes;
+    }
+    return Math.max(1, Math.min(value, 24 * 60));
+  }
+
+  private Integer normalizeRecoveryRecheckIntervalMinutes(Integer value) {
+    if (value == null) {
+      return defaultRecoveryRecheckIntervalMinutes;
+  }
+    return Math.max(1, Math.min(value, 24 * 60));
   }
 
   private Integer normalizeAiTextCacheTtlDays(Integer ttlDays) {

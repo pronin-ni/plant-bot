@@ -340,18 +340,27 @@ export interface AdminOpenRouterModelsDto {
   textModel?: string | null;
   photoModel?: string | null;
   hasApiKey: boolean;
+  healthChecksEnabled: boolean;
+  retryCount?: number | null;
+  retryBaseDelayMs?: number | null;
+  retryMaxDelayMs?: number | null;
+  requestTimeoutMs?: number | null;
+  degradedFailureThreshold?: number | null;
+  unavailableFailureThreshold?: number | null;
+  unavailableCooldownMinutes?: number | null;
+  recoveryRecheckIntervalMinutes?: number | null;
   aiTextCacheEnabled: boolean;
   aiTextCacheTtlDays?: number | null;
   aiTextCacheEntryCount: number;
   aiTextCacheLastCleanupAt?: string | null;
   updatedAt?: string | null;
-  textModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR' | null;
+  textModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR' | null;
   textModelLastCheckedAt?: string | null;
   textModelLastSuccessfulAt?: string | null;
   textModelLastErrorMessage?: string | null;
   textModelLastNotifiedUnavailableAt?: string | null;
   textModelCheckIntervalMinutes?: number | null;
-  photoModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR' | null;
+  photoModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR' | null;
   photoModelLastCheckedAt?: string | null;
   photoModelLastSuccessfulAt?: string | null;
   photoModelLastErrorMessage?: string | null;
@@ -362,7 +371,7 @@ export interface AdminOpenRouterModelsDto {
 export interface AdminOpenRouterAvailabilityCheckDto {
   type: 'text' | 'photo';
   model?: string | null;
-  status: 'UNKNOWN' | 'AVAILABLE' | 'UNAVAILABLE' | 'ERROR';
+  status: 'UNKNOWN' | 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR';
   message: string;
   checkedAt?: string | null;
   successfulAt?: string | null;

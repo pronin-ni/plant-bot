@@ -30,6 +30,15 @@ export async function updateAdminOpenRouterModels(payload: {
   photoModel?: string | null;
   textModelCheckIntervalMinutes?: number | null;
   photoModelCheckIntervalMinutes?: number | null;
+  healthChecksEnabled?: boolean | null;
+  retryCount?: number | null;
+  retryBaseDelayMs?: number | null;
+  retryMaxDelayMs?: number | null;
+  requestTimeoutMs?: number | null;
+  degradedFailureThreshold?: number | null;
+  unavailableFailureThreshold?: number | null;
+  unavailableCooldownMinutes?: number | null;
+  recoveryRecheckIntervalMinutes?: number | null;
   aiTextCacheEnabled?: boolean | null;
   aiTextCacheTtlDays?: number | null;
 }): Promise<AdminOpenRouterModelsDto> {

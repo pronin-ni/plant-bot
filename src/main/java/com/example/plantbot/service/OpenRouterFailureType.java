@@ -1,0 +1,14 @@
+package com.example.plantbot.service;
+
+public enum OpenRouterFailureType {
+  INVALID_KEY,
+  MODEL_UNAVAILABLE,
+  RATE_LIMIT,
+  TIMEOUT,
+  NETWORK_ERROR,
+  MALFORMED_RESPONSE,
+  SERVER_ERROR,
+  TEMPORARY_ERROR,
+  CIRCUIT_OPEN,
+  OVER_CAPACITY
+}

@@ -22,12 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -38,9 +33,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -55,13 +47,12 @@ public class OpenRouterPlantAdvisorService {
   private static final String NS_WATERING = "watering";
   private static final String NS_CHAT = "chat";
 
-  private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final OpenRouterCacheRepository openRouterCacheRepository;
   private final AiTextCacheService aiTextCacheService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
-  private final PerformanceMetricsService performanceMetricsService;
+  private final OpenRouterExecutionService openRouterExecutionService;
 
   @Value("${openrouter.model:}")
   private String model;
@@ -99,75 +90,59 @@ public class OpenRouterPlantAdvisorService {
   @Value("${openrouter.cache-negative-ttl-seconds:90}")
   private int negativeCacheTtlSeconds;
 
-  @Value("${openrouter.resilience.max-concurrent-requests:8}")
-  private int maxConcurrentRequests;
-
-  @Value("${openrouter.resilience.acquire-timeout-ms:250}")
-  private long acquireTimeoutMs;
-
-  @Value("${openrouter.resilience.circuit-breaker-failure-threshold:5}")
-  private int circuitBreakerFailureThreshold;
-
-  @Value("${openrouter.resilience.circuit-breaker-open-seconds:90}")
-  private long circuitBreakerOpenSeconds;
-
-  private volatile Semaphore requestPermits;
-  private volatile int requestPermitCapacity = -1;
-  private final AtomicInteger consecutiveFailures = new AtomicInteger();
-  private volatile Instant blockedUntil;
-
   public Optional<PlantLookupResult> suggestIntervalDays(String plantName) {
     return suggestIntervalDays(null, plantName);
   }
 
   public Optional<PlantLookupResult> suggestIntervalDays(User user, String plantName) {
-    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+    if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
-    try {
-      JsonNode body = postMessages(apiKey, modelToUse, List.of(
-          Map.of("role", "system", "content", intervalSystemPrompt()),
-          Map.of("role", "user", "content", userPrompt(plantName))
-      ));
-      if (body == null) {
-        return Optional.empty();
-      }
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", intervalSystemPrompt()),
+            Map.of("role", "user", "content", userPrompt(plantName))
+        ));
+        if (body == null) {
+          continue;
+        }
 
-      String content = extractContent(body);
-      if (content.isEmpty()) {
-        return Optional.empty();
-      }
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          continue;
+        }
 
-      String jsonPayload = sanitizeJsonPayload(content);
-      if (jsonPayload.isEmpty()) {
-        log.warn("OpenRouter returned empty payload after sanitization. input='{}', rawPreview='{}'",
-            plantName, preview(content));
-        return Optional.empty();
-      }
+        String jsonPayload = sanitizeJsonPayload(content);
+        if (jsonPayload.isEmpty()) {
+          log.warn("OpenRouter returned empty payload after sanitization. input='{}', rawPreview='{}'",
+              plantName, preview(content));
+          continue;
+        }
 
-      JsonNode advice = objectMapper.readTree(jsonPayload);
-      int interval = advice.path("interval_days").asInt(0);
-      if (interval <= 0) {
-        return Optional.empty();
-      }
-      interval = Math.max(1, Math.min(30, interval));
+        JsonNode advice = objectMapper.readTree(jsonPayload);
+        int interval = advice.path("interval_days").asInt(0);
+        if (interval <= 0) {
+          continue;
+        }
+        interval = Math.max(1, Math.min(30, interval));
 
-      String normalizedName = advice.path("normalized_name").asText(plantName).trim();
-      if (normalizedName.isEmpty()) {
-        normalizedName = plantName;
-      }
+        String normalizedName = advice.path("normalized_name").asText(plantName).trim();
+        if (normalizedName.isEmpty()) {
+          normalizedName = plantName;
+        }
 
-      PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
-      String source = "OpenRouter:" + modelToUse;
-      log.info("OpenRouter interval success. input='{}', normalized='{}', interval={}, type={}, rawPreview='{}'",
-          plantName, normalizedName, interval, suggestedType, preview(content));
-      return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
-    } catch (Exception ex) {
-      log.warn("OpenRouter suggestion failed for '{}': {}", plantName, ex.getMessage());
-      return Optional.empty();
+        PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
+        String source = "OpenRouter:" + modelToUse;
+        log.info("OpenRouter interval success. input='{}', normalized='{}', interval={}, type={}, rawPreview='{}'",
+            plantName, normalizedName, interval, suggestedType, preview(content));
+        return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
+      } catch (Exception ex) {
+        log.warn("OpenRouter suggestion failed for '{}'. model='{}': {}", plantName, modelToUse, ex.getMessage());
+      }
     }
+    return Optional.empty();
   }
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays) {
@@ -271,47 +246,48 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
     User user = plant == null ? null : plant.getUser();
-    String modelToUse = resolveTextModel(user);
     String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (plant == null || apiKey == null || apiKey.isBlank() || modelToUse == null || modelToUse.isBlank()) {
+    if (plant == null || apiKey == null || apiKey.isBlank()) {
       return Optional.empty();
     }
-    String cacheKey = buildWateringProfileCacheKey(modelToUse, plant, weather, outdoor);
-    Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
-    if (cached != null) {
-      return cached;
+    for (String modelToUse : resolveTextModelCandidates(user)) {
+      String cacheKey = buildWateringProfileCacheKey(modelToUse, plant, weather, outdoor);
+      Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
+      if (cached != null) {
+        return cached;
+      }
+      try {
+        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+            Map.of("role", "system", "content", wateringProfileSystemPrompt()),
+            Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
+        ));
+        if (body == null) {
+          putWateringProfileCache(cacheKey, Optional.empty());
+          continue;
+        }
+        String content = extractContent(body);
+        if (content.isEmpty()) {
+          putWateringProfileCache(cacheKey, Optional.empty());
+          continue;
+        }
+        JsonNode profile = objectMapper.readTree(sanitizeJsonPayload(content));
+        double intervalFactor = profile.path("interval_factor").asDouble(1.0);
+        double waterFactor = profile.path("water_factor").asDouble(1.0);
+        if (intervalFactor <= 0 || waterFactor <= 0) {
+          putWateringProfileCache(cacheKey, Optional.empty());
+          continue;
+        }
+        intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
+        waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
+        AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + modelToUse);
+        putWateringProfileCache(cacheKey, Optional.of(value));
+        return Optional.of(value);
+      } catch (Exception ex) {
+        putWateringProfileCache(cacheKey, Optional.empty());
+        log.warn("OpenRouter watering profile failed for '{}'. model='{}': {}", plant.getName(), modelToUse, ex.getMessage());
+      }
     }
-    try {
-      JsonNode body = postMessages(apiKey, modelToUse, List.of(
-          Map.of("role", "system", "content", wateringProfileSystemPrompt()),
-          Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
-      ));
-      if (body == null) {
-        putWateringProfileCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-      String content = extractContent(body);
-      if (content.isEmpty()) {
-        putWateringProfileCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-      JsonNode profile = objectMapper.readTree(sanitizeJsonPayload(content));
-      double intervalFactor = profile.path("interval_factor").asDouble(1.0);
-      double waterFactor = profile.path("water_factor").asDouble(1.0);
-      if (intervalFactor <= 0 || waterFactor <= 0) {
-        putWateringProfileCache(cacheKey, Optional.empty());
-        return Optional.empty();
-      }
-      intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
-      waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
-      AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + modelToUse);
-      putWateringProfileCache(cacheKey, Optional.of(value));
-      return Optional.of(value);
-    } catch (Exception ex) {
-      putWateringProfileCache(cacheKey, Optional.empty());
-      log.warn("OpenRouter watering profile failed for '{}': {}", plant.getName(), ex.getMessage());
-      return Optional.empty();
-    }
+    return Optional.empty();
   }
 
   public Optional<WizardWateringRecommendation> suggestWizardRecommendation(User user,
@@ -693,106 +669,15 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
-    if (isCircuitOpen()) {
-      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "short-circuited", 0);
-      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "circuit_open");
-      throw new IllegalStateException("OpenRouter temporarily disabled after repeated failures");
-    }
-
-    Semaphore permits = getRequestPermits();
-    boolean acquired = false;
-    long startedAt = System.nanoTime();
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(apiKey);
-    if (siteUrl != null && !siteUrl.isBlank()) {
-      headers.set("HTTP-Referer", siteUrl);
-    }
-    if (appName != null && !appName.isBlank()) {
-      headers.set("X-Title", appName);
-    }
-
-    Map<String, Object> request = Map.of(
-        "model", modelName,
-        "temperature", 0,
-        "messages", messages
+    return openRouterExecutionService.executeChatCompletion(
+        apiKey,
+        modelName,
+        OpenRouterModelKind.TEXT,
+        baseUrl,
+        siteUrl,
+        appName,
+        messages
     );
-
-    try {
-      acquired = permits.tryAcquire(Math.max(1L, acquireTimeoutMs), TimeUnit.MILLISECONDS);
-      if (!acquired) {
-        performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "shed", System.nanoTime() - startedAt);
-        performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "shed_over_capacity");
-        throw new IllegalStateException("OpenRouter is overloaded, try again later");
-      }
-      ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-          baseUrl,
-          new HttpEntity<>(request, headers),
-          JsonNode.class
-      );
-      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "success", System.nanoTime() - startedAt);
-      consecutiveFailures.set(0);
-      blockedUntil = null;
-      return response.getBody();
-    } catch (InterruptedException ex) {
-      Thread.currentThread().interrupt();
-      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "interrupted", System.nanoTime() - startedAt);
-      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", "interrupted");
-      throw new IllegalStateException("OpenRouter request interrupted", ex);
-    } catch (Exception ex) {
-      performanceMetricsService.recordExternalCall("openrouter", "chat_completions", modelName, "error", System.nanoTime() - startedAt);
-      performanceMetricsService.incrementExternalFailure("openrouter", "chat_completions", classifyOpenRouterFailure(ex));
-      registerFailure();
-      throw ex;
-    } finally {
-      if (acquired) {
-        permits.release();
-      }
-    }
-  }
-
-  private Semaphore getRequestPermits() {
-    Semaphore local = requestPermits;
-    int safeMax = Math.max(1, maxConcurrentRequests);
-    if (local == null || requestPermitCapacity != safeMax) {
-      synchronized (this) {
-        if (requestPermits == null || requestPermitCapacity != safeMax) {
-          requestPermits = new Semaphore(safeMax, true);
-          requestPermitCapacity = safeMax;
-        }
-        local = requestPermits;
-      }
-    }
-    return local;
-  }
-
-  private boolean isCircuitOpen() {
-    Instant until = blockedUntil;
-    return until != null && until.isAfter(Instant.now());
-  }
-
-  private void registerFailure() {
-    int failures = consecutiveFailures.incrementAndGet();
-    if (failures >= Math.max(1, circuitBreakerFailureThreshold)) {
-      blockedUntil = Instant.now().plus(Duration.ofSeconds(Math.max(5L, circuitBreakerOpenSeconds)));
-    }
-  }
-
-  private String classifyOpenRouterFailure(Exception ex) {
-    String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-    if (message.contains("429") || message.contains("too many requests")) {
-      return "rate_limit";
-    }
-    if (message.contains("401") || message.contains("403") || message.contains("unauthorized") || message.contains("forbidden")) {
-      return "auth";
-    }
-    if (message.contains("timeout") || message.contains("timed out") || message.contains("read timed out")) {
-      return "timeout";
-    }
-    if (message.contains("connection") || message.contains("i/o error") || message.contains("network")) {
-      return "network";
-    }
-    return ex.getClass().getSimpleName();
   }
 
   private String extractContent(JsonNode body) {

@@ -9,13 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,11 +30,11 @@ import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 public class OpenRouterVisionService {
   private static final Pattern FENCED_JSON_PATTERN = Pattern.compile("(?s)^```(?:json)?\\s*(.*?)\\s*```$");
 
-  private final RestTemplate restTemplate;
   private final ObjectMapper objectMapper;
   private final AiTextCacheService aiTextCacheService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
+  private final OpenRouterExecutionService openRouterExecutionService;
 
   @Value("${openrouter.model-plant:}")
   private String plantModel;
@@ -252,37 +247,23 @@ public class OpenRouterVisionService {
         )
     );
 
-    Map<String, Object> requestBody = Map.of(
-        "model", model,
-        "temperature", 0,
-        "messages", List.of(
-            Map.of("role", "system", "content", systemPrompt),
-            userContent
-        )
-    );
-
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(apiKey);
-    if (siteUrl != null && !siteUrl.isBlank()) {
-      headers.set("HTTP-Referer", siteUrl);
-    }
-    if (appName != null && !appName.isBlank()) {
-      headers.set("X-Title", appName);
-    }
-
     try {
-      ResponseEntity<JsonNode> response = restTemplate.postForEntity(
+      return openRouterExecutionService.executeChatCompletion(
+          apiKey,
+          model,
+          OpenRouterModelKind.PHOTO,
           baseUrl,
-          new HttpEntity<>(requestBody, headers),
-          JsonNode.class
+          siteUrl,
+          appName,
+          List.of(
+              Map.of("role", "system", "content", systemPrompt),
+              userContent
+          )
       );
-      if (response.getBody() == null) {
-        throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter вернул пустой ответ");
-      }
-      return response.getBody();
     } catch (ResponseStatusException ex) {
       throw ex;
+    } catch (OpenRouterExecutionException ex) {
+      throw new ResponseStatusException(BAD_GATEWAY, ex.getMessage());
     } catch (Exception ex) {
       log.warn("OpenRouter request failed: {}", ex.getMessage());
       throw new ResponseStatusException(BAD_GATEWAY, "Ошибка запроса к OpenRouter");
