@@ -220,6 +220,9 @@ function formatAiAdviceSource(source: string | null): string {
   if (source.toLowerCase().startsWith('openrouter:')) {
     return 'AI через OpenRouter';
   }
+  if (source.toLowerCase().startsWith('openai:')) {
+    return 'AI через ChatGPT / OpenAI';
+  }
   return source;
 }
 
@@ -742,7 +745,9 @@ export function PlantDetailSheet() {
 
   const adviceSource = careAdviceQuery.data?.source ?? null;
   const adviceText = normalizeAdviceText(careAdviceQuery.data);
-  const hasAiAdvice = Boolean(adviceSource?.toLowerCase().startsWith('openrouter:') && adviceText);
+  const hasAiAdvice = Boolean(
+    adviceText && adviceSource && /^(openrouter|openai):/i.test(adviceSource)
+  );
   const recommendationState = recommendationUiState(
     recommendationQuery.isLoading && !recommendationQuery.data,
     recommendationQuery.isError && !recommendationQuery.data,

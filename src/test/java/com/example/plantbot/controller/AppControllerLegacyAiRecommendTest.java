@@ -6,10 +6,13 @@ import com.example.plantbot.controller.dto.CalendarSyncResponse;
 import com.example.plantbot.controller.dto.OpenRouterRuntimeSettingsResponse;
 import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantType;
+import com.example.plantbot.domain.AiProviderType;
+import com.example.plantbot.domain.GlobalSettings;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.repository.PlantRepository;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.service.AiTextCacheInvalidationService;
+import com.example.plantbot.service.AiProviderSettingsService;
 import com.example.plantbot.service.AssistantChatHistoryService;
 import com.example.plantbot.service.CurrentUserService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
@@ -73,6 +76,7 @@ class AppControllerLegacyAiRecommendTest {
   @Mock private OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   @Mock private OpenRouterUserSettingsService openRouterUserSettingsService;
   @Mock private OpenRouterModelCatalogService openRouterModelCatalogService;
+  @Mock private AiProviderSettingsService aiProviderSettingsService;
   @Mock private PlantAvatarService plantAvatarService;
   @Mock private WeatherService weatherService;
   @Mock private SeedLifecycleService seedLifecycleService;
@@ -104,6 +108,7 @@ class AppControllerLegacyAiRecommendTest {
         openRouterPlantAdvisorService,
         openRouterUserSettingsService,
         openRouterModelCatalogService,
+        aiProviderSettingsService,
         plantAvatarService,
         weatherService,
         seedLifecycleService,
@@ -204,11 +209,22 @@ class AppControllerLegacyAiRecommendTest {
     user.setId(5L);
 
     when(currentUserService.resolve(authentication, "init")).thenReturn(user);
-    when(openRouterUserSettingsService.resolveGlobalModels())
-        .thenReturn(new OpenRouterGlobalSettingsService.ResolvedModels(null, null, null));
-    when(openRouterUserSettingsService.resolveApiKey(user)).thenReturn("");
-    when(openRouterModelCatalogService.resolveConfiguredTextFallback()).thenReturn("configured-text");
-    when(openRouterModelCatalogService.resolveConfiguredPhotoFallback()).thenReturn("configured-photo");
+    GlobalSettings settings = new GlobalSettings();
+    when(aiProviderSettingsService.getOrCreate()).thenReturn(settings);
+    when(aiProviderSettingsService.summarize(settings, user)).thenReturn(
+        new AiProviderSettingsService.ProviderSettingsSummary(
+            AiProviderType.OPENROUTER,
+            AiProviderType.OPENROUTER,
+            null,
+            null,
+            null,
+            null,
+            "configured-text",
+            "configured-photo",
+            false,
+            false
+        )
+    );
 
     OpenRouterRuntimeSettingsResponse response = controller.getOpenRouterRuntimeSettings("init", authentication);
 

@@ -2,13 +2,13 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.controller.dto.OpenRouterDiagnoseResponse;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyResponse;
+import com.example.plantbot.domain.AiRequestKind;
 import com.example.plantbot.domain.AiTextFeatureType;
 import com.example.plantbot.domain.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,30 +32,8 @@ public class OpenRouterVisionService {
 
   private final ObjectMapper objectMapper;
   private final AiTextCacheService aiTextCacheService;
-  private final OpenRouterUserSettingsService openRouterUserSettingsService;
-  private final OpenRouterModelCatalogService openRouterModelCatalogService;
-  private final OpenRouterExecutionService openRouterExecutionService;
-
-  @Value("${openrouter.model-plant:}")
-  private String plantModel;
-
-  @Value("${openrouter.model-photo-identify:}")
-  private String photoIdentifyModel;
-
-  @Value("${openrouter.model-photo-diagnose:}")
-  private String photoDiagnoseModel;
-
-  @Value("${openrouter.model:}")
-  private String fallbackModel;
-
-  @Value("${openrouter.base-url:https://openrouter.ai/api/v1/chat/completions}")
-  private String baseUrl;
-
-  @Value("${openrouter.site-url:}")
-  private String siteUrl;
-
-  @Value("${openrouter.app-name:plant-bot}")
-  private String appName;
+  private final AiProviderSettingsService aiProviderSettingsService;
+  private final AiExecutionService aiExecutionService;
 
   public OpenRouterIdentifyResponse identifyPlant(String imageBase64) {
     return identifyPlant(null, imageBase64);
@@ -63,36 +41,24 @@ public class OpenRouterVisionService {
 
   public OpenRouterIdentifyResponse identifyPlant(User user, String imageBase64) {
     validateImage(imageBase64);
-    JsonNode payload = null;
-    String modelToUse = null;
-    ResponseStatusException lastError = null;
-    for (String candidate : resolveIdentifyModelCandidates(user)) {
-      var cached = aiTextCacheService.find(
-          user == null ? 0L : user.getId(),
-          null,
-          AiTextFeatureType.PLANT_IDENTIFY_TEXT,
-          candidate,
-          buildIdentifyCacheInput(imageBase64),
-          OpenRouterIdentifyResponse.class
-      );
-      if (cached.hit()) {
-        return cached.payload();
-      }
-      try {
-        payload = callOpenRouter(user, candidate, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
-        modelToUse = candidate;
-        break;
-      } catch (ResponseStatusException ex) {
-        lastError = ex;
-        log.warn("OpenRouter identify failed for model='{}': {}", candidate, ex.getReason());
-      }
+    AiProviderSettingsService.RuntimeResolution runtime = aiProviderSettingsService.resolveVisionRuntime(user);
+    if (!runtime.hasApiKey()) {
+      throw new ResponseStatusException(BAD_GATEWAY, "AI provider API key не настроен");
     }
-    if (payload == null) {
-      if (lastError != null) {
-        throw lastError;
-      }
-      throw new ResponseStatusException(BAD_GATEWAY, "Не удалось выполнить распознавание растения");
+
+    var cached = aiTextCacheService.find(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.PLANT_IDENTIFY_TEXT,
+        runtime.analyticsModelKey(),
+        buildIdentifyCacheInput(imageBase64),
+        OpenRouterIdentifyResponse.class
+    );
+    if (cached.hit()) {
+      return cached.payload();
     }
+
+    JsonNode payload = callProvider(runtime, AiRequestKind.PHOTO_IDENTIFY, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -127,13 +93,13 @@ public class OpenRouterVisionService {
         user == null ? 0L : user.getId(),
         null,
         AiTextFeatureType.PLANT_IDENTIFY_TEXT,
-        modelToUse,
+        runtime.analyticsModelKey(),
         buildIdentifyCacheInput(imageBase64),
         response
     );
 
-    log.info("OpenRouter identify success: model={}, confidence={}, russian='{}', latin='{}'",
-        modelToUse, response.confidence(), response.russianName(), response.latinName());
+    log.info("AI identify success: provider={} model={}, confidence={}, russian='{}', latin='{}'",
+        runtime.provider(), runtime.model(), response.confidence(), response.russianName(), response.latinName());
 
     return response;
   }
@@ -152,36 +118,24 @@ public class OpenRouterVisionService {
       throw new ResponseStatusException(BAD_REQUEST, "plantName обязателен");
     }
 
-    JsonNode payload = null;
-    String modelToUse = null;
-    ResponseStatusException lastError = null;
-    for (String candidate : resolveDiagnoseModelCandidates(user)) {
-      var cached = aiTextCacheService.find(
-          user == null ? 0L : user.getId(),
-          null,
-          AiTextFeatureType.PLANT_DIAGNOSIS_TEXT,
-          candidate,
-          buildDiagnoseCacheInput(imageBase64, plantName, plantContext),
-          OpenRouterDiagnoseResponse.class
-      );
-      if (cached.hit()) {
-        return cached.payload();
-      }
-      try {
-        payload = callOpenRouter(user, candidate, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
-        modelToUse = candidate;
-        break;
-      } catch (ResponseStatusException ex) {
-        lastError = ex;
-        log.warn("OpenRouter diagnose failed for model='{}': {}", candidate, ex.getReason());
-      }
+    AiProviderSettingsService.RuntimeResolution runtime = aiProviderSettingsService.resolveVisionRuntime(user);
+    if (!runtime.hasApiKey()) {
+      throw new ResponseStatusException(BAD_GATEWAY, "AI provider API key не настроен");
     }
-    if (payload == null) {
-      if (lastError != null) {
-        throw lastError;
-      }
-      throw new ResponseStatusException(BAD_GATEWAY, "Не удалось выполнить диагностику растения");
+
+    var cached = aiTextCacheService.find(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.PLANT_DIAGNOSIS_TEXT,
+        runtime.analyticsModelKey(),
+        buildDiagnoseCacheInput(imageBase64, plantName, plantContext),
+        OpenRouterDiagnoseResponse.class
+    );
+    if (cached.hit()) {
+      return cached.payload();
     }
+
+    JsonNode payload = callProvider(runtime, AiRequestKind.PHOTO_DIAGNOSIS, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -218,27 +172,24 @@ public class OpenRouterVisionService {
         user == null ? 0L : user.getId(),
         null,
         AiTextFeatureType.PLANT_DIAGNOSIS_TEXT,
-        modelToUse,
+        runtime.analyticsModelKey(),
         buildDiagnoseCacheInput(imageBase64, plantName, plantContext),
         response
     );
 
-    log.info("OpenRouter diagnose success: model={}, confidence={}, problem='{}', urgency={}",
-        modelToUse, response.confidence(), response.problem(), response.urgency());
+    log.info("AI diagnose success: provider={} model={}, confidence={}, problem='{}', urgency={}",
+        runtime.provider(), runtime.model(), response.confidence(), response.problem(), response.urgency());
 
     return response;
   }
 
-  private JsonNode callOpenRouter(String model, String systemPrompt, String userPrompt, String imageBase64) {
-    return callOpenRouter(null, model, systemPrompt, userPrompt, imageBase64);
-  }
-
-  private JsonNode callOpenRouter(User user, String model, String systemPrompt, String userPrompt, String imageBase64) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (apiKey == null || apiKey.isBlank()) {
-      throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter API key не настроен");
-    }
-
+  private JsonNode callProvider(
+      AiProviderSettingsService.RuntimeResolution runtime,
+      AiRequestKind requestKind,
+      String systemPrompt,
+      String userPrompt,
+      String imageBase64
+  ) {
     Map<String, Object> userContent = Map.of(
         "role", "user",
         "content", List.of(
@@ -248,25 +199,19 @@ public class OpenRouterVisionService {
     );
 
     try {
-      return openRouterExecutionService.executeChatCompletion(
-          apiKey,
-          model,
-          OpenRouterModelKind.PHOTO,
-          baseUrl,
-          siteUrl,
-          appName,
+      return aiExecutionService.execute(
+          runtime,
+          requestKind,
           List.of(
               Map.of("role", "system", "content", systemPrompt),
               userContent
           )
-      );
-    } catch (ResponseStatusException ex) {
-      throw ex;
-    } catch (OpenRouterExecutionException ex) {
+      ).body();
+    } catch (OpenRouterExecutionException | OpenAiExecutionException ex) {
       throw new ResponseStatusException(BAD_GATEWAY, ex.getMessage());
     } catch (Exception ex) {
-      log.warn("OpenRouter request failed: {}", ex.getMessage());
-      throw new ResponseStatusException(BAD_GATEWAY, "Ошибка запроса к OpenRouter");
+      log.warn("AI vision request failed: {}", ex.getMessage());
+      throw new ResponseStatusException(BAD_GATEWAY, "Ошибка запроса к AI provider");
     }
   }
 
@@ -348,98 +293,6 @@ public class OpenRouterVisionService {
     return Math.max(min, Math.min(max, value));
   }
 
-  private String resolveIdentifyModel(User user) {
-    // OR3: модель для распознавания берём из глобальных настроек.
-    String globalIdentify = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
-    if (globalIdentify != null && !globalIdentify.isBlank()) {
-      return normalizeModelId(globalIdentify);
-    }
-    if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
-      return normalizeModelId(photoIdentifyModel);
-    }
-    if (plantModel != null && !plantModel.isBlank()) {
-      return normalizeModelId(plantModel);
-    }
-    if (fallbackModel != null && !fallbackModel.isBlank()) {
-      return normalizeModelId(fallbackModel);
-    }
-    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
-  }
-
-  private List<String> resolveIdentifyModelCandidates(User user) {
-    List<String> candidates = new ArrayList<>();
-    addCandidate(candidates, resolveIdentifyModel(user));
-    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
-    addCandidate(candidates, photoIdentifyModel);
-    addCandidate(candidates, plantModel);
-    addCandidate(candidates, fallbackModel);
-    return candidates;
-  }
-
-  private String resolveDiagnoseModel(User user) {
-    // OR3: модель для диагностики берём из глобальных настроек.
-    String globalDiagnose = openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel();
-    if (globalDiagnose != null && !globalDiagnose.isBlank()) {
-      return normalizeModelId(globalDiagnose);
-    }
-    String globalIdentify = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
-    if (globalIdentify != null && !globalIdentify.isBlank()) {
-      return normalizeModelId(globalIdentify);
-    }
-    if (photoDiagnoseModel != null && !photoDiagnoseModel.isBlank()) {
-      return normalizeModelId(photoDiagnoseModel);
-    }
-    if (photoIdentifyModel != null && !photoIdentifyModel.isBlank()) {
-      return normalizeModelId(photoIdentifyModel);
-    }
-    if (plantModel != null && !plantModel.isBlank()) {
-      return normalizeModelId(plantModel);
-    }
-    if (fallbackModel != null && !fallbackModel.isBlank()) {
-      return normalizeModelId(fallbackModel);
-    }
-    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
-  }
-
-  private List<String> resolveDiagnoseModelCandidates(User user) {
-    List<String> candidates = new ArrayList<>();
-    addCandidate(candidates, resolveDiagnoseModel(user));
-    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel());
-    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
-    addCandidate(candidates, photoDiagnoseModel);
-    addCandidate(candidates, photoIdentifyModel);
-    addCandidate(candidates, plantModel);
-    addCandidate(candidates, fallbackModel);
-    return candidates;
-  }
-
-  private void addCandidate(List<String> candidates, String raw) {
-    String normalized = normalizeModelId(raw);
-    if (normalized == null || normalized.isBlank()) {
-      return;
-    }
-    boolean exists = candidates.stream().anyMatch(item -> item.equalsIgnoreCase(normalized));
-    if (!exists) {
-      candidates.add(normalized);
-    }
-  }
-
-  private String normalizeModelId(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return "";
-    }
-    String cleaned = raw.trim();
-    String[] commaParts = cleaned.split(",");
-    if (commaParts.length > 0) {
-      cleaned = commaParts[0].trim();
-    }
-    String[] parts = cleaned.split("\\s+");
-    if (parts.length > 0) {
-      cleaned = parts[0].trim();
-    }
-    return cleaned;
-  }
-
   private String textOrNull(JsonNode node, String field) {
     String value = node.path(field).asText("").trim();
     return value.isEmpty() ? null : value;
@@ -503,23 +356,16 @@ public class OpenRouterVisionService {
       plantName = "комнатное растение";
     }
 
-    JsonNode payload = null;
-    String modelToUse = null;
-    ResponseStatusException lastError = null;
-
-    for (String candidate : resolveDiagnoseModelCandidates(user)) {
-      try {
-        payload = callOpenRouter(user, candidate, growthSummarySystemPrompt(), growthSummaryUserPrompt(plantName), imageBase64);
-        modelToUse = candidate;
-        break;
-      } catch (ResponseStatusException ex) {
-        lastError = ex;
-        log.warn("OpenRouter growth summary failed for model='{}': {}", candidate, ex.getReason());
-      }
+    AiProviderSettingsService.RuntimeResolution runtime = aiProviderSettingsService.resolveVisionRuntime(user);
+    if (!runtime.hasApiKey()) {
+      return null;
     }
 
-    if (payload == null) {
-      log.warn("Growth summary generation failed, returning null: {}", lastError != null ? lastError.getReason() : "no model worked");
+    JsonNode payload;
+    try {
+      payload = callProvider(runtime, AiRequestKind.GROWTH_SUMMARY, growthSummarySystemPrompt(), growthSummaryUserPrompt(plantName), imageBase64);
+    } catch (ResponseStatusException ex) {
+      log.warn("Growth summary generation failed: {}", ex.getReason());
       return null;
     }
 
@@ -530,7 +376,7 @@ public class OpenRouterVisionService {
       summary = summary.substring(0, 497) + "...";
     }
 
-    log.info("OpenRouter growth summary generated: model={}, length={}", modelToUse, summary.length());
+    log.info("AI growth summary generated: provider={} model={}, length={}", runtime.provider(), runtime.model(), summary.length());
     return summary;
   }
 

@@ -50,6 +50,9 @@ import type {
   AdminOpenRouterModelsDto,
   AdminOpenRouterAvailabilityCheckDto,
   OpenRouterRuntimeSettingsDto,
+  AiRuntimeSettingsDto,
+  AdminAiSettingsDto,
+  AdminAiAnalyticsDto,
   OpenRouterTypedTestDto,
   ChatAskResponse,
   PlantCareAdviceDto,
@@ -379,6 +382,90 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
 
   if (method === 'GET' && pathname === '/api/settings/openrouter') {
     return getDemoOpenRouterSettings() as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/settings/ai-runtime') {
+    const demo = getDemoOpenRouterSettings();
+    return {
+      activeTextProvider: 'OPENROUTER',
+      activeVisionProvider: 'OPENROUTER',
+      textModel: demo.textModel,
+      visionModel: demo.photoModel,
+      openrouterHasApiKey: false,
+      openaiHasApiKey: false
+    } as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/ai/settings') {
+    const demo = getDemoOpenRouterSettings();
+    return {
+      activeTextProvider: 'OPENROUTER',
+      activeVisionProvider: 'OPENROUTER',
+      openrouterTextModel: demo.textModel,
+      openrouterVisionModel: demo.photoModel,
+      openaiTextModel: 'gpt-4o-mini',
+      openaiVisionModel: 'gpt-4o-mini',
+      effectiveTextModel: demo.textModel,
+      effectiveVisionModel: demo.photoModel,
+      openrouterHasApiKey: false,
+      openaiHasApiKey: false,
+      openrouterApiKeyMasked: '',
+      openaiApiKeyMasked: '',
+      healthChecksEnabled: true,
+      retryCount: 2,
+      requestTimeoutMs: 15000,
+      aiTextCacheEnabled: true,
+      aiTextCacheTtlDays: 7,
+      aiTextCacheEntryCount: 0,
+      aiTextCacheLastCleanupAt: null,
+      updatedAt: new Date().toISOString(),
+      textModelAvailabilityStatus: 'UNKNOWN',
+      photoModelAvailabilityStatus: 'UNKNOWN'
+    } as T;
+  }
+
+  if (method === 'PUT' && pathname === '/api/admin/ai/settings') {
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    const demo = getDemoOpenRouterSettings();
+    return {
+      activeTextProvider: body.activeTextProvider ?? 'OPENROUTER',
+      activeVisionProvider: body.activeVisionProvider ?? 'OPENROUTER',
+      openrouterTextModel: body.openrouterTextModel ?? demo.textModel,
+      openrouterVisionModel: body.openrouterVisionModel ?? demo.photoModel,
+      openaiTextModel: body.openaiTextModel ?? 'gpt-4o-mini',
+      openaiVisionModel: body.openaiVisionModel ?? 'gpt-4o-mini',
+      effectiveTextModel: (body.activeTextProvider ?? 'OPENROUTER') === 'OPENAI'
+        ? (body.openaiTextModel ?? 'gpt-4o-mini')
+        : (body.openrouterTextModel ?? demo.textModel),
+      effectiveVisionModel: (body.activeVisionProvider ?? 'OPENROUTER') === 'OPENAI'
+        ? (body.openaiVisionModel ?? 'gpt-4o-mini')
+        : (body.openrouterVisionModel ?? demo.photoModel),
+      openrouterHasApiKey: false,
+      openaiHasApiKey: Boolean(body.openaiApiKey),
+      openrouterApiKeyMasked: '',
+      openaiApiKeyMasked: body.openaiApiKey ? '••••demo' : '',
+      healthChecksEnabled: body.healthChecksEnabled ?? true,
+      retryCount: body.retryCount ?? 2,
+      requestTimeoutMs: body.requestTimeoutMs ?? 15000,
+      aiTextCacheEnabled: body.aiTextCacheEnabled ?? true,
+      aiTextCacheTtlDays: body.aiTextCacheTtlDays ?? 7,
+      aiTextCacheEntryCount: 0,
+      aiTextCacheLastCleanupAt: null,
+      updatedAt: new Date().toISOString(),
+      textModelAvailabilityStatus: 'UNKNOWN',
+      photoModelAvailabilityStatus: 'UNKNOWN'
+    } as T;
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/ai/analytics') {
+    return {
+      period: query.get('period') ?? 'DAY',
+      from: new Date().toISOString(),
+      total: 0,
+      success: 0,
+      failed: 0,
+      rows: []
+    } as T;
   }
 
   if (method === 'GET' && pathname === '/api/assistant/history') {
@@ -1403,6 +1490,10 @@ export async function getOpenRouterRuntimeSettings(): Promise<OpenRouterRuntimeS
   return apiFetch<OpenRouterRuntimeSettingsDto>('/api/settings/openrouter', { method: 'GET' });
 }
 
+export async function getAiRuntimeSettings(): Promise<AiRuntimeSettingsDto> {
+  return apiFetch<AiRuntimeSettingsDto>('/api/settings/ai-runtime', { method: 'GET' });
+}
+
 export async function getAdminOpenRouterModels(): Promise<AdminOpenRouterModelsDto> {
   return apiFetch<AdminOpenRouterModelsDto>('/api/admin/openrouter/models', { method: 'GET' });
 }
@@ -1428,6 +1519,42 @@ export async function saveAdminOpenRouterModels(payload: {
     method: 'PUT',
     body: JSON.stringify(payload)
   });
+}
+
+export async function getAdminAiSettings(): Promise<AdminAiSettingsDto> {
+  return apiFetch<AdminAiSettingsDto>('/api/admin/ai/settings', { method: 'GET' });
+}
+
+export async function saveAdminAiSettings(payload: {
+  activeTextProvider?: 'OPENROUTER' | 'OPENAI' | null;
+  activeVisionProvider?: 'OPENROUTER' | 'OPENAI' | null;
+  openrouterTextModel?: string | null;
+  openrouterVisionModel?: string | null;
+  openaiTextModel?: string | null;
+  openaiVisionModel?: string | null;
+  openaiApiKey?: string | null;
+  textModelCheckIntervalMinutes?: number | null;
+  photoModelCheckIntervalMinutes?: number | null;
+  healthChecksEnabled?: boolean | null;
+  retryCount?: number | null;
+  retryBaseDelayMs?: number | null;
+  retryMaxDelayMs?: number | null;
+  requestTimeoutMs?: number | null;
+  degradedFailureThreshold?: number | null;
+  unavailableFailureThreshold?: number | null;
+  unavailableCooldownMinutes?: number | null;
+  recoveryRecheckIntervalMinutes?: number | null;
+  aiTextCacheEnabled?: boolean | null;
+  aiTextCacheTtlDays?: number | null;
+}): Promise<AdminAiSettingsDto> {
+  return apiFetch<AdminAiSettingsDto>('/api/admin/ai/settings', {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getAdminAiAnalytics(period: 'HOUR' | 'DAY' | 'WEEK' | 'MONTH'): Promise<AdminAiAnalyticsDto> {
+  return apiFetch<AdminAiAnalyticsDto>(`/api/admin/ai/analytics?period=${encodeURIComponent(period)}`, { method: 'GET' });
 }
 
 export async function checkAdminOpenRouterAvailability(type: 'text' | 'photo'): Promise<AdminOpenRouterAvailabilityCheckDto> {

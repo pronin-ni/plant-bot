@@ -236,8 +236,8 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     items: [
       {
         id: 'openrouter',
-        title: 'OpenRouter',
-        subtitle: 'Глобальные AI-модели (только админ)',
+        title: 'AI Providers',
+        subtitle: 'Провайдеры, модели и AI аналитика (только админ)',
         icon: Settings2,
         detailId: 'openrouter',
         action: 'dialog',
@@ -313,8 +313,8 @@ const DETAIL_META: Record<SettingsDetailId, { title: string; description: string
     description: 'Куда писать, если нужна помощь.'
   },
   openrouter: {
-    title: 'OpenRouter',
-    description: 'Глобальные модели и тесты для всей системы.'
+    title: 'AI Providers',
+    description: 'Активные AI провайдеры, модели и операционная аналитика запросов.'
   }
 };
 

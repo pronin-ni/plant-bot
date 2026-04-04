@@ -1,5 +1,6 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.AiRequestKind;
 import com.example.plantbot.domain.AiTextFeatureType;
 import com.example.plantbot.domain.OpenRouterCacheEntry;
 import com.example.plantbot.repository.OpenRouterCacheRepository;
@@ -50,27 +51,8 @@ public class OpenRouterPlantAdvisorService {
   private final ObjectMapper objectMapper;
   private final OpenRouterCacheRepository openRouterCacheRepository;
   private final AiTextCacheService aiTextCacheService;
-  private final OpenRouterUserSettingsService openRouterUserSettingsService;
-  private final OpenRouterModelCatalogService openRouterModelCatalogService;
-  private final OpenRouterExecutionService openRouterExecutionService;
-
-  @Value("${openrouter.model:}")
-  private String model;
-
-  @Value("${openrouter.model-plant:}")
-  private String plantModel;
-
-  @Value("${openrouter.model-chat:}")
-  private String chatModel;
-
-  @Value("${openrouter.base-url:https://openrouter.ai/api/v1/chat/completions}")
-  private String baseUrl;
-
-  @Value("${openrouter.site-url:}")
-  private String siteUrl;
-
-  @Value("${openrouter.app-name:plant-bot}")
-  private String appName;
+  private final AiProviderSettingsService aiProviderSettingsService;
+  private final AiExecutionService aiExecutionService;
 
   @Value("${openrouter.care-cache-ttl-minutes:10080}")
   private int careCacheTtlMinutes;
@@ -80,9 +62,6 @@ public class OpenRouterPlantAdvisorService {
 
   @Value("${openrouter.chat-cache-ttl-minutes:10080}")
   private int chatCacheTtlMinutes;
-
-  @Value("${openrouter.chat-fallback-enabled:true}")
-  private boolean chatFallbackEnabled;
 
   @Value("${openrouter.cache-max-entries:5000}")
   private int cacheMaxEntries;
@@ -95,52 +74,47 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<PlantLookupResult> suggestIntervalDays(User user, String plantName) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (plantName == null || plantName.isBlank() || apiKey == null || apiKey.isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
+    if (plantName == null || plantName.isBlank() || !runtime.hasApiKey()) {
       return Optional.empty();
     }
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
-            Map.of("role", "system", "content", intervalSystemPrompt()),
-            Map.of("role", "user", "content", userPrompt(plantName))
-        ));
-        if (body == null) {
-          continue;
-        }
-
-        String content = extractContent(body);
-        if (content.isEmpty()) {
-          continue;
-        }
-
-        String jsonPayload = sanitizeJsonPayload(content);
-        if (jsonPayload.isEmpty()) {
-          log.warn("OpenRouter returned empty payload after sanitization. input='{}', rawPreview='{}'",
-              plantName, preview(content));
-          continue;
-        }
-
-        JsonNode advice = objectMapper.readTree(jsonPayload);
-        int interval = advice.path("interval_days").asInt(0);
-        if (interval <= 0) {
-          continue;
-        }
-        interval = Math.max(1, Math.min(30, interval));
-
-        String normalizedName = advice.path("normalized_name").asText(plantName).trim();
-        if (normalizedName.isEmpty()) {
-          normalizedName = plantName;
-        }
-
-        PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
-        String source = "OpenRouter:" + modelToUse;
-        log.info("OpenRouter interval success. input='{}', normalized='{}', interval={}, type={}, rawPreview='{}'",
-            plantName, normalizedName, interval, suggestedType, preview(content));
-        return Optional.of(new PlantLookupResult(normalizedName, interval, source, suggestedType));
-      } catch (Exception ex) {
-        log.warn("OpenRouter suggestion failed for '{}'. model='{}': {}", plantName, modelToUse, ex.getMessage());
+    try {
+      JsonNode body = postMessages(
+          runtime,
+          AiRequestKind.PLANT_PROFILE_LOOKUP,
+          List.of(
+              Map.of("role", "system", "content", intervalSystemPrompt()),
+              Map.of("role", "user", "content", userPrompt(plantName))
+          )
+      );
+      String content = extractContent(body);
+      if (content.isEmpty()) {
+        return Optional.empty();
       }
+
+      String jsonPayload = sanitizeJsonPayload(content);
+      if (jsonPayload.isEmpty()) {
+        log.warn("AI provider returned empty payload after sanitization. input='{}', rawPreview='{}'",
+            plantName, preview(content));
+        return Optional.empty();
+      }
+
+      JsonNode advice = objectMapper.readTree(jsonPayload);
+      int interval = advice.path("interval_days").asInt(0);
+      if (interval <= 0) {
+        return Optional.empty();
+      }
+      interval = Math.max(1, Math.min(30, interval));
+
+      String normalizedName = advice.path("normalized_name").asText(plantName).trim();
+      if (normalizedName.isEmpty()) {
+        normalizedName = plantName;
+      }
+
+      PlantType suggestedType = parsePlantType(advice.path("type_hint").asText(""));
+      return Optional.of(new PlantLookupResult(normalizedName, interval, runtime.sourceLabel(), suggestedType));
+    } catch (Exception ex) {
+      log.warn("AI suggestion failed for '{}'. provider={} model='{}': {}", plantName, runtime.provider(), runtime.model(), ex.getMessage());
     }
     return Optional.empty();
   }
@@ -151,94 +125,90 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<PlantCareAdvice> suggestCareAdvice(Plant plant, double recommendedIntervalDays, boolean forceRefresh) {
     User user = plant == null ? null : plant.getUser();
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
     if (plant == null || plant.getName() == null || plant.getName().isBlank()) {
       return Optional.empty();
     }
-    if (apiKey == null || apiKey.isBlank()) {
+    if (!runtime.hasApiKey()) {
       return Optional.empty();
     }
 
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      if (!forceRefresh) {
-        var cached = aiTextCacheService.find(
-            user == null ? 0L : user.getId(),
-            plant.getId(),
-            AiTextFeatureType.PLANT_CARE_ADVICE,
-            modelToUse,
-            buildCareCacheInput(plant, recommendedIntervalDays),
-            PlantCareAdvice.class
-        );
-        if (cached.hit()) {
-          return Optional.of(cached.payload());
+    if (!forceRefresh) {
+      var cached = aiTextCacheService.find(
+          user == null ? 0L : user.getId(),
+          plant.getId(),
+          AiTextFeatureType.PLANT_CARE_ADVICE,
+          runtime.analyticsModelKey(),
+          buildCareCacheInput(plant, recommendedIntervalDays),
+          PlantCareAdvice.class
+      );
+      if (cached.hit()) {
+        return Optional.of(cached.payload());
+      }
+    }
+
+    try {
+      JsonNode body = postMessages(
+          runtime,
+          AiRequestKind.PLANT_CARE_ADVICE,
+          List.of(
+              Map.of("role", "system", "content", careAdviceSystemPrompt()),
+              Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
+          )
+      );
+      String content = extractContent(body);
+      if (content.isEmpty()) {
+        return Optional.empty();
+      }
+
+      String jsonPayload = sanitizeJsonPayload(content);
+      JsonNode advice = objectMapper.readTree(jsonPayload);
+
+      int cycle = advice.path("watering_cycle_days").asInt((int) Math.round(recommendedIntervalDays));
+      cycle = Math.max(1, Math.min(30, cycle));
+
+      List<String> additives = new ArrayList<>();
+      JsonNode additivesNode = advice.path("additives");
+      if (additivesNode.isArray()) {
+        for (JsonNode node : additivesNode) {
+          String value = node.asText("").trim();
+          if (!value.isEmpty()) {
+            additives.add(value);
+          }
+          if (additives.size() >= 3) {
+            break;
+          }
         }
       }
 
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
-            Map.of("role", "system", "content", careAdviceSystemPrompt()),
-            Map.of("role", "user", "content", careAdviceUserPrompt(plant, recommendedIntervalDays))
-        ));
-        if (body == null) {
-          continue;
-        }
-
-        String content = extractContent(body);
-        if (content.isEmpty()) {
-          continue;
-        }
-
-        String jsonPayload = sanitizeJsonPayload(content);
-        JsonNode advice = objectMapper.readTree(jsonPayload);
-
-        int cycle = advice.path("watering_cycle_days").asInt((int) Math.round(recommendedIntervalDays));
-        cycle = Math.max(1, Math.min(30, cycle));
-
-        List<String> additives = new ArrayList<>();
-        JsonNode additivesNode = advice.path("additives");
-        if (additivesNode.isArray()) {
-          for (JsonNode node : additivesNode) {
-            String value = node.asText("").trim();
-            if (!value.isEmpty()) {
-              additives.add(value);
-            }
-            if (additives.size() >= 3) {
-              break;
-            }
+      String soilType = normalizeAdviceNote(advice.path("soil_type").asText("").trim());
+      List<String> soilComposition = new ArrayList<>();
+      JsonNode soilCompositionNode = advice.path("soil_composition");
+      if (soilCompositionNode.isArray()) {
+        for (JsonNode node : soilCompositionNode) {
+          String value = normalizeAdviceNote(node.asText("").trim());
+          if (!value.isEmpty()) {
+            soilComposition.add(value);
+          }
+          if (soilComposition.size() >= 5) {
+            break;
           }
         }
-
-        String soilType = normalizeAdviceNote(advice.path("soil_type").asText("").trim());
-        List<String> soilComposition = new ArrayList<>();
-        JsonNode soilCompositionNode = advice.path("soil_composition");
-        if (soilCompositionNode.isArray()) {
-          for (JsonNode node : soilCompositionNode) {
-            String value = normalizeAdviceNote(node.asText("").trim());
-            if (!value.isEmpty()) {
-              soilComposition.add(value);
-            }
-            if (soilComposition.size() >= 5) {
-              break;
-            }
-          }
-        }
-
-        String note = normalizeAdviceNote(advice.path("note").asText("").trim());
-        PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, "OpenRouter:" + modelToUse);
-        aiTextCacheService.put(
-            user == null ? 0L : user.getId(),
-            plant.getId(),
-            AiTextFeatureType.PLANT_CARE_ADVICE,
-            modelToUse,
-            buildCareCacheInput(plant, recommendedIntervalDays),
-            result
-        );
-        log.info("OpenRouter care advice success. plant='{}', cycle={}, additives={}, soilType='{}', soilComposition={}, source='{}'",
-            plant.getName(), cycle, additives, soilType, soilComposition, result.source());
-        return Optional.of(result);
-      } catch (Exception ex) {
-        log.warn("OpenRouter care advice failed for '{}'. model='{}': {}", plant.getName(), modelToUse, ex.getMessage());
       }
+
+      String note = normalizeAdviceNote(advice.path("note").asText("").trim());
+      PlantCareAdvice result = new PlantCareAdvice(cycle, additives, soilType, soilComposition, note, runtime.sourceLabel());
+      aiTextCacheService.put(
+          user == null ? 0L : user.getId(),
+          plant.getId(),
+          AiTextFeatureType.PLANT_CARE_ADVICE,
+          runtime.analyticsModelKey(),
+          buildCareCacheInput(plant, recommendedIntervalDays),
+          result
+      );
+      return Optional.of(result);
+    } catch (Exception ex) {
+      log.warn("AI care advice failed for '{}'. provider={} model='{}': {}", plant.getName(), runtime.provider(), runtime.model(), ex.getMessage());
     }
 
     return Optional.empty();
@@ -246,84 +216,78 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<AIWateringProfile> suggestWateringProfile(Plant plant, WeatherData weather, boolean outdoor) {
     User user = plant == null ? null : plant.getUser();
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (plant == null || apiKey == null || apiKey.isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
+    if (plant == null || !runtime.hasApiKey()) {
       return Optional.empty();
     }
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      String cacheKey = buildWateringProfileCacheKey(modelToUse, plant, weather, outdoor);
-      Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
-      if (cached != null) {
-        return cached;
-      }
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
-            Map.of("role", "system", "content", wateringProfileSystemPrompt()),
-            Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
-        ));
-        if (body == null) {
-          putWateringProfileCache(cacheKey, Optional.empty());
-          continue;
-        }
-        String content = extractContent(body);
-        if (content.isEmpty()) {
-          putWateringProfileCache(cacheKey, Optional.empty());
-          continue;
-        }
-        JsonNode profile = objectMapper.readTree(sanitizeJsonPayload(content));
-        double intervalFactor = profile.path("interval_factor").asDouble(1.0);
-        double waterFactor = profile.path("water_factor").asDouble(1.0);
-        if (intervalFactor <= 0 || waterFactor <= 0) {
-          putWateringProfileCache(cacheKey, Optional.empty());
-          continue;
-        }
-        intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
-        waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
-        AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, "OpenRouter:" + modelToUse);
-        putWateringProfileCache(cacheKey, Optional.of(value));
-        return Optional.of(value);
-      } catch (Exception ex) {
+    String cacheKey = buildWateringProfileCacheKey(runtime.analyticsModelKey(), plant, weather, outdoor);
+    Optional<AIWateringProfile> cached = getWateringProfileCache(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
+    try {
+      JsonNode body = postMessages(
+          runtime,
+          AiRequestKind.PLANT_WATERING_PROFILE,
+          List.of(
+              Map.of("role", "system", "content", wateringProfileSystemPrompt()),
+              Map.of("role", "user", "content", wateringProfileUserPrompt(plant, weather, outdoor))
+          )
+      );
+      String content = extractContent(body);
+      if (content.isEmpty()) {
         putWateringProfileCache(cacheKey, Optional.empty());
-        log.warn("OpenRouter watering profile failed for '{}'. model='{}': {}", plant.getName(), modelToUse, ex.getMessage());
+        return Optional.empty();
       }
+      JsonNode profile = objectMapper.readTree(sanitizeJsonPayload(content));
+      double intervalFactor = profile.path("interval_factor").asDouble(1.0);
+      double waterFactor = profile.path("water_factor").asDouble(1.0);
+      if (intervalFactor <= 0 || waterFactor <= 0) {
+        putWateringProfileCache(cacheKey, Optional.empty());
+        return Optional.empty();
+      }
+      intervalFactor = Math.max(0.6, Math.min(1.6, intervalFactor));
+      waterFactor = Math.max(0.5, Math.min(2.0, waterFactor));
+      AIWateringProfile value = new AIWateringProfile(intervalFactor, waterFactor, runtime.sourceLabel());
+      putWateringProfileCache(cacheKey, Optional.of(value));
+      return Optional.of(value);
+    } catch (Exception ex) {
+      putWateringProfileCache(cacheKey, Optional.empty());
+      log.warn("AI watering profile failed for '{}'. provider={} model='{}': {}", plant.getName(), runtime.provider(), runtime.model(), ex.getMessage());
     }
     return Optional.empty();
   }
 
   public Optional<WizardWateringRecommendation> suggestWizardRecommendation(User user,
                                                                             WizardRecommendInput input) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (apiKey == null || apiKey.isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
+    if (!runtime.hasApiKey()) {
       return Optional.empty();
     }
     if (input == null || input.plantName() == null || input.plantName().isBlank()) {
       return Optional.empty();
     }
 
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      var cached = aiTextCacheService.find(
-          user == null ? 0L : user.getId(),
-          null,
-          AiTextFeatureType.WIZARD_WATERING_RECOMMENDATION,
-          modelToUse,
-          buildWizardRecommendationCacheInput(input),
-          WizardWateringRecommendation.class
-      );
-      if (cached.hit()) {
-        return Optional.of(cached.payload());
-      }
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+    var cached = aiTextCacheService.find(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.WIZARD_WATERING_RECOMMENDATION,
+        runtime.analyticsModelKey(),
+        buildWizardRecommendationCacheInput(input),
+        WizardWateringRecommendation.class
+    );
+    if (cached.hit()) {
+      return Optional.of(cached.payload());
+    }
+    try {
+      JsonNode body = postMessages(runtime, AiRequestKind.WIZARD_RECOMMENDATION, List.of(
             Map.of("role", "system", "content", wizardRecommendSystemPrompt()),
             Map.of("role", "user", "content", wizardRecommendUserPrompt(input))
-        ));
-        if (body == null) {
-          continue;
-        }
+      ));
 
         String content = extractContent(body);
         if (content.isEmpty()) {
-          continue;
+          return Optional.empty();
         }
 
         JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
@@ -338,7 +302,7 @@ public class OpenRouterPlantAdvisorService {
             10_000
         );
         if (frequency <= 0 || volumeMl <= 0) {
-          continue;
+          return Optional.empty();
         }
 
         String summary = normalizeAdviceNote(json.path("summary").asText(""));
@@ -366,49 +330,44 @@ public class OpenRouterPlantAdvisorService {
             user == null ? 0L : user.getId(),
             null,
             AiTextFeatureType.WIZARD_WATERING_RECOMMENDATION,
-            modelToUse,
+            runtime.analyticsModelKey(),
             buildWizardRecommendationCacheInput(input),
             result
         );
         return Optional.of(result);
-      } catch (Exception ex) {
-        log.warn("OpenRouter wizard recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
-      }
+    } catch (Exception ex) {
+      log.warn("AI wizard recommend failed for '{}'. provider={} model='{}': {}", preview(input.plantName()), runtime.provider(), runtime.model(), ex.getMessage());
     }
 
     return Optional.empty();
   }
 
   public Optional<SeedCareRecommendation> suggestSeedRecommendation(User user, SeedRecommendInput input) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (apiKey == null || apiKey.isBlank() || input == null || input.plantName() == null || input.plantName().isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
+    if (!runtime.hasApiKey() || input == null || input.plantName() == null || input.plantName().isBlank()) {
       return Optional.empty();
     }
 
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      var cached = aiTextCacheService.find(
-          user == null ? 0L : user.getId(),
-          null,
-          AiTextFeatureType.SEED_RECOMMENDATION,
-          modelToUse,
-          buildSeedRecommendationCacheInput(input),
-          SeedCareRecommendation.class
-      );
-      if (cached.hit()) {
-        return Optional.of(cached.payload());
-      }
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+    var cached = aiTextCacheService.find(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.SEED_RECOMMENDATION,
+        runtime.analyticsModelKey(),
+        buildSeedRecommendationCacheInput(input),
+        SeedCareRecommendation.class
+    );
+    if (cached.hit()) {
+      return Optional.of(cached.payload());
+    }
+    try {
+      JsonNode body = postMessages(runtime, AiRequestKind.SEED_RECOMMENDATION, List.of(
             Map.of("role", "system", "content", seedRecommendSystemPrompt()),
             Map.of("role", "user", "content", seedRecommendUserPrompt(input))
-        ));
-        if (body == null) {
-          continue;
-        }
+      ));
 
         String content = extractContent(body);
         if (content.isEmpty()) {
-          continue;
+          return Optional.empty();
         }
 
         JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
@@ -430,7 +389,7 @@ public class OpenRouterPlantAdvisorService {
         List<String> warnings = parseAdviceList(json.path("warnings"), 5);
 
         SeedCareRecommendation result = new SeedCareRecommendation(
-            "AI",
+            runtime.sourceLabel(),
             careMode,
             checkIntervalHours,
             wateringMode,
@@ -444,55 +403,50 @@ public class OpenRouterPlantAdvisorService {
             user == null ? 0L : user.getId(),
             null,
             AiTextFeatureType.SEED_RECOMMENDATION,
-            modelToUse,
+            runtime.analyticsModelKey(),
             buildSeedRecommendationCacheInput(input),
             result
         );
         return Optional.of(result);
-      } catch (Exception ex) {
-        log.warn("OpenRouter seed recommend failed for '{}'. model='{}': {}", preview(input.plantName()), modelToUse, ex.getMessage());
-      }
+    } catch (Exception ex) {
+      log.warn("AI seed recommend failed for '{}'. provider={} model='{}': {}", preview(input.plantName()), runtime.provider(), runtime.model(), ex.getMessage());
     }
 
     return Optional.empty();
   }
 
   public Optional<PlantSearchSuggestions> suggestPlantSearch(User user, String query, PlantCategory category) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (apiKey == null || apiKey.isBlank() || query == null || query.isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
+    if (!runtime.hasApiKey() || query == null || query.isBlank()) {
       return Optional.empty();
     }
 
-    for (String modelToUse : resolveTextModelCandidates(user)) {
-      var cached = aiTextCacheService.find(
-          user == null ? 0L : user.getId(),
-          null,
-          AiTextFeatureType.PLANT_SEARCH_SUGGESTIONS_AI,
-          modelToUse,
-          buildPlantSearchCacheInput(query, category),
-          PlantSearchSuggestions.class
-      );
-      if (cached.hit()) {
-        return Optional.of(cached.payload());
-      }
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, List.of(
+    var cached = aiTextCacheService.find(
+        user == null ? 0L : user.getId(),
+        null,
+        AiTextFeatureType.PLANT_SEARCH_SUGGESTIONS_AI,
+        runtime.analyticsModelKey(),
+        buildPlantSearchCacheInput(query, category),
+        PlantSearchSuggestions.class
+    );
+    if (cached.hit()) {
+      return Optional.of(cached.payload());
+    }
+    try {
+      JsonNode body = postMessages(runtime, AiRequestKind.PLANT_SEARCH, List.of(
             Map.of("role", "system", "content", plantSearchSystemPrompt()),
             Map.of("role", "user", "content", plantSearchUserPrompt(query, category))
-        ));
-        if (body == null) {
-          continue;
-        }
+      ));
 
         String content = extractContent(body);
         if (content.isEmpty()) {
-          continue;
+          return Optional.empty();
         }
 
         JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
         JsonNode items = json.path("suggestions");
         if (!items.isArray()) {
-          continue;
+          return Optional.empty();
         }
 
         List<PlantSearchSuggestion> suggestions = new ArrayList<>();
@@ -511,20 +465,19 @@ public class OpenRouterPlantAdvisorService {
         }
 
         if (!suggestions.isEmpty()) {
-          PlantSearchSuggestions result = new PlantSearchSuggestions("AI", suggestions);
+          PlantSearchSuggestions result = new PlantSearchSuggestions(runtime.provider().name(), suggestions);
           aiTextCacheService.put(
               user == null ? 0L : user.getId(),
               null,
               AiTextFeatureType.PLANT_SEARCH_SUGGESTIONS_AI,
-              modelToUse,
+              runtime.analyticsModelKey(),
               buildPlantSearchCacheInput(query, category),
               result
           );
           return Optional.of(result);
         }
-      } catch (Exception ex) {
-        log.warn("OpenRouter plant search failed for '{}'. model='{}': {}", preview(query), modelToUse, ex.getMessage());
-      }
+    } catch (Exception ex) {
+      log.warn("AI plant search failed for '{}'. provider={} model='{}': {}", preview(query), runtime.provider(), runtime.model(), ex.getMessage());
     }
 
     return Optional.empty();
@@ -539,48 +492,43 @@ public class OpenRouterPlantAdvisorService {
   }
 
   public Optional<ChatAnswer> answerGardeningQuestion(User user, String question, String photoBase64) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    if (question == null || question.isBlank() || apiKey == null || apiKey.isBlank()) {
+    if (question == null || question.isBlank()) {
       return Optional.empty();
     }
 
     String normalizedQuestion = question.trim();
     String normalizedPhoto = normalizePhotoBase64(photoBase64);
     boolean hasPhoto = normalizedPhoto != null;
-    for (String modelToUse : resolveChatModelCandidates(user, hasPhoto)) {
-      String cacheKey = buildChatCacheKey(modelToUse, normalizedQuestion);
-      if (!hasPhoto) {
-        Optional<String> cached = getChatAnswerCache(cacheKey);
-        if (cached != null) {
-          log.info("OpenRouter chat cache hit. model='{}', question='{}', hasAnswer={}",
-              modelToUse, preview(normalizedQuestion), cached.isPresent());
-          if (cached.isPresent()) {
-            return Optional.of(new ChatAnswer(cached.get(), modelToUse));
-          }
-          continue;
-        }
-      }
+    AiProviderSettingsService.RuntimeResolution runtime = resolveChatRuntime(user, hasPhoto);
+    if (!runtime.hasApiKey()) {
+      return Optional.empty();
+    }
 
-      try {
-        JsonNode body = postMessages(apiKey, modelToUse, buildChatMessages(normalizedQuestion, normalizedPhoto));
-        if (body == null) {
-          continue;
+    String cacheKey = buildChatCacheKey(runtime.analyticsModelKey(), normalizedQuestion);
+    if (!hasPhoto) {
+      Optional<String> cached = getChatAnswerCache(cacheKey);
+      if (cached != null) {
+        if (cached.isPresent()) {
+          return Optional.of(new ChatAnswer(cached.get(), runtime.sourceLabel()));
         }
-        String content = extractContent(body);
-        if (content.isEmpty()) {
-          continue;
-        }
-        String answer = content.trim();
-        if (!hasPhoto) {
-          putChatAnswerCache(cacheKey, Optional.of(answer));
-        }
-        log.info("OpenRouter chat success. model='{}', hasPhoto={}, question='{}', answerPreview='{}'",
-            modelToUse, hasPhoto, preview(normalizedQuestion), preview(answer));
-        return Optional.of(new ChatAnswer(answer, modelToUse));
-      } catch (Exception ex) {
-        log.warn("OpenRouter chat failed. model='{}', hasPhoto={}, question='{}': {}",
-            modelToUse, hasPhoto, preview(normalizedQuestion), ex.getMessage());
+        return Optional.empty();
       }
+    }
+
+    try {
+      JsonNode body = postMessages(runtime, AiRequestKind.ASSISTANT_CHAT, buildChatMessages(normalizedQuestion, normalizedPhoto));
+      String content = extractContent(body);
+      if (content.isEmpty()) {
+        return Optional.empty();
+      }
+      String answer = content.trim();
+      if (!hasPhoto) {
+        putChatAnswerCache(cacheKey, Optional.of(answer));
+      }
+      return Optional.of(new ChatAnswer(answer, runtime.sourceLabel()));
+    } catch (Exception ex) {
+      log.warn("AI chat failed. provider={} model='{}', hasPhoto={}, question='{}': {}",
+          runtime.provider(), runtime.model(), hasPhoto, preview(normalizedQuestion), ex.getMessage());
     }
 
     return Optional.empty();
@@ -668,16 +616,20 @@ public class OpenRouterPlantAdvisorService {
     );
   }
 
-  private JsonNode postMessages(String apiKey, String modelName, List<Map<String, Object>> messages) {
-    return openRouterExecutionService.executeChatCompletion(
-        apiKey,
-        modelName,
-        OpenRouterModelKind.TEXT,
-        baseUrl,
-        siteUrl,
-        appName,
-        messages
-    );
+  private AiProviderSettingsService.RuntimeResolution resolveTextRuntime(User user) {
+    return aiProviderSettingsService.resolveTextRuntime(user);
+  }
+
+  private AiProviderSettingsService.RuntimeResolution resolveChatRuntime(User user, boolean hasPhoto) {
+    return hasPhoto ? aiProviderSettingsService.resolveVisionRuntime(user) : aiProviderSettingsService.resolveTextRuntime(user);
+  }
+
+  private JsonNode postMessages(
+      AiProviderSettingsService.RuntimeResolution runtime,
+      AiRequestKind requestKind,
+      List<Map<String, Object>> messages
+  ) {
+    return aiExecutionService.execute(runtime, requestKind, messages).body();
   }
 
   private String extractContent(JsonNode body) {
@@ -1108,16 +1060,6 @@ public class OpenRouterPlantAdvisorService {
     }
   }
 
-  private String buildCareCacheKey(String modelName, Plant plant, double recommendedIntervalDays) {
-    String modelKey = (modelName == null || modelName.isBlank()) ? "model:unknown" : "model:" + modelName.trim().toLowerCase();
-    return (NS_CARE + "|"
-        + modelKey + "|"
-        + plant.getName().trim().toLowerCase() + "|"
-        + plant.getType().name() + "|"
-        + plant.getPotVolumeLiters() + "|"
-        + Math.round(recommendedIntervalDays * 10.0) / 10.0);
-  }
-
   private String buildWateringProfileCacheKey(String modelName, Plant plant, WeatherData weather, boolean outdoor) {
     String modelKey = (modelName == null || modelName.isBlank()) ? "model:unknown" : "model:" + modelName.trim().toLowerCase();
     double t = weather == null ? 20.0 : Math.round(weather.temperatureC());
@@ -1137,104 +1079,6 @@ public class OpenRouterPlantAdvisorService {
     return NS_CHAT + "|" + modelKey + "|" + normalizedQuestion;
   }
 
-  private String resolveTextModel(User user) {
-    // ORB2: для текстовых задач всегда text-модель из глобальных настроек.
-    String globalText = openRouterUserSettingsService.resolveGlobalModels().chatModel();
-    if (globalText != null && !globalText.isBlank()) {
-      return normalizeModelId(globalText);
-    }
-    if (chatModel != null && !chatModel.isBlank()) {
-      return normalizeModelId(chatModel);
-    }
-    if (plantModel != null && !plantModel.isBlank()) {
-      return normalizeModelId(plantModel);
-    }
-    if (model != null && !model.isBlank()) {
-      return normalizeModelId(model);
-    }
-    return normalizeModelId(openRouterModelCatalogService.resolveDynamicTextFallback(user));
-  }
-
-  private String resolvePhotoModel(User user) {
-    // ORB2: для задач с фото всегда vision-модель из глобальных настроек.
-    String globalPhoto = openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel();
-    if (globalPhoto != null && !globalPhoto.isBlank()) {
-      return normalizeModelId(globalPhoto);
-    }
-    if (plantModel != null && !plantModel.isBlank()) {
-      return normalizeModelId(plantModel);
-    }
-    if (model != null && !model.isBlank()) {
-      return normalizeModelId(model);
-    }
-    return normalizeModelId(openRouterModelCatalogService.resolveDynamicPhotoFallback(user));
-  }
-
-  private List<String> resolveTextModelCandidates(User user) {
-    List<String> models = new ArrayList<>();
-    addModelCandidate(models, resolveTextModel(user));
-    addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().chatModel());
-    if (chatModel != null && !chatModel.isBlank()) {
-      addModelCandidate(models, chatModel);
-    }
-    if (plantModel != null && !plantModel.isBlank()) {
-      addModelCandidate(models, plantModel);
-    }
-    if (model != null && !model.isBlank()) {
-      addModelCandidate(models, model);
-    }
-    if (!chatFallbackEnabled) {
-      return models.isEmpty() ? List.of() : List.of(models.get(0));
-    }
-
-    return models;
-  }
-
-  private String resolveChatModel(User user, boolean hasPhoto) {
-    if (hasPhoto) {
-      return resolvePhotoModel(user);
-    }
-    return resolveTextModel(user);
-  }
-
-  private List<String> resolveChatModelCandidates(User user, boolean hasPhoto) {
-    List<String> models = new ArrayList<>();
-    addModelCandidate(models, resolveChatModel(user, hasPhoto));
-
-    if (hasPhoto) {
-      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().photoDiagnosisModel());
-      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().photoRecognitionModel());
-    } else {
-      addModelCandidate(models, openRouterUserSettingsService.resolveGlobalModels().chatModel());
-    }
-
-    if (!hasPhoto && chatModel != null && !chatModel.isBlank()) {
-      addModelCandidate(models, chatModel);
-    }
-    if (hasPhoto && plantModel != null && !plantModel.isBlank()) {
-      addModelCandidate(models, plantModel);
-    }
-    if (model != null && !model.isBlank()) {
-      addModelCandidate(models, model);
-    }
-    if (!chatFallbackEnabled) {
-      return models.isEmpty() ? List.of() : List.of(models.get(0));
-    }
-
-    return models;
-  }
-
-  private void addModelCandidate(List<String> models, String raw) {
-    String normalized = normalizeModelId(raw);
-    if (normalized == null || normalized.isBlank()) {
-      return;
-    }
-    boolean exists = models.stream().anyMatch(item -> item.equalsIgnoreCase(normalized));
-    if (!exists) {
-      models.add(normalized);
-    }
-  }
-
   private String normalizePhotoBase64(String raw) {
     if (raw == null) {
       return null;
@@ -1247,22 +1091,6 @@ public class OpenRouterPlantAdvisorService {
       return null;
     }
     return trimmed;
-  }
-
-  private String normalizeModelId(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return "";
-    }
-    String cleaned = raw.trim();
-    String[] commaParts = cleaned.split(",");
-    if (commaParts.length > 0) {
-      cleaned = commaParts[0].trim();
-    }
-    String[] parts = cleaned.split("\\s+");
-    if (parts.length > 0) {
-      cleaned = parts[0].trim();
-    }
-    return cleaned;
   }
 
   private Optional<PlantCareAdvice> getCareAdviceCache(String key) {

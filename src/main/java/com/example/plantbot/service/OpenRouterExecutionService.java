@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,6 +27,15 @@ public class OpenRouterExecutionService {
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
   private final OpenRouterModelHealthService openRouterModelHealthService;
   private final PerformanceMetricsService performanceMetricsService;
+
+  @Value("${openrouter.base-url:https://openrouter.ai/api/v1/chat/completions}")
+  private String defaultBaseUrl;
+
+  @Value("${openrouter.site-url:}")
+  private String defaultSiteUrl;
+
+  @Value("${openrouter.app-name:plant-bot}")
+  private String defaultAppName;
 
   public JsonNode executeChatCompletion(
       String apiKey,
@@ -58,7 +68,14 @@ public class OpenRouterExecutionService {
     for (int attempt = 0; attempt <= retryCount; attempt += 1) {
       long startedAt = System.nanoTime();
       try {
-        JsonNode body = doExecute(apiKey, modelName, baseUrl, siteUrl, appName, messages);
+        JsonNode body = doExecute(
+            apiKey,
+            modelName,
+            normalizeBaseUrl(baseUrl),
+            normalizeHeaderValue(siteUrl, defaultSiteUrl),
+            normalizeHeaderValue(appName, defaultAppName),
+            messages
+        );
         if (body == null) {
           throw new OpenRouterExecutionException(OpenRouterFailureType.MALFORMED_RESPONSE, true, "OpenRouter вернул пустой ответ");
         }
@@ -179,5 +196,19 @@ public class OpenRouterExecutionService {
 
   private String safeMessage(Exception ex) {
     return ex == null || ex.getMessage() == null ? "unknown" : ex.getMessage();
+  }
+
+  private String normalizeBaseUrl(String value) {
+    if (value != null && !value.isBlank()) {
+      return value.trim();
+    }
+    return defaultBaseUrl;
+  }
+
+  private String normalizeHeaderValue(String value, String fallback) {
+    if (value != null && !value.isBlank()) {
+      return value.trim();
+    }
+    return fallback == null || fallback.isBlank() ? null : fallback.trim();
   }
 }

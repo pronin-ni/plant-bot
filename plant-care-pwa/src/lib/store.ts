@@ -127,16 +127,24 @@ export const useOfflineStore = create<OfflineState>((set) => ({
 }));
 
 interface OpenRouterModelsState {
+  activeTextProvider: string;
+  activeVisionProvider: string;
   textModel: string;
   photoModel: string;
   hasApiKey: boolean;
+  openrouterHasApiKey: boolean;
+  openaiHasApiKey: boolean;
   isLoaded: boolean;
   source: 'default' | 'server';
   updatedAt?: string;
   setModels: (payload: {
+    activeTextProvider?: string;
+    activeVisionProvider?: string;
     textModel?: string;
     photoModel?: string;
     hasApiKey?: boolean;
+    openrouterHasApiKey?: boolean;
+    openaiHasApiKey?: boolean;
     source: 'default' | 'server';
     updatedAt?: string;
   }) => void;
@@ -144,26 +152,38 @@ interface OpenRouterModelsState {
 }
 
 export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => ({
+  activeTextProvider: 'OPENROUTER',
+  activeVisionProvider: 'OPENROUTER',
   textModel: '',
   photoModel: '',
   hasApiKey: false,
+  openrouterHasApiKey: false,
+  openaiHasApiKey: false,
   isLoaded: false,
   source: 'default',
   updatedAt: undefined,
-  setModels: ({ textModel, photoModel, hasApiKey, source, updatedAt }) =>
+  setModels: ({ activeTextProvider, activeVisionProvider, textModel, photoModel, hasApiKey, openrouterHasApiKey, openaiHasApiKey, source, updatedAt }) =>
     set({
+      activeTextProvider: activeTextProvider?.trim() || 'OPENROUTER',
+      activeVisionProvider: activeVisionProvider?.trim() || 'OPENROUTER',
       textModel: textModel?.trim() || '',
       photoModel: photoModel?.trim() || '',
       hasApiKey: Boolean(hasApiKey),
+      openrouterHasApiKey: Boolean(openrouterHasApiKey),
+      openaiHasApiKey: Boolean(openaiHasApiKey),
       isLoaded: true,
       source,
       updatedAt
     }),
   resetToDefault: () =>
     set({
+      activeTextProvider: 'OPENROUTER',
+      activeVisionProvider: 'OPENROUTER',
       textModel: '',
       photoModel: '',
       hasApiKey: false,
+      openrouterHasApiKey: false,
+      openaiHasApiKey: false,
       isLoaded: true,
       source: 'default',
       updatedAt: undefined

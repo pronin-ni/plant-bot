@@ -5,6 +5,7 @@ import com.example.plantbot.controller.dto.CalendarEventResponse;
 import com.example.plantbot.controller.dto.CalendarSyncRequest;
 import com.example.plantbot.controller.dto.CalendarSyncResponse;
 import com.example.plantbot.controller.dto.CityUpdateRequest;
+import com.example.plantbot.controller.dto.AiRuntimeSettingsResponse;
 import com.example.plantbot.controller.dto.ChatAskRequest;
 import com.example.plantbot.controller.dto.ChatAskResponse;
 import com.example.plantbot.controller.dto.CreatePlantRequest;
@@ -42,6 +43,7 @@ import com.example.plantbot.service.PhotoUrlSignerService;
 import com.example.plantbot.service.OpenRouterPlantAdvisorService;
 import com.example.plantbot.service.OpenRouterUserSettingsService;
 import com.example.plantbot.service.OpenRouterModelCatalogService;
+import com.example.plantbot.service.AiProviderSettingsService;
 import com.example.plantbot.service.PlantMutationService;
 import com.example.plantbot.service.PlantAvatarService;
 import com.example.plantbot.service.PlantService;
@@ -135,6 +137,7 @@ public class AppController {
   private final OpenRouterPlantAdvisorService openRouterPlantAdvisorService;
   private final OpenRouterUserSettingsService openRouterUserSettingsService;
   private final OpenRouterModelCatalogService openRouterModelCatalogService;
+  private final AiProviderSettingsService aiProviderSettingsService;
   private final PlantAvatarService plantAvatarService;
   private final WeatherService weatherService;
   private final SeedLifecycleService seedLifecycleService;
@@ -574,7 +577,7 @@ public class AppController {
     var answer = openRouterPlantAdvisorService.answerGardeningQuestion(user, question, request.photoBase64());
     if (answer.isEmpty()) {
       return new ChatAskResponse(false,
-          "Не удалось получить ответ от OpenRouter. Попросите администратора проверить глобальный ключ/модели и лимиты.",
+          "Не удалось получить ответ от AI provider. Попросите администратора проверить активного провайдера, ключ и модели.",
           null);
     }
     assistantChatHistoryService.saveAndTrim(user, question, answer.get().answer(), answer.get().model());
@@ -673,6 +676,27 @@ public class AppController {
     return new AuthValidateResponse(true, String.valueOf(user.getTelegramId()), user.getUsername(), user.getFirstName(), user.getCityDisplayName() == null ? user.getCity() : user.getCityDisplayName(), isAdmin(user));
   }
 
+  @GetMapping("/settings/ai-runtime")
+  public AiRuntimeSettingsResponse getAiRuntimeSettings(
+      @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
+      Authentication authentication
+  ) {
+    User user = currentUserService.resolve(authentication, initData);
+    if (user.getId() == null) {
+      throw new IllegalStateException("Unauthorized user context");
+    }
+
+    var summary = aiProviderSettingsService.summarize(aiProviderSettingsService.getOrCreate(), user);
+    return new AiRuntimeSettingsResponse(
+        summary.activeTextProvider().name(),
+        summary.activeVisionProvider().name(),
+        summary.effectiveTextModel(),
+        summary.effectiveVisionModel(),
+        summary.openrouterHasApiKey(),
+        summary.openaiHasApiKey()
+    );
+  }
+
   @GetMapping("/settings/openrouter")
   public OpenRouterRuntimeSettingsResponse getOpenRouterRuntimeSettings(
       @RequestHeader(name = "X-Telegram-Init-Data", required = false) String initData,
@@ -683,23 +707,11 @@ public class AppController {
       throw new IllegalStateException("Unauthorized user context");
     }
 
-    var models = openRouterUserSettingsService.resolveGlobalModels();
-    String apiKey = openRouterUserSettingsService.resolveApiKey(user);
-    boolean hasApiKey = apiKey != null && !apiKey.isBlank();
-    String effectiveTextModel = firstNonBlank(
-        models.chatModel(),
-        openRouterModelCatalogService.resolveConfiguredTextFallback(),
-        hasApiKey ? openRouterModelCatalogService.resolveDynamicTextFallback(user) : null
-    );
-    String effectivePhotoModel = firstNonBlank(
-        models.photoRecognitionModel(),
-        openRouterModelCatalogService.resolveConfiguredPhotoFallback(),
-        hasApiKey ? openRouterModelCatalogService.resolveDynamicPhotoFallback(user) : null
-    );
+    var summary = aiProviderSettingsService.summarize(aiProviderSettingsService.getOrCreate(), user);
     return new OpenRouterRuntimeSettingsResponse(
-        effectiveTextModel,
-        effectivePhotoModel,
-        hasApiKey
+        summary.effectiveTextModel(),
+        summary.effectiveVisionModel(),
+        summary.openrouterHasApiKey() || summary.openaiHasApiKey()
     );
   }
 

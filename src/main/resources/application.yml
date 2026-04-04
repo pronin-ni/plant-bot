@@ -64,6 +64,16 @@ openrouter:
     recovery-recheck-interval-minutes: ${OPENROUTER_RESILIENCE_RECOVERY_RECHECK_INTERVAL_MINUTES:5}
     health-checks-enabled: ${OPENROUTER_RESILIENCE_HEALTH_CHECKS_ENABLED:true}
 
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1/chat/completions}
+  model-text: ${OPENAI_MODEL_TEXT:gpt-4o-mini}
+  model-vision: ${OPENAI_MODEL_VISION:gpt-4o-mini}
+  request-timeout-ms: ${OPENAI_REQUEST_TIMEOUT_MS:15000}
+  retry-count: ${OPENAI_RETRY_COUNT:2}
+  retry-base-delay-ms: ${OPENAI_RETRY_BASE_DELAY_MS:600}
+  retry-max-delay-ms: ${OPENAI_RETRY_MAX_DELAY_MS:4000}
+
 openmeteo:
   enabled: ${OPENMETEO_ENABLED:true}
   base-url: ${OPENMETEO_BASE_URL:https://api.open-meteo.com/v1/forecast}

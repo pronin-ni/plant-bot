@@ -1,20 +1,13 @@
 package com.example.plantbot.service;
 
+import com.example.plantbot.domain.AiRequestKind;
 import com.example.plantbot.domain.PlantAvatarSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,77 +28,39 @@ public class OpenRouterPlantAvatarService {
   private static final Set<String> BACKGROUND_TONES = Set.of("mist", "warm", "dusk", "light");
 
   private final ObjectMapper objectMapper;
-  private final RestTemplate restTemplate;
-  private final OpenRouterUserSettingsService openRouterUserSettingsService;
-  private final OpenRouterModelCatalogService openRouterModelCatalogService;
-
-  @Value("${openrouter.model-plant:}")
-  private String plantModel;
-
-  @Value("${openrouter.model-chat:}")
-  private String chatModel;
-
-  @Value("${openrouter.model:}")
-  private String fallbackModel;
-
-  @Value("${openrouter.base-url:https://openrouter.ai/api/v1/chat/completions}")
-  private String baseUrl;
-
-  @Value("${openrouter.site-url:}")
-  private String siteUrl;
-
-  @Value("${openrouter.app-name:plant-bot}")
-  private String appName;
+  private final AiProviderSettingsService aiProviderSettingsService;
+  private final AiExecutionService aiExecutionService;
 
   public AvatarGenerationResult generateSpec(String exactPlantName) {
-    String apiKey = openRouterUserSettingsService.resolveApiKey(null);
-    if (apiKey == null || apiKey.isBlank()) {
+    AiProviderSettingsService.RuntimeResolution runtime = aiProviderSettingsService.resolveTextRuntime(null);
+    if (!runtime.hasApiKey()) {
       return AvatarGenerationResult.unavailable();
     }
 
-    for (String modelName : resolveTextModelCandidates()) {
-      try {
-        JsonNode payload = callOpenRouter(apiKey, modelName, exactPlantName);
-        String content = payload.path("choices").path(0).path("message").path("content").asText("").trim();
-        if (content.isEmpty()) {
-          continue;
-        }
-        PlantAvatarSpec spec = parseAndValidate(content);
-        return new AvatarGenerationResult(spec, PlantAvatarSource.AI, modelName, true);
-      } catch (Exception ex) {
-        log.warn("Plant avatar OpenRouter generation failed for model='{}', name='{}': {}", modelName, exactPlantName, ex.getMessage());
+    try {
+      JsonNode payload = callProvider(runtime, exactPlantName);
+      String content = payload.path("choices").path(0).path("message").path("content").asText("").trim();
+      if (content.isEmpty()) {
+        return AvatarGenerationResult.unavailable();
       }
+      PlantAvatarSpec spec = parseAndValidate(content);
+      return new AvatarGenerationResult(spec, PlantAvatarSource.AI, runtime.sourceLabel(), true);
+    } catch (Exception ex) {
+      log.warn("Plant avatar AI generation failed for provider={} model='{}', name='{}': {}",
+          runtime.provider(), runtime.model(), exactPlantName, ex.getMessage());
     }
     return AvatarGenerationResult.unavailable();
   }
 
-  private JsonNode callOpenRouter(String apiKey, String modelName, String exactPlantName) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(apiKey);
-    if (siteUrl != null && !siteUrl.isBlank()) {
-      headers.set("HTTP-Referer", siteUrl);
-    }
-    if (appName != null && !appName.isBlank()) {
-      headers.set("X-Title", appName);
-    }
-    Map<String, Object> requestBody = Map.of(
-        "model", modelName,
-        "temperature", 0,
-        "messages", List.of(
+  private JsonNode callProvider(AiProviderSettingsService.RuntimeResolution runtime, String exactPlantName) {
+    return aiExecutionService.execute(
+        runtime,
+        AiRequestKind.AVATAR_SPEC,
+        List.of(
             Map.of("role", "system", "content", systemPrompt()),
             Map.of("role", "user", "content", userPrompt(exactPlantName))
         )
-    );
-    ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-        baseUrl,
-        new HttpEntity<>(requestBody, headers),
-        JsonNode.class
-    );
-    if (response.getBody() == null) {
-      throw new IllegalStateException("OpenRouter avatar response body is empty");
-    }
-    return response.getBody();
+    ).body();
   }
 
   private PlantAvatarSpec parseAndValidate(String content) throws Exception {
@@ -142,26 +97,6 @@ public class OpenRouterPlantAvatarService {
       return trimmed.substring(firstBrace, lastBrace + 1).trim();
     }
     return trimmed;
-  }
-
-  private List<String> resolveTextModelCandidates() {
-    LinkedHashSet<String> candidates = new LinkedHashSet<>();
-    addCandidate(candidates, openRouterUserSettingsService.resolveGlobalModels().chatModel());
-    addCandidate(candidates, chatModel);
-    addCandidate(candidates, plantModel);
-    addCandidate(candidates, fallbackModel);
-    addCandidate(candidates, openRouterModelCatalogService.resolveConfiguredTextFallback());
-    return new ArrayList<>(candidates);
-  }
-
-  private void addCandidate(Set<String> candidates, String raw) {
-    if (raw == null || raw.isBlank()) {
-      return;
-    }
-    String cleaned = raw.trim().split(",")[0].trim().split("\\s+")[0].trim();
-    if (!cleaned.isBlank()) {
-      candidates.add(cleaned);
-    }
   }
 
   private String systemPrompt() {

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchOpenRouterRuntimeSettings } from '@/lib/api/openrouter';
+import { getAiRuntimeSettings } from '@/lib/api';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
 
 function normalizeModelId(value: string | null | undefined): string {
@@ -31,8 +31,8 @@ export function useOpenRouterModels() {
   const resetToDefault = useOpenRouterModelsStore((s) => s.resetToDefault);
 
   const modelsQuery = useQuery({
-    queryKey: ['openrouter-global-models', 'runtime'],
-    queryFn: fetchOpenRouterRuntimeSettings,
+    queryKey: ['ai-runtime-settings'],
+    queryFn: getAiRuntimeSettings,
     enabled: isAuthorized && !isGuest,
     staleTime: 60_000,
     retry: 1
@@ -50,9 +50,13 @@ export function useOpenRouterModels() {
     }
 
     setModels({
+      activeTextProvider: modelsQuery.data.activeTextProvider,
+      activeVisionProvider: modelsQuery.data.activeVisionProvider,
       textModel: normalizeModelId(modelsQuery.data.textModel),
-      photoModel: normalizeModelId(modelsQuery.data.photoModel),
-      hasApiKey: modelsQuery.data.hasApiKey,
+      photoModel: normalizeModelId(modelsQuery.data.visionModel),
+      hasApiKey: modelsQuery.data.openrouterHasApiKey || modelsQuery.data.openaiHasApiKey,
+      openrouterHasApiKey: modelsQuery.data.openrouterHasApiKey,
+      openaiHasApiKey: modelsQuery.data.openaiHasApiKey,
       source: 'server',
       updatedAt: undefined
     });

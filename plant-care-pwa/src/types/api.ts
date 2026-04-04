@@ -383,6 +383,76 @@ export interface OpenRouterRuntimeSettingsDto {
   hasApiKey: boolean;
 }
 
+export interface AiRuntimeSettingsDto {
+  activeTextProvider: 'OPENROUTER' | 'OPENAI';
+  activeVisionProvider: 'OPENROUTER' | 'OPENAI';
+  textModel?: string | null;
+  visionModel?: string | null;
+  openrouterHasApiKey: boolean;
+  openaiHasApiKey: boolean;
+}
+
+export interface AdminAiSettingsDto {
+  activeTextProvider: 'OPENROUTER' | 'OPENAI';
+  activeVisionProvider: 'OPENROUTER' | 'OPENAI';
+  openrouterTextModel?: string | null;
+  openrouterVisionModel?: string | null;
+  openaiTextModel?: string | null;
+  openaiVisionModel?: string | null;
+  effectiveTextModel?: string | null;
+  effectiveVisionModel?: string | null;
+  openrouterHasApiKey: boolean;
+  openaiHasApiKey: boolean;
+  openrouterApiKeyMasked?: string | null;
+  openaiApiKeyMasked?: string | null;
+  healthChecksEnabled: boolean;
+  retryCount?: number | null;
+  retryBaseDelayMs?: number | null;
+  retryMaxDelayMs?: number | null;
+  requestTimeoutMs?: number | null;
+  degradedFailureThreshold?: number | null;
+  unavailableFailureThreshold?: number | null;
+  unavailableCooldownMinutes?: number | null;
+  recoveryRecheckIntervalMinutes?: number | null;
+  aiTextCacheEnabled: boolean;
+  aiTextCacheTtlDays?: number | null;
+  aiTextCacheEntryCount: number;
+  aiTextCacheLastCleanupAt?: string | null;
+  updatedAt?: string | null;
+  textModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR' | null;
+  textModelLastCheckedAt?: string | null;
+  textModelLastSuccessfulAt?: string | null;
+  textModelLastErrorMessage?: string | null;
+  textModelLastNotifiedUnavailableAt?: string | null;
+  textModelCheckIntervalMinutes?: number | null;
+  photoModelAvailabilityStatus?: 'UNKNOWN' | 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'ERROR' | null;
+  photoModelLastCheckedAt?: string | null;
+  photoModelLastSuccessfulAt?: string | null;
+  photoModelLastErrorMessage?: string | null;
+  photoModelLastNotifiedUnavailableAt?: string | null;
+  photoModelCheckIntervalMinutes?: number | null;
+}
+
+export interface AdminAiAnalyticsRowDto {
+  requestKind: string;
+  provider: string;
+  model?: string | null;
+  total: number;
+  success: number;
+  failed: number;
+  lastSuccessAt?: string | null;
+  lastFailureAt?: string | null;
+}
+
+export interface AdminAiAnalyticsDto {
+  period: 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | string;
+  from?: string | null;
+  total: number;
+  success: number;
+  failed: number;
+  rows: AdminAiAnalyticsRowDto[];
+}
+
 export interface OpenRouterTypedTestDto {
   ok: boolean;
   type: 'text' | 'photo';

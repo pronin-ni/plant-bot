@@ -27,6 +27,17 @@ public class GlobalSettings {
   @Column(name = "openrouter_api_key")
   private String openrouterApiKey;
 
+  @Column(name = "openai_api_key")
+  private String openaiApiKey;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "active_text_provider", length = 32)
+  private AiProviderType activeTextProvider = AiProviderType.OPENROUTER;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "active_vision_provider", length = 32)
+  private AiProviderType activeVisionProvider = AiProviderType.OPENROUTER;
+
   @Column(name = "chat_model")
   private String chatModel;
 
@@ -40,6 +51,12 @@ public class GlobalSettings {
   // Упрощённая глобальная модель для всех photo/vision OpenRouter-запросов.
   @Column(name = "openrouter_photo_model")
   private String openrouterPhotoModel;
+
+  @Column(name = "openai_text_model")
+  private String openaiTextModel;
+
+  @Column(name = "openai_vision_model")
+  private String openaiVisionModel;
 
   @Column(name = "photo_diagnosis_model")
   private String photoDiagnosisModel;

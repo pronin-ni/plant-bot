@@ -28,11 +28,17 @@ import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequ
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterAvailabilityCheckResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
+import com.example.plantbot.controller.dto.admin.AdminAiAnalyticsResponse;
+import com.example.plantbot.controller.dto.admin.AdminAiSettingsResponse;
+import com.example.plantbot.controller.dto.admin.AdminAiSettingsUpdateRequest;
+import com.example.plantbot.domain.AiAnalyticsPeriod;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.domain.UserRole;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
+import com.example.plantbot.service.AiProviderSettingsService;
+import com.example.plantbot.service.AiRequestAnalyticsService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityCheckService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityPersistenceService;
@@ -84,6 +90,8 @@ public class AdminController {
   private final MagicLinkAuditService magicLinkAuditService;
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
+  private final AiProviderSettingsService aiProviderSettingsService;
+  private final AiRequestAnalyticsService aiRequestAnalyticsService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
   private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
   private final OpenRouterModelAvailabilityPersistenceService openRouterModelAvailabilityPersistenceService;
@@ -177,6 +185,63 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     log.info("Admin monitoring requested: userId={} telegramId={}", admin.getId(), admin.getTelegramId());
     return adminInsightsService.monitoring();
+  }
+
+  @GetMapping("/ai/settings")
+  public AdminAiSettingsResponse aiSettings(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    var settings = aiProviderSettingsService.getOrCreate();
+    var summary = aiProviderSettingsService.summarize(settings, admin);
+    log.info("Admin AI settings requested: userId={} telegramId={} textProvider={} visionProvider={}",
+        admin.getId(), admin.getTelegramId(), summary.activeTextProvider(), summary.activeVisionProvider());
+    return toAdminAiSettingsResponse(settings, summary);
+  }
+
+  @PutMapping("/ai/settings")
+  public AdminAiSettingsResponse updateAiSettings(
+      Authentication authentication,
+      @RequestBody(required = false) AdminAiSettingsUpdateRequest request
+  ) {
+    User admin = requireAdmin(authentication);
+    if (request != null) {
+      openRouterGlobalSettingsService.updateModels(new AdminOpenRouterModelsUpdateRequest(
+          request.openrouterTextModel(),
+          request.openrouterVisionModel(),
+          request.textModelCheckIntervalMinutes(),
+          request.photoModelCheckIntervalMinutes(),
+          request.healthChecksEnabled(),
+          request.retryCount(),
+          request.retryBaseDelayMs(),
+          request.retryMaxDelayMs(),
+          request.requestTimeoutMs(),
+          request.degradedFailureThreshold(),
+          request.unavailableFailureThreshold(),
+          request.unavailableCooldownMinutes(),
+          request.recoveryRecheckIntervalMinutes(),
+          request.aiTextCacheEnabled(),
+          request.aiTextCacheTtlDays()
+      ));
+    }
+    var result = aiProviderSettingsService.update(request);
+    log.warn("Admin AI settings updated: userId={} telegramId={} changedFields={} textProvider={} visionProvider={}",
+        admin.getId(), admin.getTelegramId(), result.changedFields(), result.summary().activeTextProvider(), result.summary().activeVisionProvider());
+    return toAdminAiSettingsResponse(result.settings(), result.summary());
+  }
+
+  @GetMapping("/ai/analytics")
+  public AdminAiAnalyticsResponse aiAnalytics(
+      Authentication authentication,
+      @RequestParam(name = "period", defaultValue = "DAY") String period
+  ) {
+    User admin = requireAdmin(authentication);
+    AiAnalyticsPeriod analyticsPeriod;
+    try {
+      analyticsPeriod = AiAnalyticsPeriod.valueOf((period == null ? "DAY" : period.trim().toUpperCase()));
+    } catch (IllegalArgumentException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "period должен быть HOUR, DAY, WEEK или MONTH");
+    }
+    log.info("Admin AI analytics requested: userId={} telegramId={} period={}", admin.getId(), admin.getTelegramId(), analyticsPeriod);
+    return aiRequestAnalyticsService.analytics(analyticsPeriod);
   }
 
   @GetMapping("/activity/logs")
@@ -288,6 +353,52 @@ public class AdminController {
         effectiveTextModel,
         effectivePhotoModel,
         hasApiKey,
+        Boolean.TRUE.equals(settings.getOpenrouterHealthChecksEnabled()),
+        settings.getOpenrouterRetryCount(),
+        settings.getOpenrouterRetryBaseDelayMs(),
+        settings.getOpenrouterRetryMaxDelayMs(),
+        settings.getOpenrouterRequestTimeoutMs(),
+        settings.getOpenrouterDegradedFailureThreshold(),
+        settings.getOpenrouterUnavailableFailureThreshold(),
+        settings.getOpenrouterUnavailableCooldownMinutes(),
+        settings.getOpenrouterRecoveryRecheckIntervalMinutes(),
+        settings.isAiTextCacheEnabled(),
+        settings.getAiTextCacheTtlDays(),
+        openRouterGlobalSettingsService.countActiveAiTextCacheEntries(),
+        settings.getAiTextCacheLastCleanupAt(),
+        settings.getUpdatedAt(),
+        settings.getTextModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getTextModelAvailabilityStatus().name(),
+        settings.getTextModelLastCheckedAt(),
+        settings.getTextModelLastSuccessfulAt(),
+        settings.getTextModelLastErrorMessage(),
+        settings.getTextModelLastNotifiedUnavailableAt(),
+        settings.getTextModelCheckIntervalMinutes(),
+        settings.getPhotoModelAvailabilityStatus() == null ? "UNKNOWN" : settings.getPhotoModelAvailabilityStatus().name(),
+        settings.getPhotoModelLastCheckedAt(),
+        settings.getPhotoModelLastSuccessfulAt(),
+        settings.getPhotoModelLastErrorMessage(),
+        settings.getPhotoModelLastNotifiedUnavailableAt(),
+        settings.getPhotoModelCheckIntervalMinutes()
+    );
+  }
+
+  private AdminAiSettingsResponse toAdminAiSettingsResponse(
+      com.example.plantbot.domain.GlobalSettings settings,
+      AiProviderSettingsService.ProviderSettingsSummary summary
+  ) {
+    return new AdminAiSettingsResponse(
+        summary.activeTextProvider().name(),
+        summary.activeVisionProvider().name(),
+        summary.openrouterTextModel(),
+        summary.openrouterVisionModel(),
+        summary.openaiTextModel(),
+        summary.openaiVisionModel(),
+        summary.effectiveTextModel(),
+        summary.effectiveVisionModel(),
+        summary.openrouterHasApiKey(),
+        summary.openaiHasApiKey(),
+        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
+        aiProviderSettingsService.maskApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI),
         Boolean.TRUE.equals(settings.getOpenrouterHealthChecksEnabled()),
         settings.getOpenrouterRetryCount(),
         settings.getOpenrouterRetryBaseDelayMs(),
