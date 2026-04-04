@@ -429,8 +429,14 @@ public class SqliteSchemaInitializer {
     columns.put("openrouter_text_model", "openrouter_text_model VARCHAR(255)");
     columns.put("photo_recognition_model", "photo_recognition_model VARCHAR(255)");
     columns.put("openrouter_photo_model", "openrouter_photo_model VARCHAR(255)");
+    columns.put("openai_compatible_base_url", "openai_compatible_base_url VARCHAR(255)");
+    columns.put("openai_compatible_api_key", "openai_compatible_api_key VARCHAR(4096)");
     columns.put("openai_text_model", "openai_text_model VARCHAR(255)");
+    columns.put("openai_compatible_text_model", "openai_compatible_text_model VARCHAR(255)");
     columns.put("openai_vision_model", "openai_vision_model VARCHAR(255)");
+    columns.put("openai_compatible_vision_model", "openai_compatible_vision_model VARCHAR(255)");
+    columns.put("openai_compatible_request_timeout_ms", "openai_compatible_request_timeout_ms INTEGER");
+    columns.put("openai_compatible_max_tokens", "openai_compatible_max_tokens INTEGER");
     columns.put("photo_diagnosis_model", "photo_diagnosis_model VARCHAR(255)");
     columns.put("text_model_availability_status", "text_model_availability_status TEXT " + OPENROUTER_AVAILABILITY_CHECK);
     columns.put("text_model_last_checked_at", "text_model_last_checked_at TIMESTAMP");

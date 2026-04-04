@@ -8,11 +8,13 @@ import {
   getAdminAiSettings,
   getOpenRouterModels,
   saveAdminAiSettings,
-  testAdminOpenAiCompatibleConnection
+  testAdminOpenAiCompatibleConnection,
+  testAdminOpenAiCompatibleJson,
+  testAdminOpenAiCompatibleVision
 } from '@/lib/api';
 import { impactLight, impactMedium, success as hapticSuccess, error as hapticError } from '@/lib/haptics';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
-import type { AdminAiAnalyticsDto, AdminAiSettingsDto, AdminOpenAiCompatibleTestDto, OpenRouterModelOption } from '@/types/api';
+import type { AdminAiAnalyticsDto, AdminAiSettingsDto, AdminOpenAiCompatibleCapabilityTestDto, OpenRouterModelOption } from '@/types/api';
 
 type ProviderId = 'OPENROUTER' | 'OPENAI_COMPATIBLE';
 type PeriodId = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH';
@@ -72,8 +74,10 @@ export function OpenRouterSettings() {
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('https://api.openai.com/v1/chat/completions');
   const [openaiRequestTimeoutMs, setOpenaiRequestTimeoutMs] = useState(15000);
   const [openaiMaxTokens, setOpenaiMaxTokens] = useState(256);
-  const [openAiTestResult, setOpenAiTestResult] = useState<AdminOpenAiCompatibleTestDto | null>(null);
-  const [openAiTestLoading, setOpenAiTestLoading] = useState(false);
+  const [openAiConnectionResult, setOpenAiConnectionResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
+  const [openAiJsonResult, setOpenAiJsonResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
+  const [openAiVisionResult, setOpenAiVisionResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
+  const [openAiTestLoading, setOpenAiTestLoading] = useState<'connection' | 'json' | 'vision' | null>(null);
   const [healthChecksEnabled, setHealthChecksEnabled] = useState(true);
   const [retryCount, setRetryCount] = useState(2);
   const [requestTimeoutMs, setRequestTimeoutMs] = useState(15000);
@@ -209,25 +213,47 @@ export function OpenRouterSettings() {
     }
   }
 
-  async function handleOpenAiCompatibleTest() {
-    setOpenAiTestLoading(true);
-    setOpenAiTestResult(null);
+  function openAiTestPayload() {
+    return {
+      baseUrl: openaiBaseUrl || null,
+      apiKey: openaiApiKey.trim() || null,
+      textModel: openaiTextModel || null,
+      visionModel: openaiVisionModel || null,
+      requestTimeoutMs: openaiRequestTimeoutMs,
+      maxTokens: openaiMaxTokens
+    };
+  }
+
+  async function runOpenAiCompatibleTest(kind: 'connection' | 'json' | 'vision') {
+    setOpenAiTestLoading(kind);
+    if (kind === 'connection') setOpenAiConnectionResult(null);
+    if (kind === 'json') setOpenAiJsonResult(null);
+    if (kind === 'vision') setOpenAiVisionResult(null);
     try {
-      const result = await testAdminOpenAiCompatibleConnection();
-      setOpenAiTestResult(result);
-      setStatus(result.ok ? 'OpenAI-compatible соединение проверено' : result.message);
+      const result = kind === 'connection'
+        ? await testAdminOpenAiCompatibleConnection(openAiTestPayload())
+        : kind === 'json'
+          ? await testAdminOpenAiCompatibleJson(openAiTestPayload())
+          : await testAdminOpenAiCompatibleVision(openAiTestPayload());
+      if (kind === 'connection') setOpenAiConnectionResult(result);
+      if (kind === 'json') setOpenAiJsonResult(result);
+      if (kind === 'vision') setOpenAiVisionResult(result);
+      setStatus(result.ok ? `OpenAI-compatible ${kind} test completed` : result.message);
       if (result.ok) {
         hapticSuccess();
       } else {
         hapticError();
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось проверить OpenAI-compatible соединение';
+      const message = error instanceof Error ? error.message : `Не удалось выполнить OpenAI-compatible ${kind} test`;
       setStatus(message);
-      setOpenAiTestResult({ ok: false, message, model: null, latencyMs: null, baseUrl: openaiBaseUrl });
+      const failed = { ok: false, capability: kind, message, model: null, latencyMs: null, baseUrl: openaiBaseUrl, jsonValid: null, visionSupported: null, rawPreview: null };
+      if (kind === 'connection') setOpenAiConnectionResult(failed);
+      if (kind === 'json') setOpenAiJsonResult(failed);
+      if (kind === 'vision') setOpenAiVisionResult(failed);
       hapticError();
     } finally {
-      setOpenAiTestLoading(false);
+      setOpenAiTestLoading(null);
     }
   }
 
@@ -311,14 +337,20 @@ export function OpenRouterSettings() {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button variant="secondary" className="rounded-2xl" disabled={openAiTestLoading} onClick={() => void handleOpenAiCompatibleTest()}>
-            {openAiTestLoading ? 'Проверяем...' : 'Test connection'}
+          <Button variant="secondary" className="rounded-2xl" disabled={openAiTestLoading !== null} onClick={() => void runOpenAiCompatibleTest('connection')}>
+            {openAiTestLoading === 'connection' ? 'Проверяем...' : 'Test connection'}
           </Button>
-          {openAiTestResult ? (
-            <span className={`text-sm ${openAiTestResult.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
-              {openAiTestResult.ok ? `OK · ${openAiTestResult.latencyMs ?? '—'} ms` : openAiTestResult.message}
-            </span>
-          ) : null}
+          <Button variant="secondary" className="rounded-2xl" disabled={openAiTestLoading !== null} onClick={() => void runOpenAiCompatibleTest('json')}>
+            {openAiTestLoading === 'json' ? 'Проверяем...' : 'Test JSON'}
+          </Button>
+          <Button variant="secondary" className="rounded-2xl" disabled={openAiTestLoading !== null} onClick={() => void runOpenAiCompatibleTest('vision')}>
+            {openAiTestLoading === 'vision' ? 'Проверяем...' : 'Test vision'}
+          </Button>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <TestResultCard title="Connection" result={openAiConnectionResult} />
+          <TestResultCard title="JSON" result={openAiJsonResult} />
+          <TestResultCard title="Vision" result={openAiVisionResult} />
         </div>
       </Card>
 
@@ -486,5 +518,19 @@ function ToggleRow({ label, checked, onChange }: { label: string; checked: boole
         }}
       />
     </label>
+  );
+}
+
+function TestResultCard({ title, result }: { title: string; result: AdminOpenAiCompatibleCapabilityTestDto | null }) {
+  return (
+    <div className="rounded-2xl border border-ios-border/40 px-3 py-3 text-sm">
+      <p className="font-medium text-ios-text">{title}</p>
+      <p className="mt-1 text-ios-subtext">
+        {!result ? 'Не запускался' : result.ok ? `OK · ${result.latencyMs ?? '—'} ms` : result.message}
+      </p>
+      {result?.jsonValid != null ? <p className="mt-1 text-ios-subtext">JSON valid: {result.jsonValid ? 'yes' : 'no'}</p> : null}
+      {result?.visionSupported != null ? <p className="mt-1 text-ios-subtext">Vision supported: {result.visionSupported ? 'yes' : 'no'}</p> : null}
+      {result?.rawPreview ? <p className="mt-1 line-clamp-3 text-xs text-ios-subtext">{result.rawPreview}</p> : null}
+    </div>
   );
 }

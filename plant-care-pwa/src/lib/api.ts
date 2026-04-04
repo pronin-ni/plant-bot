@@ -53,7 +53,7 @@ import type {
   AiRuntimeSettingsDto,
   AdminAiSettingsDto,
   AdminAiAnalyticsDto,
-  AdminOpenAiCompatibleTestDto,
+  AdminOpenAiCompatibleCapabilityTestDto,
   OpenRouterTypedTestDto,
   ChatAskResponse,
   PlantCareAdviceDto,
@@ -464,14 +464,24 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
     } as T;
   }
 
-  if (method === 'POST' && pathname === '/api/admin/ai/openai-compatible/test') {
+  if (method === 'POST' && (pathname === '/api/admin/ai/openai-compatible/test'
+      || pathname === '/api/admin/ai/openai-compatible/test-connection'
+      || pathname === '/api/admin/ai/openai-compatible/test-json'
+      || pathname === '/api/admin/ai/openai-compatible/test-vision')) {
     const body = init.body ? JSON.parse(String(init.body)) : {};
+    const capability = pathname.endsWith('test-json') ? 'json' : pathname.endsWith('test-vision') ? 'vision' : 'connection';
     return {
       ok: Boolean(body?.baseUrl || true),
-      message: 'Demo: OpenAI-compatible test successful',
-      model: body?.openaiCompatibleTextModel ?? 'gpt-4o-mini',
+      capability,
+      message: `Demo: OpenAI-compatible ${capability} test successful`,
+      model: capability === 'vision'
+        ? (body?.visionModel ?? body?.openaiCompatibleVisionModel ?? 'gpt-4o-mini')
+        : (body?.textModel ?? body?.openaiCompatibleTextModel ?? 'gpt-4o-mini'),
       latencyMs: 120,
-      baseUrl: body?.openaiCompatibleBaseUrl ?? 'https://api.openai.com/v1/chat/completions'
+      baseUrl: body?.baseUrl ?? body?.openaiCompatibleBaseUrl ?? 'https://api.openai.com/v1/chat/completions',
+      jsonValid: capability === 'json' ? true : null,
+      visionSupported: capability === 'vision' ? true : null,
+      rawPreview: capability === 'json' ? '{"ok":true,"kind":"json-test","value":7}' : 'ok'
     } as T;
   }
 
@@ -1578,9 +1588,33 @@ export async function getAdminAiAnalytics(period: 'HOUR' | 'DAY' | 'WEEK' | 'MON
   return apiFetch<AdminAiAnalyticsDto>(`/api/admin/ai/analytics?period=${encodeURIComponent(period)}`, { method: 'GET' });
 }
 
-export async function testAdminOpenAiCompatibleConnection(): Promise<AdminOpenAiCompatibleTestDto> {
-  return apiFetch<AdminOpenAiCompatibleTestDto>('/api/admin/ai/openai-compatible/test', {
+type OpenAiCompatibleTestPayload = {
+  baseUrl?: string | null;
+  apiKey?: string | null;
+  textModel?: string | null;
+  visionModel?: string | null;
+  requestTimeoutMs?: number | null;
+  maxTokens?: number | null;
+};
+
+export async function testAdminOpenAiCompatibleConnection(payload: OpenAiCompatibleTestPayload): Promise<AdminOpenAiCompatibleCapabilityTestDto> {
+  return apiFetch<AdminOpenAiCompatibleCapabilityTestDto>('/api/admin/ai/openai-compatible/test-connection', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function testAdminOpenAiCompatibleJson(payload: OpenAiCompatibleTestPayload): Promise<AdminOpenAiCompatibleCapabilityTestDto> {
+  return apiFetch<AdminOpenAiCompatibleCapabilityTestDto>('/api/admin/ai/openai-compatible/test-json', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function testAdminOpenAiCompatibleVision(payload: OpenAiCompatibleTestPayload): Promise<AdminOpenAiCompatibleCapabilityTestDto> {
+  return apiFetch<AdminOpenAiCompatibleCapabilityTestDto>('/api/admin/ai/openai-compatible/test-vision', {
     method: 'POST'
+    ,body: JSON.stringify(payload)
   });
 }
 

@@ -99,6 +99,12 @@ class SqliteSchemaInitializerTest {
         assertHasGlobalSettingsColumn(statement, "photo_model_last_notified_unavailable_at");
         assertHasGlobalSettingsColumn(statement, "text_model_check_interval_minutes");
         assertHasGlobalSettingsColumn(statement, "photo_model_check_interval_minutes");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_base_url");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_api_key");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_text_model");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_vision_model");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_request_timeout_ms");
+        assertHasGlobalSettingsColumn(statement, "openai_compatible_max_tokens");
         assertHasRecommendationSnapshotColumn(statement, "flow");
 
         String globalSettingsSql;
@@ -190,6 +196,12 @@ class SqliteSchemaInitializerTest {
             active_vision_provider VARCHAR(32) CHECK (active_vision_provider IN ('OPENROUTER','OPENAI')),
             openrouter_text_model VARCHAR(255),
             openrouter_photo_model VARCHAR(255),
+            openai_compatible_base_url VARCHAR(255),
+            openai_compatible_api_key VARCHAR(4096),
+            openai_compatible_text_model VARCHAR(255),
+            openai_compatible_vision_model VARCHAR(255),
+            openai_compatible_request_timeout_ms INTEGER,
+            openai_compatible_max_tokens INTEGER,
             text_model_availability_status TEXT CHECK (text_model_availability_status IN ('UNKNOWN','AVAILABLE','UNAVAILABLE','ERROR')),
             photo_model_availability_status TEXT CHECK (photo_model_availability_status IN ('UNKNOWN','AVAILABLE','UNAVAILABLE','ERROR'))
           )
@@ -202,6 +214,12 @@ class SqliteSchemaInitializerTest {
             active_vision_provider,
             openrouter_text_model,
             openrouter_photo_model,
+            openai_compatible_base_url,
+            openai_compatible_api_key,
+            openai_compatible_text_model,
+            openai_compatible_vision_model,
+            openai_compatible_request_timeout_ms,
+            openai_compatible_max_tokens,
             text_model_availability_status,
             photo_model_availability_status
           ) VALUES (
@@ -211,6 +229,12 @@ class SqliteSchemaInitializerTest {
             'OPENAI',
             'openai/gpt-4o-mini',
             'openai/gpt-4o-mini',
+            'https://api.openai.com/v1/chat/completions',
+            'enc::legacy',
+            'gpt-4o-mini',
+            'gpt-4o-mini',
+            15000,
+            256,
             'UNKNOWN',
             'UNKNOWN'
           )

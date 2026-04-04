@@ -464,12 +464,16 @@ export interface OpenRouterTypedTestDto {
   message: string;
 }
 
-export interface AdminOpenAiCompatibleTestDto {
+export interface AdminOpenAiCompatibleCapabilityTestDto {
   ok: boolean;
+  capability: 'connection' | 'json' | 'vision' | string;
   message: string;
   model?: string | null;
   latencyMs?: number | null;
   baseUrl?: string | null;
+  jsonValid?: boolean | null;
+  visionSupported?: boolean | null;
+  rawPreview?: string | null;
 }
 
 

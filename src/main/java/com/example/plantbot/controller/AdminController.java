@@ -28,7 +28,8 @@ import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequ
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterAvailabilityCheckResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
-import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleTestResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleCapabilityTestResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminAiAnalyticsResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiSettingsResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiSettingsUpdateRequest;
@@ -41,6 +42,7 @@ import com.example.plantbot.service.AdminService;
 import com.example.plantbot.service.AiExecutionService;
 import com.example.plantbot.service.AiProviderSettingsService;
 import com.example.plantbot.service.AiRequestAnalyticsService;
+import com.example.plantbot.service.OpenAiCompatibleAdminTestService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityCheckService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityPersistenceService;
@@ -95,6 +97,7 @@ public class AdminController {
   private final AiProviderSettingsService aiProviderSettingsService;
   private final AiExecutionService aiExecutionService;
   private final AiRequestAnalyticsService aiRequestAnalyticsService;
+  private final OpenAiCompatibleAdminTestService openAiCompatibleAdminTestService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
   private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
   private final OpenRouterModelAvailabilityPersistenceService openRouterModelAvailabilityPersistenceService;
@@ -435,39 +438,30 @@ public class AdminController {
   }
 
   @PostMapping("/ai/openai-compatible/test")
-  public AdminOpenAiCompatibleTestResponse testOpenAiCompatible(Authentication authentication) {
+  public AdminOpenAiCompatibleCapabilityTestResponse testOpenAiCompatible(Authentication authentication,
+                                                                          @RequestBody(required = false) AdminOpenAiCompatibleTestRequest request) {
+    return testOpenAiCompatibleConnection(authentication, request);
+  }
+
+  @PostMapping("/ai/openai-compatible/test-connection")
+  public AdminOpenAiCompatibleCapabilityTestResponse testOpenAiCompatibleConnection(Authentication authentication,
+                                                                                    @RequestBody(required = false) AdminOpenAiCompatibleTestRequest request) {
     User admin = requireAdmin(authentication);
-    var settings = aiProviderSettingsService.getOrCreate();
-    var runtime = new AiProviderSettingsService.RuntimeResolution(
-        com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE,
-        com.example.plantbot.domain.AiCapability.TEXT,
-        aiProviderSettingsService.resolveConfiguredModel(settings, admin, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE, com.example.plantbot.domain.AiCapability.TEXT),
-        aiProviderSettingsService.resolveApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
-        aiProviderSettingsService.resolveBaseUrl(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
-        aiProviderSettingsService.resolveRequestTimeoutMs(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
-        aiProviderSettingsService.resolveMaxTokens(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
-        aiProviderSettingsService.hasApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE)
-    );
-    long startedAt = System.nanoTime();
-    if (!runtime.hasApiKey() || runtime.model() == null || runtime.model().isBlank()) {
-      aiExecutionService.recordConfigurationFailure(runtime, com.example.plantbot.domain.AiRequestKind.OTHER_AI_REQUEST, "AI runtime is not configured");
-      return new AdminOpenAiCompatibleTestResponse(false, "AI runtime is not configured", runtime.model(), 0L, runtime.baseUrl());
-    }
-    try {
-      aiExecutionService.execute(
-          runtime,
-          com.example.plantbot.domain.AiRequestKind.ASSISTANT_CHAT,
-          java.util.List.of(
-              java.util.Map.of("role", "system", "content", "Answer with one word: ok."),
-              java.util.Map.of("role", "user", "content", "ok?")
-          )
-      );
-      long latencyMs = Math.max(1L, System.nanoTime() - startedAt) / 1_000_000L;
-      return new AdminOpenAiCompatibleTestResponse(true, "Тест успешен", runtime.model(), latencyMs, runtime.baseUrl());
-    } catch (Exception ex) {
-      long latencyMs = Math.max(1L, System.nanoTime() - startedAt) / 1_000_000L;
-      return new AdminOpenAiCompatibleTestResponse(false, ex.getMessage(), runtime.model(), latencyMs, runtime.baseUrl());
-    }
+    return openAiCompatibleAdminTestService.testConnection(admin, request);
+  }
+
+  @PostMapping("/ai/openai-compatible/test-json")
+  public AdminOpenAiCompatibleCapabilityTestResponse testOpenAiCompatibleJson(Authentication authentication,
+                                                                              @RequestBody(required = false) AdminOpenAiCompatibleTestRequest request) {
+    User admin = requireAdmin(authentication);
+    return openAiCompatibleAdminTestService.testJson(admin, request);
+  }
+
+  @PostMapping("/ai/openai-compatible/test-vision")
+  public AdminOpenAiCompatibleCapabilityTestResponse testOpenAiCompatibleVision(Authentication authentication,
+                                                                                @RequestBody(required = false) AdminOpenAiCompatibleTestRequest request) {
+    User admin = requireAdmin(authentication);
+    return openAiCompatibleAdminTestService.testVision(admin, request);
   }
 
   @PostMapping("/openrouter/test")

@@ -290,6 +290,47 @@ public class AiProviderSettingsService {
     return normalizeMaxTokens(settings == null ? null : settings.getOpenaiCompatibleMaxTokens());
   }
 
+  public RuntimeResolution resolveTestRuntime(String baseUrl,
+                                             String apiKey,
+                                             String textModel,
+                                             String visionModel,
+                                             Integer requestTimeoutMs,
+                                             Integer maxTokens,
+                                             User user,
+                                             AiCapability capability) {
+    GlobalSettings settings = getOrCreate();
+    String normalizedModel = capability == AiCapability.VISION ? normalizeModel(visionModel) : normalizeModel(textModel);
+    if (normalizedModel == null) {
+      normalizedModel = resolveConfiguredModel(settings, user, AiProviderType.OPENAI_COMPATIBLE, capability);
+    }
+    String normalizedApiKey = normalizeSecret(apiKey);
+    if (normalizedApiKey == null) {
+      normalizedApiKey = resolveApiKey(settings, AiProviderType.OPENAI_COMPATIBLE);
+    }
+    String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    if (normalizedBaseUrl == null) {
+      normalizedBaseUrl = resolveBaseUrl(settings, AiProviderType.OPENAI_COMPATIBLE);
+    }
+    Integer normalizedTimeout = normalizeRequestTimeoutMs(requestTimeoutMs);
+    if (normalizedTimeout == null) {
+      normalizedTimeout = resolveRequestTimeoutMs(settings, AiProviderType.OPENAI_COMPATIBLE);
+    }
+    Integer normalizedMaxTokens = normalizeMaxTokens(maxTokens);
+    if (normalizedMaxTokens == null) {
+      normalizedMaxTokens = resolveMaxTokens(settings, AiProviderType.OPENAI_COMPATIBLE);
+    }
+    return new RuntimeResolution(
+        AiProviderType.OPENAI_COMPATIBLE,
+        capability,
+        normalizedModel,
+        normalizedApiKey,
+        normalizedBaseUrl,
+        normalizedTimeout,
+        normalizedMaxTokens,
+        normalizedApiKey != null && !normalizedApiKey.isBlank()
+    );
+  }
+
   private String firstNonBlank(String... values) {
     if (values == null) {
       return null;

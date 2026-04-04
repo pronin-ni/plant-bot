@@ -15,6 +15,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -52,10 +53,10 @@ public class OpenAiExecutionService {
       List<Map<String, Object>> messages
   ) {
     if (apiKey == null || apiKey.isBlank()) {
-      throw new OpenAiExecutionException(false, "OpenAI API key не настроен");
+      throw new OpenAiExecutionException(false, "OpenAI-compatible API key не настроен");
     }
     if (modelName == null || modelName.isBlank()) {
-      throw new OpenAiExecutionException(false, "Модель OpenAI не выбрана");
+      throw new OpenAiExecutionException(false, "Модель OpenAI-compatible не выбрана");
     }
 
     OpenAiExecutionException lastFailure = null;
@@ -74,7 +75,7 @@ public class OpenAiExecutionService {
     if (lastFailure != null) {
       throw lastFailure;
     }
-    throw new OpenAiExecutionException(false, "OpenAI request failed unexpectedly");
+    throw new OpenAiExecutionException(false, "OpenAI-compatible request failed unexpectedly");
   }
 
   private JsonNode doExecute(String apiKey,
@@ -107,7 +108,7 @@ public class OpenAiExecutionService {
           JsonNode.class
       );
       if (response.getBody() == null) {
-        throw new OpenAiExecutionException(true, "OpenAI вернул пустой ответ");
+        throw new OpenAiExecutionException(true, "OpenAI-compatible provider returned empty response");
       }
       return response.getBody();
     } catch (HttpStatusCodeException ex) {
@@ -117,33 +118,33 @@ public class OpenAiExecutionService {
     } catch (OpenAiExecutionException ex) {
       throw ex;
     } catch (Exception ex) {
-      throw new OpenAiExecutionException(true, "Ошибка OpenAI: " + safeMessage(ex), ex);
+      throw new OpenAiExecutionException(true, "OpenAI-compatible request failed: " + safeMessage(ex), ex);
     }
   }
 
   private OpenAiExecutionException classifyHttpFailure(HttpStatusCodeException ex) {
     int code = ex.getStatusCode().value();
     if (code == 401 || code == 403) {
-      return new OpenAiExecutionException(false, "OpenAI отклонил API key или доступ к модели", ex);
+      return new OpenAiExecutionException(false, "OpenAI-compatible endpoint rejected API key or model access", ex);
     }
     if (code == 404) {
-      return new OpenAiExecutionException(false, "Выбранная модель OpenAI недоступна", ex);
+      return new OpenAiExecutionException(false, "Selected OpenAI-compatible model or path is unavailable", ex);
     }
     if (code == 429) {
-      return new OpenAiExecutionException(true, "OpenAI вернул rate limit", ex);
+      return new OpenAiExecutionException(true, "OpenAI-compatible endpoint returned rate limit", ex);
     }
     if (code >= 500) {
-      return new OpenAiExecutionException(true, "OpenAI временно вернул HTTP " + code, ex);
+      return new OpenAiExecutionException(true, "OpenAI-compatible endpoint temporarily returned HTTP " + code, ex);
     }
-    return new OpenAiExecutionException(false, "OpenAI вернул HTTP " + code, ex);
+    return new OpenAiExecutionException(false, "OpenAI-compatible endpoint returned HTTP " + code, ex);
   }
 
   private OpenAiExecutionException classifyResourceFailure(ResourceAccessException ex) {
     String lower = safeMessage(ex).toLowerCase();
     if (lower.contains("timed out") || lower.contains("timeout")) {
-      return new OpenAiExecutionException(true, "OpenAI не ответил вовремя", ex);
+      return new OpenAiExecutionException(true, "OpenAI-compatible endpoint timed out", ex);
     }
-    return new OpenAiExecutionException(true, "Сетевой сбой при обращении к OpenAI", ex);
+    return new OpenAiExecutionException(true, "Network failure while contacting OpenAI-compatible endpoint", ex);
   }
 
   private int delayForAttempt(int baseDelayMs, int maxDelayMs, int attempt) {
@@ -158,7 +159,7 @@ public class OpenAiExecutionService {
       Thread.sleep(Math.max(50, delayMs));
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
-      throw new OpenAiExecutionException(false, "OpenAI retry interrupted", ex);
+      throw new OpenAiExecutionException(false, "OpenAI-compatible retry interrupted", ex);
     }
   }
 
@@ -169,7 +170,17 @@ public class OpenAiExecutionService {
   private String resolveBaseUrl(String baseUrlOverride) {
     String value = baseUrlOverride == null || baseUrlOverride.isBlank() ? baseUrl : baseUrlOverride;
     String trimmed = value.trim();
-    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+    String normalized = trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+    try {
+      URI uri = URI.create(normalized);
+      String scheme = uri.getScheme();
+      if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+        throw new OpenAiExecutionException(false, "OpenAI-compatible base URL must use http or https");
+      }
+      return normalized;
+    } catch (IllegalArgumentException ex) {
+      throw new OpenAiExecutionException(false, "OpenAI-compatible base URL is invalid", ex);
+    }
   }
 
   private int normalizeMaxTokens(Integer value) {
