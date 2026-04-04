@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -375,7 +376,37 @@ public class AiProviderSettingsService {
     if (normalized == null) {
       return null;
     }
-    return normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
+    String cleaned = normalized.replaceFirst("^(https?):(?=[^/])", "$1://");
+    while (cleaned.endsWith("/")) {
+      cleaned = cleaned.substring(0, cleaned.length() - 1);
+    }
+    try {
+      URI uri = URI.create(cleaned);
+      String path = uri.getPath();
+      if (path == null || path.isBlank() || "/".equals(path)) {
+        path = "/v1/chat/completions";
+      } else if ("/v1".equals(path)) {
+        path = "/v1/chat/completions";
+      } else if (path.endsWith("/chat/completios")) {
+        path = path.substring(0, path.length() - 1) + "ns";
+      }
+      URI normalizedUri = new URI(
+          uri.getScheme(),
+          uri.getUserInfo(),
+          uri.getHost(),
+          uri.getPort(),
+          path,
+          uri.getQuery(),
+          uri.getFragment()
+      );
+      String result = normalizedUri.toString();
+      while (result.endsWith("/")) {
+        result = result.substring(0, result.length() - 1);
+      }
+      return result;
+    } catch (Exception ex) {
+      return cleaned;
+    }
   }
 
   private Integer normalizeRequestTimeoutMs(Integer value) {

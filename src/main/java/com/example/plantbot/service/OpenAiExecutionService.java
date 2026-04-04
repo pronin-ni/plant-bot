@@ -65,6 +65,15 @@ public class OpenAiExecutionService {
         return doExecute(apiKey, baseUrlOverride, modelName, requestTimeoutOverrideMs, maxTokens, messages);
       } catch (OpenAiExecutionException ex) {
         lastFailure = ex;
+        log.warn(
+            "OpenAI-compatible request failed: model='{}' baseUrl='{}' attempt={}/{} retryable={} reason={}",
+            modelName,
+            resolveBaseUrl(baseUrlOverride),
+            attempt + 1,
+            Math.max(1, retryCount + 1),
+            ex.isRetryable(),
+            ex.getMessage()
+        );
         if (!ex.isRetryable() || attempt >= Math.max(0, retryCount)) {
           throw ex;
         }
@@ -169,17 +178,48 @@ public class OpenAiExecutionService {
 
   private String resolveBaseUrl(String baseUrlOverride) {
     String value = baseUrlOverride == null || baseUrlOverride.isBlank() ? baseUrl : baseUrlOverride;
-    String trimmed = value.trim();
-    String normalized = trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+    String trimmed = normalizeBaseUrl(value.trim());
     try {
-      URI uri = URI.create(normalized);
+      URI uri = URI.create(trimmed);
       String scheme = uri.getScheme();
       if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
         throw new OpenAiExecutionException(false, "OpenAI-compatible base URL must use http or https");
       }
-      return normalized;
+      if (uri.getHost() == null || uri.getHost().isBlank()) {
+        throw new OpenAiExecutionException(false, "OpenAI-compatible base URL must include a host");
+      }
+      return trimmed;
     } catch (IllegalArgumentException ex) {
       throw new OpenAiExecutionException(false, "OpenAI-compatible base URL is invalid", ex);
+    }
+  }
+
+  private String normalizeBaseUrl(String value) {
+    String normalized = value.replaceFirst("^(https?):(?=[^/])", "$1://");
+    while (normalized.endsWith("/")) {
+      normalized = normalized.substring(0, normalized.length() - 1);
+    }
+    try {
+      URI uri = URI.create(normalized);
+      String path = uri.getPath();
+      if (path == null || path.isBlank() || "/".equals(path)) {
+        path = "/v1/chat/completions";
+      } else if ("/v1".equals(path)) {
+        path = "/v1/chat/completions";
+      } else if (path.endsWith("/chat/completios")) {
+        path = path.substring(0, path.length() - 1) + "ns";
+      }
+      return new URI(
+          uri.getScheme(),
+          uri.getUserInfo(),
+          uri.getHost(),
+          uri.getPort(),
+          path,
+          uri.getQuery(),
+          uri.getFragment()
+      ).toString();
+    } catch (Exception ex) {
+      return normalized;
     }
   }
 

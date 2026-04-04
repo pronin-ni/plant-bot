@@ -106,4 +106,35 @@ class AiProviderSettingsServiceTest {
     assertEquals("gpt-4.1-mini", result.summary().openaiCompatibleTextModel());
     assertEquals("https://openai-compatible.example/v1/chat/completions", result.summary().openaiCompatibleBaseUrl());
   }
+
+  @Test
+  void shouldNormalizeCommonOpenAiCompatibleBaseUrlTypos() {
+    AiProviderSettingsService.UpdateResult result = service.update(new AdminAiSettingsUpdateRequest(
+        AiProviderType.OPENAI_COMPATIBLE,
+        AiProviderType.OPENAI_COMPATIBLE,
+        null,
+        null,
+        "https:ai.okgk.ru/v1/chat/completios/",
+        "yandexgpt",
+        "yandexgpt",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+    ));
+
+    assertEquals("https://ai.okgk.ru/v1/chat/completions", result.summary().openaiCompatibleBaseUrl());
+  }
 }

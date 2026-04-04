@@ -85,6 +85,7 @@ public class OpenAiCompatibleAdminTestService {
       );
     } catch (Exception ex) {
       long latencyMs = elapsedMs(startedAt);
+      log.warn("OpenAI-compatible admin JSON test failed: model='{}' baseUrl='{}' reason={}", runtime.model(), runtime.baseUrl(), ex.getMessage());
       aiRequestAnalyticsService.record(
           AiRequestKind.ADMIN_PROVIDER_TEST_JSON,
           runtime.provider(),
@@ -158,6 +159,7 @@ public class OpenAiCompatibleAdminTestService {
       );
     } catch (Exception ex) {
       long latencyMs = elapsedMs(startedAt);
+      log.warn("OpenAI-compatible admin vision test failed: model='{}' baseUrl='{}' reason={}", runtime.model(), runtime.baseUrl(), ex.getMessage());
       aiRequestAnalyticsService.record(
           AiRequestKind.ADMIN_PROVIDER_TEST_VISION,
           runtime.provider(),
@@ -214,6 +216,7 @@ public class OpenAiCompatibleAdminTestService {
       );
     } catch (Exception ex) {
       long latencyMs = elapsedMs(startedAt);
+      log.warn("OpenAI-compatible admin {} test failed: model='{}' baseUrl='{}' reason={}", capability, runtime.model(), runtime.baseUrl(), ex.getMessage());
       aiRequestAnalyticsService.record(requestKind, runtime.provider(), runtime.capability(), runtime.analyticsModelKey(), false, ex.getMessage(), latencyMs);
       return new AdminOpenAiCompatibleCapabilityTestResponse(
           false,
