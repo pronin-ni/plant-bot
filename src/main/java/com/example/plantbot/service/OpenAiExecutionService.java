@@ -31,6 +31,9 @@ public class OpenAiExecutionService {
   @Value("${openai.request-timeout-ms:15000}")
   private int requestTimeoutMs;
 
+  @Value("${openai.max-tokens:256}")
+  private int defaultMaxTokens;
+
   @Value("${openai.retry-count:2}")
   private int retryCount;
 
@@ -42,7 +45,10 @@ public class OpenAiExecutionService {
 
   public JsonNode executeChatCompletion(
       String apiKey,
+      String baseUrlOverride,
       String modelName,
+      Integer requestTimeoutOverrideMs,
+      Integer maxTokens,
       List<Map<String, Object>> messages
   ) {
     if (apiKey == null || apiKey.isBlank()) {
@@ -55,7 +61,7 @@ public class OpenAiExecutionService {
     OpenAiExecutionException lastFailure = null;
     for (int attempt = 0; attempt <= Math.max(0, retryCount); attempt += 1) {
       try {
-        return doExecute(apiKey, modelName, messages);
+        return doExecute(apiKey, baseUrlOverride, modelName, requestTimeoutOverrideMs, maxTokens, messages);
       } catch (OpenAiExecutionException ex) {
         lastFailure = ex;
         if (!ex.isRetryable() || attempt >= Math.max(0, retryCount)) {
@@ -71,10 +77,16 @@ public class OpenAiExecutionService {
     throw new OpenAiExecutionException(false, "OpenAI request failed unexpectedly");
   }
 
-  private JsonNode doExecute(String apiKey, String modelName, List<Map<String, Object>> messages) {
+  private JsonNode doExecute(String apiKey,
+                             String baseUrlOverride,
+                             String modelName,
+                             Integer requestTimeoutOverrideMs,
+                             Integer maxTokens,
+                             List<Map<String, Object>> messages) {
+    int effectiveTimeoutMs = requestTimeoutOverrideMs == null ? requestTimeoutMs : requestTimeoutOverrideMs;
     RestTemplate restTemplate = restTemplateBuilder
-        .setConnectTimeout(Duration.ofMillis(Math.max(1_000, Math.min(5_000, requestTimeoutMs))))
-        .setReadTimeout(Duration.ofMillis(Math.max(1_000, requestTimeoutMs)))
+        .setConnectTimeout(Duration.ofMillis(Math.max(1_000, Math.min(5_000, effectiveTimeoutMs))))
+        .setReadTimeout(Duration.ofMillis(Math.max(1_000, effectiveTimeoutMs)))
         .build();
 
     HttpHeaders headers = new HttpHeaders();
@@ -84,12 +96,13 @@ public class OpenAiExecutionService {
     Map<String, Object> request = Map.of(
         "model", modelName,
         "temperature", 0,
+        "max_tokens", normalizeMaxTokens(maxTokens),
         "messages", messages
     );
 
     try {
       ResponseEntity<JsonNode> response = restTemplate.postForEntity(
-          baseUrl,
+          resolveBaseUrl(baseUrlOverride),
           new HttpEntity<>(request, headers),
           JsonNode.class
       );
@@ -151,5 +164,16 @@ public class OpenAiExecutionService {
 
   private String safeMessage(Exception ex) {
     return ex == null || ex.getMessage() == null ? "unknown" : ex.getMessage();
+  }
+
+  private String resolveBaseUrl(String baseUrlOverride) {
+    String value = baseUrlOverride == null || baseUrlOverride.isBlank() ? baseUrl : baseUrlOverride;
+    String trimmed = value.trim();
+    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+  }
+
+  private int normalizeMaxTokens(Integer value) {
+    int normalized = value == null ? defaultMaxTokens : value;
+    return Math.max(1, Math.min(32_000, normalized));
   }
 }

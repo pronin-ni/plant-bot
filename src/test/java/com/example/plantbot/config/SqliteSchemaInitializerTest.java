@@ -120,6 +120,13 @@ class SqliteSchemaInitializerTest {
         assertHasIndex(statement, "idx_openrouter_cache_updated", "openrouter_cache");
         assertHasIndex(statement, "idx_watering_log_plant_watered", "watering_log");
         assertHasIndex(statement, "idx_watering_log_created", "watering_log");
+
+        String aiRequestEventSql;
+        try (ResultSet rs = statement.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_request_event'")) {
+          assertTrue(rs.next());
+          aiRequestEventSql = rs.getString(1);
+        }
+        assertTrue(aiRequestEventSql.toUpperCase(Locale.ROOT).contains("OPENAI_COMPATIBLE"));
       }
     } finally {
       Files.deleteIfExists(dbPath);
@@ -179,6 +186,8 @@ class SqliteSchemaInitializerTest {
           CREATE TABLE global_settings (
             id INTEGER PRIMARY KEY,
             openrouter_api_key VARCHAR(4096),
+            active_text_provider VARCHAR(32) CHECK (active_text_provider IN ('OPENROUTER','OPENAI')),
+            active_vision_provider VARCHAR(32) CHECK (active_vision_provider IN ('OPENROUTER','OPENAI')),
             openrouter_text_model VARCHAR(255),
             openrouter_photo_model VARCHAR(255),
             text_model_availability_status TEXT CHECK (text_model_availability_status IN ('UNKNOWN','AVAILABLE','UNAVAILABLE','ERROR')),
@@ -189,6 +198,8 @@ class SqliteSchemaInitializerTest {
           INSERT INTO global_settings (
             id,
             openrouter_api_key,
+            active_text_provider,
+            active_vision_provider,
             openrouter_text_model,
             openrouter_photo_model,
             text_model_availability_status,
@@ -196,6 +207,8 @@ class SqliteSchemaInitializerTest {
           ) VALUES (
             1,
             'encrypted',
+            'OPENAI',
+            'OPENAI',
             'openai/gpt-4o-mini',
             'openai/gpt-4o-mini',
             'UNKNOWN',
@@ -228,6 +241,19 @@ class SqliteSchemaInitializerTest {
             id INTEGER PRIMARY KEY,
             plant_id BIGINT NOT NULL,
             watered_at TIMESTAMP,
+            created_at TIMESTAMP
+          )
+          """);
+      statement.execute("""
+          CREATE TABLE ai_request_event (
+            id INTEGER PRIMARY KEY,
+            provider VARCHAR(32) CHECK (provider IN ('OPENROUTER','OPENAI')),
+            capability VARCHAR(32),
+            request_kind VARCHAR(64),
+            model VARCHAR(255),
+            success BOOLEAN NOT NULL,
+            failure_reason VARCHAR(255),
+            latency_ms BIGINT,
             created_at TIMESTAMP
           )
           """);

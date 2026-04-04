@@ -4,6 +4,7 @@ import com.example.plantbot.controller.dto.OpenRouterDiagnoseResponse;
 import com.example.plantbot.controller.dto.OpenRouterIdentifyResponse;
 import com.example.plantbot.domain.AiRequestKind;
 import com.example.plantbot.domain.AiTextFeatureType;
+import com.example.plantbot.domain.AiProviderType;
 import com.example.plantbot.domain.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +36,7 @@ public class OpenRouterVisionService {
   private final AiTextCacheService aiTextCacheService;
   private final AiProviderSettingsService aiProviderSettingsService;
   private final AiExecutionService aiExecutionService;
+  private final OpenRouterModelCatalogService openRouterModelCatalogService;
 
   public OpenRouterIdentifyResponse identifyPlant(String imageBase64) {
     return identifyPlant(null, imageBase64);
@@ -58,7 +61,13 @@ public class OpenRouterVisionService {
       return cached.payload();
     }
 
-    JsonNode payload = callProvider(runtime, AiRequestKind.PHOTO_IDENTIFY, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
+    JsonNode payload;
+    try {
+      payload = callProvider(user, runtime, AiRequestKind.PHOTO_IDENTIFY, identifySystemPrompt(), identifyUserPrompt(), imageBase64);
+    } catch (ResponseStatusException ex) {
+      log.warn("AI identify degraded fallback used: {}", ex.getReason());
+      return degradedIdentifyResponse(ex.getReason());
+    }
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -135,7 +144,13 @@ public class OpenRouterVisionService {
       return cached.payload();
     }
 
-    JsonNode payload = callProvider(runtime, AiRequestKind.PHOTO_DIAGNOSIS, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
+    JsonNode payload;
+    try {
+      payload = callProvider(user, runtime, AiRequestKind.PHOTO_DIAGNOSIS, diagnoseSystemPrompt(), diagnoseUserPrompt(plantName, plantContext), imageBase64);
+    } catch (ResponseStatusException ex) {
+      log.warn("AI diagnose degraded fallback used: {}", ex.getReason());
+      return degradedDiagnoseResponse(plantName, plantContext, ex.getReason());
+    }
 
     String content = extractMessageContent(payload);
     JsonNode json = parseJsonPayload(content);
@@ -184,6 +199,7 @@ public class OpenRouterVisionService {
   }
 
   private JsonNode callProvider(
+      User user,
       AiProviderSettingsService.RuntimeResolution runtime,
       AiRequestKind requestKind,
       String systemPrompt,
@@ -198,21 +214,86 @@ public class OpenRouterVisionService {
         )
     );
 
+    List<Map<String, Object>> messages = List.of(
+        Map.of("role", "system", "content", systemPrompt),
+        userContent
+    );
+
     try {
-      return aiExecutionService.execute(
-          runtime,
-          requestKind,
-          List.of(
-              Map.of("role", "system", "content", systemPrompt),
-              userContent
-          )
-      ).body();
-    } catch (OpenRouterExecutionException | OpenAiExecutionException ex) {
+      JsonNode payload = aiExecutionService.execute(runtime, requestKind, messages).body();
+      if (runtime.provider() == AiProviderType.OPENROUTER && !hasMessageContent(payload)) {
+        throw new OpenRouterExecutionException(OpenRouterFailureType.TEMPORARY_ERROR, true, "OpenRouter вернул пустой контент");
+      }
+      return payload;
+    } catch (OpenRouterExecutionException ex) {
+      if (shouldRetryWithAlternateVisionModel(runtime, ex)) {
+        for (String candidate : alternateVisionModels(user, runtime.model())) {
+          try {
+            AiProviderSettingsService.RuntimeResolution candidateRuntime = openRouterRuntimeWithModel(runtime, candidate);
+            JsonNode payload = aiExecutionService.execute(candidateRuntime, requestKind, messages).body();
+            if (!hasMessageContent(payload)) {
+              throw new OpenRouterExecutionException(OpenRouterFailureType.TEMPORARY_ERROR, true, "OpenRouter вернул пустой контент");
+            }
+            return payload;
+          } catch (OpenRouterExecutionException retryEx) {
+            if (!shouldRetryWithAlternateVisionModel(runtime, retryEx)) {
+              throw new ResponseStatusException(BAD_GATEWAY, retryEx.getMessage());
+            }
+          }
+        }
+      }
+      throw new ResponseStatusException(BAD_GATEWAY, ex.getMessage());
+    } catch (OpenAiExecutionException ex) {
       throw new ResponseStatusException(BAD_GATEWAY, ex.getMessage());
     } catch (Exception ex) {
       log.warn("AI vision request failed: {}", ex.getMessage());
       throw new ResponseStatusException(BAD_GATEWAY, "Ошибка запроса к AI provider");
     }
+  }
+
+  private boolean shouldRetryWithAlternateVisionModel(AiProviderSettingsService.RuntimeResolution runtime,
+                                                      OpenRouterExecutionException ex) {
+    if (runtime == null || runtime.provider() != AiProviderType.OPENROUTER || ex == null) {
+      return false;
+    }
+    return switch (ex.getFailureType()) {
+      case RATE_LIMIT, SERVER_ERROR, TEMPORARY_ERROR, MODEL_UNAVAILABLE, TIMEOUT, NETWORK_ERROR -> true;
+      default -> false;
+    };
+  }
+
+  private List<String> alternateVisionModels(User user, String currentModel) {
+    LinkedHashSet<String> ordered = new LinkedHashSet<>();
+    String configuredFallback = openRouterModelCatalogService.resolveConfiguredPhotoFallback();
+    if (configuredFallback != null && !configuredFallback.isBlank()) {
+      ordered.add(configuredFallback.trim());
+    }
+    String dynamicFallback = openRouterModelCatalogService.resolveDynamicPhotoFallback(user);
+    if (dynamicFallback != null && !dynamicFallback.isBlank()) {
+      ordered.add(dynamicFallback.trim());
+    }
+    openRouterModelCatalogService.fetchModels(user).stream()
+        .filter(model -> model.supportsImageToText() && model.id() != null && !model.id().isBlank())
+        .map(model -> model.id().trim())
+        .forEach(ordered::add);
+    if (currentModel != null) {
+      ordered.remove(currentModel.trim());
+    }
+    return ordered.stream().limit(4).toList();
+  }
+
+  private AiProviderSettingsService.RuntimeResolution openRouterRuntimeWithModel(AiProviderSettingsService.RuntimeResolution runtime,
+                                                                                 String model) {
+    return new AiProviderSettingsService.RuntimeResolution(
+        runtime.provider(),
+        runtime.capability(),
+        model,
+        runtime.apiKey(),
+        runtime.baseUrl(),
+        runtime.requestTimeoutMs(),
+        runtime.maxTokens(),
+        runtime.hasApiKey()
+    );
   }
 
   private String extractMessageContent(JsonNode payload) {
@@ -221,6 +302,13 @@ public class OpenRouterVisionService {
       throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter вернул пустой контент");
     }
     return content;
+  }
+
+  private boolean hasMessageContent(JsonNode payload) {
+    if (payload == null) {
+      return false;
+    }
+    return !payload.path("choices").path(0).path("message").path("content").asText("").trim().isEmpty();
   }
 
   private JsonNode parseJsonPayload(String content) {
@@ -328,6 +416,23 @@ public class OpenRouterVisionService {
     return "Определи растение на фото. Укажи рекомендации по базовому уходу для комнатных условий.";
   }
 
+  private OpenRouterIdentifyResponse degradedIdentifyResponse(String reason) {
+    String message = reason == null || reason.isBlank()
+        ? "Vision-модель OpenRouter временно недоступна"
+        : reason.trim();
+    return new OpenRouterIdentifyResponse(
+        "Растение не определено",
+        null,
+        null,
+        10,
+        7,
+        null,
+        null,
+        "Не удалось надёжно определить растение по фото. " + message + ". Попробуйте повторить снимок позже при хорошем освещении.",
+        List.of("Сделайте фото листьев крупным планом", "Повторите попытку позже, когда vision-модели OpenRouter будут доступны")
+    );
+  }
+
   private String diagnoseSystemPrompt() {
     return "Ты — фитопатолог и специалист по уходу за растениями. Анализируй фото листа/части растения и определи возможные проблемы.\n"
         + "Отвечай ТОЛЬКО валидным JSON без лишнего текста.\n"
@@ -349,6 +454,22 @@ public class OpenRouterVisionService {
     return "Проанализируй фото. Растение — " + plantName + ". Опиши проблему и дай рекомендации по лечению." + context;
   }
 
+  private OpenRouterDiagnoseResponse degradedDiagnoseResponse(String plantName, String plantContext, String reason) {
+    String context = plantContext == null || plantContext.isBlank() ? "" : (" Контекст: " + plantContext.trim() + ".");
+    String message = reason == null || reason.isBlank()
+        ? "Vision-модель OpenRouter временно недоступна."
+        : reason.trim();
+    return new OpenRouterDiagnoseResponse(
+        "Точный диагноз временно недоступен",
+        15,
+        "Не удалось надёжно проанализировать фото растения " + plantName + ". " + message + context,
+        List.of("Временная недоступность vision-модели OpenRouter", "Нужен повторный анализ при следующем доступном окне"),
+        "Сделайте новое фото при хорошем освещении и повторите диагностику позже. Если состояние ухудшается, осмотрите листья вручную на пятна, вредителей и признаки перелива.",
+        "Поддерживайте стабильный уход и делайте фото крупным планом при естественном свете.",
+        "medium"
+    );
+  }
+
   public String generateGrowthSummary(User user, String imageBase64, String plantName) {
     validateImage(imageBase64);
     
@@ -363,7 +484,7 @@ public class OpenRouterVisionService {
 
     JsonNode payload;
     try {
-      payload = callProvider(runtime, AiRequestKind.GROWTH_SUMMARY, growthSummarySystemPrompt(), growthSummaryUserPrompt(plantName), imageBase64);
+      payload = callProvider(user, runtime, AiRequestKind.GROWTH_SUMMARY, growthSummarySystemPrompt(), growthSummaryUserPrompt(plantName), imageBase64);
     } catch (ResponseStatusException ex) {
       log.warn("Growth summary generation failed: {}", ex.getReason());
       return null;

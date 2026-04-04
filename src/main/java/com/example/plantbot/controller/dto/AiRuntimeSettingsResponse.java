@@ -6,6 +6,6 @@ public record AiRuntimeSettingsResponse(
     String textModel,
     String visionModel,
     boolean openrouterHasApiKey,
-    boolean openaiHasApiKey
+    boolean openaiCompatibleHasApiKey
 ) {
 }

@@ -7,13 +7,14 @@ import {
   getAdminAiAnalytics,
   getAdminAiSettings,
   getOpenRouterModels,
-  saveAdminAiSettings
+  saveAdminAiSettings,
+  testAdminOpenAiCompatibleConnection
 } from '@/lib/api';
 import { impactLight, impactMedium, success as hapticSuccess, error as hapticError } from '@/lib/haptics';
 import { useAuthStore, useOpenRouterModelsStore } from '@/lib/store';
-import type { AdminAiAnalyticsDto, AdminAiSettingsDto, OpenRouterModelOption } from '@/types/api';
+import type { AdminAiAnalyticsDto, AdminAiSettingsDto, AdminOpenAiCompatibleTestDto, OpenRouterModelOption } from '@/types/api';
 
-type ProviderId = 'OPENROUTER' | 'OPENAI';
+type ProviderId = 'OPENROUTER' | 'OPENAI_COMPATIBLE';
 type PeriodId = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH';
 
 function normalizeModelId(value: string | null | undefined): string {
@@ -31,7 +32,7 @@ function formatWhen(value?: string | null): string {
 }
 
 function providerLabel(value: ProviderId): string {
-  return value === 'OPENAI' ? 'ChatGPT / OpenAI' : 'OpenRouter';
+  return value === 'OPENAI_COMPATIBLE' ? 'OpenAI-compatible' : 'OpenRouter';
 }
 
 function statusLabel(status?: string | null): string {
@@ -68,6 +69,11 @@ export function OpenRouterSettings() {
   const [openaiTextModel, setOpenaiTextModel] = useState('gpt-4o-mini');
   const [openaiVisionModel, setOpenaiVisionModel] = useState('gpt-4o-mini');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [openaiBaseUrl, setOpenaiBaseUrl] = useState('https://api.openai.com/v1/chat/completions');
+  const [openaiRequestTimeoutMs, setOpenaiRequestTimeoutMs] = useState(15000);
+  const [openaiMaxTokens, setOpenaiMaxTokens] = useState(256);
+  const [openAiTestResult, setOpenAiTestResult] = useState<AdminOpenAiCompatibleTestDto | null>(null);
+  const [openAiTestLoading, setOpenAiTestLoading] = useState(false);
   const [healthChecksEnabled, setHealthChecksEnabled] = useState(true);
   const [retryCount, setRetryCount] = useState(2);
   const [requestTimeoutMs, setRequestTimeoutMs] = useState(15000);
@@ -135,9 +141,12 @@ export function OpenRouterSettings() {
     setActiveVisionProvider(next.activeVisionProvider);
     setOpenrouterTextModel(normalizeModelId(next.openrouterTextModel));
     setOpenrouterVisionModel(normalizeModelId(next.openrouterVisionModel));
-    setOpenaiTextModel(normalizeModelId(next.openaiTextModel) || 'gpt-4o-mini');
-    setOpenaiVisionModel(normalizeModelId(next.openaiVisionModel) || 'gpt-4o-mini');
+    setOpenaiBaseUrl(next.openaiCompatibleBaseUrl?.trim() || 'https://api.openai.com/v1/chat/completions');
+    setOpenaiTextModel(normalizeModelId(next.openaiCompatibleTextModel) || 'gpt-4o-mini');
+    setOpenaiVisionModel(normalizeModelId(next.openaiCompatibleVisionModel) || 'gpt-4o-mini');
     setOpenaiApiKey('');
+    setOpenaiRequestTimeoutMs(next.openaiCompatibleRequestTimeoutMs ?? 15000);
+    setOpenaiMaxTokens(next.openaiCompatibleMaxTokens ?? 256);
     setHealthChecksEnabled(next.healthChecksEnabled ?? true);
     setRetryCount(next.retryCount ?? 2);
     setRequestTimeoutMs(next.requestTimeoutMs ?? 15000);
@@ -153,9 +162,12 @@ export function OpenRouterSettings() {
         activeVisionProvider,
         openrouterTextModel: openrouterTextModel || null,
         openrouterVisionModel: openrouterVisionModel || null,
-        openaiTextModel: openaiTextModel || null,
-        openaiVisionModel: openaiVisionModel || null,
-        openaiApiKey: openaiApiKey.trim() || null,
+        openaiCompatibleBaseUrl: openaiBaseUrl || null,
+        openaiCompatibleTextModel: openaiTextModel || null,
+        openaiCompatibleVisionModel: openaiVisionModel || null,
+        openaiCompatibleApiKey: openaiApiKey.trim() || null,
+        openaiCompatibleRequestTimeoutMs: openaiRequestTimeoutMs,
+        openaiCompatibleMaxTokens: openaiMaxTokens,
         healthChecksEnabled,
         retryCount,
         requestTimeoutMs,
@@ -169,9 +181,9 @@ export function OpenRouterSettings() {
         activeVisionProvider: next.activeVisionProvider,
         textModel: next.effectiveTextModel ?? '',
         photoModel: next.effectiveVisionModel ?? '',
-        hasApiKey: next.openrouterHasApiKey || next.openaiHasApiKey,
+        hasApiKey: next.openrouterHasApiKey || next.openaiCompatibleHasApiKey,
         openrouterHasApiKey: next.openrouterHasApiKey,
-        openaiHasApiKey: next.openaiHasApiKey,
+        openaiCompatibleHasApiKey: next.openaiCompatibleHasApiKey,
         source: 'server'
       });
       setStatus('AI настройки сохранены');
@@ -194,6 +206,28 @@ export function OpenRouterSettings() {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Не удалось очистить AI кэш');
       hapticError();
+    }
+  }
+
+  async function handleOpenAiCompatibleTest() {
+    setOpenAiTestLoading(true);
+    setOpenAiTestResult(null);
+    try {
+      const result = await testAdminOpenAiCompatibleConnection();
+      setOpenAiTestResult(result);
+      setStatus(result.ok ? 'OpenAI-compatible соединение проверено' : result.message);
+      if (result.ok) {
+        hapticSuccess();
+      } else {
+        hapticError();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось проверить OpenAI-compatible соединение';
+      setStatus(message);
+      setOpenAiTestResult({ ok: false, message, model: null, latencyMs: null, baseUrl: openaiBaseUrl });
+      hapticError();
+    } finally {
+      setOpenAiTestLoading(false);
     }
   }
 
@@ -222,7 +256,7 @@ export function OpenRouterSettings() {
         </Card>
         <Card title="Ключи и кэш">
           <InfoRow label="OpenRouter key" value={settings?.openrouterHasApiKey ? settings?.openrouterApiKeyMasked || 'Настроен' : 'Не настроен'} />
-          <InfoRow label="OpenAI key" value={settings?.openaiHasApiKey ? settings?.openaiApiKeyMasked || 'Настроен' : 'Не настроен'} />
+          <InfoRow label="OpenAI-compatible key" value={settings?.openaiCompatibleHasApiKey ? settings?.openaiCompatibleApiKeyMasked || 'Настроен' : 'Не настроен'} />
           <InfoRow label="AI cache" value={aiTextCacheEnabled ? `Вкл., TTL ${aiTextCacheTtlDays} дн.` : 'Выключен'} />
           <InfoRow label="Записей в кэше" value={String(settings?.aiTextCacheEntryCount ?? 0)} />
         </Card>
@@ -232,11 +266,11 @@ export function OpenRouterSettings() {
         <div className="grid gap-3 md:grid-cols-2">
           <SelectField label="Активный text provider" value={activeTextProvider} onChange={(value) => setActiveTextProvider(value as ProviderId)}>
             <option value="OPENROUTER">OpenRouter</option>
-            <option value="OPENAI">ChatGPT / OpenAI</option>
+            <option value="OPENAI_COMPATIBLE">OpenAI-compatible</option>
           </SelectField>
           <SelectField label="Активный vision provider" value={activeVisionProvider} onChange={(value) => setActiveVisionProvider(value as ProviderId)}>
             <option value="OPENROUTER">OpenRouter</option>
-            <option value="OPENAI">ChatGPT / OpenAI</option>
+            <option value="OPENAI_COMPATIBLE">OpenAI-compatible</option>
           </SelectField>
         </div>
       </Card>
@@ -264,14 +298,27 @@ export function OpenRouterSettings() {
         </div>
       </Card>
 
-      <Card title="ChatGPT / OpenAI модели">
+      <Card title="OpenAI-compatible">
         <div className="grid gap-3 md:grid-cols-2">
-          <InputField label="OpenAI text model" value={openaiTextModel} onChange={setOpenaiTextModel} placeholder="gpt-4o-mini" />
-          <InputField label="OpenAI vision model" value={openaiVisionModel} onChange={setOpenaiVisionModel} placeholder="gpt-4o-mini" />
+          <InputField label="Base URL" value={openaiBaseUrl} onChange={setOpenaiBaseUrl} placeholder="https://api.openai.com/v1/chat/completions" />
+          <InputField label="Text model" value={openaiTextModel} onChange={setOpenaiTextModel} placeholder="gpt-4o-mini" />
+          <InputField label="Vision model" value={openaiVisionModel} onChange={setOpenaiVisionModel} placeholder="gpt-4o-mini" />
+          <InputField label="Timeout, ms" value={String(openaiRequestTimeoutMs)} onChange={(value) => setOpenaiRequestTimeoutMs(Number(value) || 15000)} type="number" />
+          <InputField label="Max tokens" value={String(openaiMaxTokens)} onChange={(value) => setOpenaiMaxTokens(Number(value) || 256)} type="number" />
           <div className="md:col-span-2">
-            <InputField label="Новый OpenAI API key" value={openaiApiKey} onChange={setOpenaiApiKey} placeholder="sk-..." />
+            <InputField label="API Key" value={openaiApiKey} onChange={setOpenaiApiKey} placeholder="sk-..." />
             <p className="mt-1 text-xs text-ios-subtext">Оставьте пустым, чтобы не менять сохранённый ключ.</p>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button variant="secondary" className="rounded-2xl" disabled={openAiTestLoading} onClick={() => void handleOpenAiCompatibleTest()}>
+            {openAiTestLoading ? 'Проверяем...' : 'Test connection'}
+          </Button>
+          {openAiTestResult ? (
+            <span className={`text-sm ${openAiTestResult.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
+              {openAiTestResult.ok ? `OK · ${openAiTestResult.latencyMs ?? '—'} ms` : openAiTestResult.message}
+            </span>
+          ) : null}
         </div>
       </Card>
 

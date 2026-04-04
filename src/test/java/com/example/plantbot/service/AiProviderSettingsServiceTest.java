@@ -46,6 +46,7 @@ class AiProviderSettingsServiceTest {
         openRouterModelCatalogService
     );
     ReflectionTestUtils.setField(service, "fallbackOpenAiApiKey", "env-openai-key");
+    ReflectionTestUtils.setField(service, "fallbackOpenAiBaseUrl", "https://api.openai.com/v1/chat/completions");
     ReflectionTestUtils.setField(service, "fallbackOpenAiTextModel", "gpt-4o-mini");
     ReflectionTestUtils.setField(service, "fallbackOpenAiVisionModel", "gpt-4o-mini");
 
@@ -60,13 +61,14 @@ class AiProviderSettingsServiceTest {
 
   @Test
   void shouldResolveOpenAiRuntimeFromActiveProvider() {
-    settings.setActiveTextProvider(AiProviderType.OPENAI);
-    settings.setOpenaiTextModel("gpt-4.1-mini");
+    settings.setActiveTextProvider(AiProviderType.OPENAI_COMPATIBLE);
+    settings.setOpenaiCompatibleTextModel("gpt-4.1-mini");
 
     AiProviderSettingsService.RuntimeResolution runtime = service.resolveRuntime(null, AiCapability.TEXT);
 
-    assertEquals(AiProviderType.OPENAI, runtime.provider());
+    assertEquals(AiProviderType.OPENAI_COMPATIBLE, runtime.provider());
     assertEquals("gpt-4.1-mini", runtime.model());
+    assertEquals("https://api.openai.com/v1/chat/completions", runtime.baseUrl());
     assertTrue(runtime.hasApiKey());
   }
 
@@ -77,8 +79,11 @@ class AiProviderSettingsServiceTest {
         AiProviderType.OPENROUTER,
         "router-text-next",
         "router-vision-next",
+        "https://openai-compatible.example/v1/chat/completions",
         "gpt-4.1-mini",
         "gpt-4o-mini",
+        null,
+        null,
         null,
         null,
         null,
@@ -95,9 +100,10 @@ class AiProviderSettingsServiceTest {
         null
     ));
 
-    assertEquals(AiProviderType.OPENAI, result.summary().activeTextProvider());
+    assertEquals(AiProviderType.OPENAI_COMPATIBLE, result.summary().activeTextProvider());
     assertEquals(AiProviderType.OPENROUTER, result.summary().activeVisionProvider());
     assertEquals("router-text-next", result.summary().openrouterTextModel());
-    assertEquals("gpt-4.1-mini", result.summary().openaiTextModel());
+    assertEquals("gpt-4.1-mini", result.summary().openaiCompatibleTextModel());
+    assertEquals("https://openai-compatible.example/v1/chat/completions", result.summary().openaiCompatibleBaseUrl());
   }
 }

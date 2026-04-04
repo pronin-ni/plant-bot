@@ -384,27 +384,30 @@ export interface OpenRouterRuntimeSettingsDto {
 }
 
 export interface AiRuntimeSettingsDto {
-  activeTextProvider: 'OPENROUTER' | 'OPENAI';
-  activeVisionProvider: 'OPENROUTER' | 'OPENAI';
+  activeTextProvider: 'OPENROUTER' | 'OPENAI_COMPATIBLE';
+  activeVisionProvider: 'OPENROUTER' | 'OPENAI_COMPATIBLE';
   textModel?: string | null;
   visionModel?: string | null;
   openrouterHasApiKey: boolean;
-  openaiHasApiKey: boolean;
+  openaiCompatibleHasApiKey: boolean;
 }
 
 export interface AdminAiSettingsDto {
-  activeTextProvider: 'OPENROUTER' | 'OPENAI';
-  activeVisionProvider: 'OPENROUTER' | 'OPENAI';
+  activeTextProvider: 'OPENROUTER' | 'OPENAI_COMPATIBLE';
+  activeVisionProvider: 'OPENROUTER' | 'OPENAI_COMPATIBLE';
   openrouterTextModel?: string | null;
   openrouterVisionModel?: string | null;
-  openaiTextModel?: string | null;
-  openaiVisionModel?: string | null;
+  openaiCompatibleBaseUrl?: string | null;
+  openaiCompatibleTextModel?: string | null;
+  openaiCompatibleVisionModel?: string | null;
   effectiveTextModel?: string | null;
   effectiveVisionModel?: string | null;
   openrouterHasApiKey: boolean;
-  openaiHasApiKey: boolean;
+  openaiCompatibleHasApiKey: boolean;
   openrouterApiKeyMasked?: string | null;
-  openaiApiKeyMasked?: string | null;
+  openaiCompatibleApiKeyMasked?: string | null;
+  openaiCompatibleRequestTimeoutMs?: number | null;
+  openaiCompatibleMaxTokens?: number | null;
   healthChecksEnabled: boolean;
   retryCount?: number | null;
   retryBaseDelayMs?: number | null;
@@ -459,6 +462,14 @@ export interface OpenRouterTypedTestDto {
   model?: string | null;
   answer?: string | null;
   message: string;
+}
+
+export interface AdminOpenAiCompatibleTestDto {
+  ok: boolean;
+  message: string;
+  model?: string | null;
+  latencyMs?: number | null;
+  baseUrl?: string | null;
 }
 
 

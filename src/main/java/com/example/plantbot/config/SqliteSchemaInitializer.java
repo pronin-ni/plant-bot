@@ -23,12 +23,19 @@ import java.util.Set;
 public class SqliteSchemaInitializer {
   private static final Map<String, String> PLANTS_COLUMNS = buildPlantsColumns();
   private static final Map<String, String> GLOBAL_SETTINGS_COLUMNS = buildGlobalSettingsColumns();
+  private static final Map<String, String> AI_REQUEST_EVENT_COLUMNS = buildAiRequestEventColumns();
   private static final String WATERING_PROFILE_CHECK =
       "CHECK (watering_profile IN ('INDOOR','OUTDOOR_ORNAMENTAL','OUTDOOR_GARDEN','SEED_START'))";
   private static final String WATERING_PROFILE_TYPE_CHECK =
       "CHECK (watering_profile_type IN ('INDOOR','OUTDOOR_ORNAMENTAL','OUTDOOR_GARDEN','SEED_START'))";
   private static final String OPENROUTER_AVAILABILITY_CHECK =
       "CHECK (text_model_availability_status IN ('UNKNOWN','AVAILABLE','DEGRADED','UNAVAILABLE','ERROR'))";
+  private static final String AI_PROVIDER_CHECK =
+      "CHECK (active_text_provider IN ('OPENROUTER','OPENAI_COMPATIBLE','OPENAI'))";
+  private static final String AI_VISION_PROVIDER_CHECK =
+      "CHECK (active_vision_provider IN ('OPENROUTER','OPENAI_COMPATIBLE','OPENAI'))";
+  private static final String OPENROUTER_PHOTO_AVAILABILITY_CHECK =
+      "CHECK (photo_model_availability_status IN ('UNKNOWN','AVAILABLE','DEGRADED','UNAVAILABLE','ERROR'))";
 
   private final DataSource dataSource;
 
@@ -67,6 +74,7 @@ public class SqliteSchemaInitializer {
       }
 
       ensureGlobalSettingsColumns(connection, statement);
+      ensureAiRequestEventColumns(connection, statement);
       ensureRecommendationSnapshotColumns(statement);
       ensurePerformanceIndexes(statement);
     } catch (Exception ex) {
@@ -181,6 +189,12 @@ public class SqliteSchemaInitializer {
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_last_notified_unavailable_at", "photo_model_last_notified_unavailable_at TIMESTAMP");
     addGlobalSettingsColumnIfMissing(statement, columns, "text_model_check_interval_minutes", "text_model_check_interval_minutes INTEGER");
     addGlobalSettingsColumnIfMissing(statement, columns, "photo_model_check_interval_minutes", "photo_model_check_interval_minutes INTEGER");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_base_url", "openai_compatible_base_url VARCHAR(255)");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_api_key", "openai_compatible_api_key VARCHAR(4096)");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_text_model", "openai_compatible_text_model VARCHAR(255)");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_vision_model", "openai_compatible_vision_model VARCHAR(255)");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_request_timeout_ms", "openai_compatible_request_timeout_ms INTEGER");
+    addGlobalSettingsColumnIfMissing(statement, columns, "openai_compatible_max_tokens", "openai_compatible_max_tokens INTEGER");
     addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_health_checks_enabled", "openrouter_health_checks_enabled BOOLEAN DEFAULT 1");
     addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_retry_count", "openrouter_retry_count INTEGER DEFAULT 2");
     addGlobalSettingsColumnIfMissing(statement, columns, "openrouter_retry_base_delay_ms", "openrouter_retry_base_delay_ms INTEGER DEFAULT 600");
@@ -209,8 +223,10 @@ public class SqliteSchemaInitializer {
         return false;
       }
       String normalized = createSql.toUpperCase(Locale.ROOT);
-      return normalized.contains("TEXT_MODEL_AVAILABILITY_STATUS")
-          && !normalized.contains("DEGRADED");
+      return !normalized.contains(OPENROUTER_AVAILABILITY_CHECK.toUpperCase(Locale.ROOT))
+          || !normalized.contains(OPENROUTER_PHOTO_AVAILABILITY_CHECK.toUpperCase(Locale.ROOT))
+          || !normalized.contains(AI_PROVIDER_CHECK.toUpperCase(Locale.ROOT))
+          || !normalized.contains(AI_VISION_PROVIDER_CHECK.toUpperCase(Locale.ROOT));
     }
   }
 
@@ -232,6 +248,39 @@ public class SqliteSchemaInitializer {
       log.info("SQLite schema init: added recommendation_snapshots.flow");
     }
     statement.executeUpdate("UPDATE recommendation_snapshots SET flow = 'UNKNOWN' WHERE flow IS NULL OR TRIM(flow) = ''");
+  }
+
+  private void ensureAiRequestEventColumns(Connection connection, Statement statement) throws Exception {
+    Set<String> columns = new HashSet<>();
+    try (ResultSet rs = statement.executeQuery("PRAGMA table_info(ai_request_event)")) {
+      while (rs.next()) {
+        String name = rs.getString("name");
+        if (name != null) {
+          columns.add(name.toLowerCase(Locale.ROOT));
+        }
+      }
+    }
+    if (columns.isEmpty()) {
+      return;
+    }
+    if (requiresAiRequestEventRebuild(statement)) {
+      rebuildTable(connection, statement, "ai_request_event", AI_REQUEST_EVENT_COLUMNS, columns);
+      log.info("SQLite schema init: rebuilt ai_request_event table to refresh provider constraints");
+    }
+  }
+
+  private boolean requiresAiRequestEventRebuild(Statement statement) throws Exception {
+    try (ResultSet rs = statement.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_request_event'")) {
+      if (!rs.next()) {
+        return false;
+      }
+      String createSql = rs.getString(1);
+      if (createSql == null) {
+        return false;
+      }
+      String normalized = createSql.toUpperCase(Locale.ROOT);
+      return !normalized.contains("CHECK (PROVIDER IN ('OPENROUTER','OPENAI_COMPATIBLE','OPENAI'))");
+    }
   }
 
   private void addGlobalSettingsColumnIfMissing(Statement statement, Set<String> columns, String columnName, String ddl) throws Exception {
@@ -374,8 +423,8 @@ public class SqliteSchemaInitializer {
     columns.put("id", "id INTEGER PRIMARY KEY");
     columns.put("openrouter_api_key", "openrouter_api_key VARCHAR(4096)");
     columns.put("openai_api_key", "openai_api_key VARCHAR(4096)");
-    columns.put("active_text_provider", "active_text_provider VARCHAR(32)");
-    columns.put("active_vision_provider", "active_vision_provider VARCHAR(32)");
+    columns.put("active_text_provider", "active_text_provider VARCHAR(32) " + AI_PROVIDER_CHECK);
+    columns.put("active_vision_provider", "active_vision_provider VARCHAR(32) " + AI_VISION_PROVIDER_CHECK);
     columns.put("chat_model", "chat_model VARCHAR(255)");
     columns.put("openrouter_text_model", "openrouter_text_model VARCHAR(255)");
     columns.put("photo_recognition_model", "photo_recognition_model VARCHAR(255)");
@@ -388,7 +437,7 @@ public class SqliteSchemaInitializer {
     columns.put("text_model_last_successful_at", "text_model_last_successful_at TIMESTAMP");
     columns.put("text_model_last_error_message", "text_model_last_error_message VARCHAR(1024)");
     columns.put("text_model_last_notified_unavailable_at", "text_model_last_notified_unavailable_at TIMESTAMP");
-    columns.put("photo_model_availability_status", "photo_model_availability_status TEXT CHECK (photo_model_availability_status IN ('UNKNOWN','AVAILABLE','DEGRADED','UNAVAILABLE','ERROR'))");
+    columns.put("photo_model_availability_status", "photo_model_availability_status TEXT " + OPENROUTER_PHOTO_AVAILABILITY_CHECK);
     columns.put("photo_model_last_checked_at", "photo_model_last_checked_at TIMESTAMP");
     columns.put("photo_model_last_successful_at", "photo_model_last_successful_at TIMESTAMP");
     columns.put("photo_model_last_error_message", "photo_model_last_error_message VARCHAR(1024)");
@@ -407,8 +456,22 @@ public class SqliteSchemaInitializer {
     columns.put("ai_text_cache_enabled", "ai_text_cache_enabled BOOLEAN DEFAULT 1");
     columns.put("ai_text_cache_ttl_days", "ai_text_cache_ttl_days INTEGER");
     columns.put("ai_text_cache_last_cleanup_at", "ai_text_cache_last_cleanup_at TIMESTAMP");
-    columns.put("created_at", "created_at TIMESTAMP NOT NULL");
-    columns.put("updated_at", "updated_at TIMESTAMP NOT NULL");
+    columns.put("created_at", "created_at TIMESTAMP");
+    columns.put("updated_at", "updated_at TIMESTAMP");
+    return columns;
+  }
+
+  private static Map<String, String> buildAiRequestEventColumns() {
+    Map<String, String> columns = new LinkedHashMap<>();
+    columns.put("id", "id INTEGER PRIMARY KEY");
+    columns.put("provider", "provider VARCHAR(32) CHECK (provider IN ('OPENROUTER','OPENAI_COMPATIBLE','OPENAI'))");
+    columns.put("capability", "capability VARCHAR(32)");
+    columns.put("request_kind", "request_kind VARCHAR(64)");
+    columns.put("model", "model VARCHAR(255)");
+    columns.put("success", "success BOOLEAN NOT NULL");
+    columns.put("failure_reason", "failure_reason VARCHAR(255)");
+    columns.put("latency_ms", "latency_ms BIGINT");
+    columns.put("created_at", "created_at TIMESTAMP");
     return columns;
   }
 }

@@ -53,6 +53,7 @@ import type {
   AiRuntimeSettingsDto,
   AdminAiSettingsDto,
   AdminAiAnalyticsDto,
+  AdminOpenAiCompatibleTestDto,
   OpenRouterTypedTestDto,
   ChatAskResponse,
   PlantCareAdviceDto,
@@ -392,7 +393,7 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       textModel: demo.textModel,
       visionModel: demo.photoModel,
       openrouterHasApiKey: false,
-      openaiHasApiKey: false
+      openaiCompatibleHasApiKey: false
     } as T;
   }
 
@@ -403,14 +404,17 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       activeVisionProvider: 'OPENROUTER',
       openrouterTextModel: demo.textModel,
       openrouterVisionModel: demo.photoModel,
-      openaiTextModel: 'gpt-4o-mini',
-      openaiVisionModel: 'gpt-4o-mini',
+      openaiCompatibleBaseUrl: 'https://api.openai.com/v1/chat/completions',
+      openaiCompatibleTextModel: 'gpt-4o-mini',
+      openaiCompatibleVisionModel: 'gpt-4o-mini',
       effectiveTextModel: demo.textModel,
       effectiveVisionModel: demo.photoModel,
       openrouterHasApiKey: false,
-      openaiHasApiKey: false,
+      openaiCompatibleHasApiKey: false,
       openrouterApiKeyMasked: '',
-      openaiApiKeyMasked: '',
+      openaiCompatibleApiKeyMasked: '',
+      openaiCompatibleRequestTimeoutMs: 15000,
+      openaiCompatibleMaxTokens: 256,
       healthChecksEnabled: true,
       retryCount: 2,
       requestTimeoutMs: 15000,
@@ -432,18 +436,21 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       activeVisionProvider: body.activeVisionProvider ?? 'OPENROUTER',
       openrouterTextModel: body.openrouterTextModel ?? demo.textModel,
       openrouterVisionModel: body.openrouterVisionModel ?? demo.photoModel,
-      openaiTextModel: body.openaiTextModel ?? 'gpt-4o-mini',
-      openaiVisionModel: body.openaiVisionModel ?? 'gpt-4o-mini',
-      effectiveTextModel: (body.activeTextProvider ?? 'OPENROUTER') === 'OPENAI'
-        ? (body.openaiTextModel ?? 'gpt-4o-mini')
+      openaiCompatibleBaseUrl: body.openaiCompatibleBaseUrl ?? 'https://api.openai.com/v1/chat/completions',
+      openaiCompatibleTextModel: body.openaiCompatibleTextModel ?? 'gpt-4o-mini',
+      openaiCompatibleVisionModel: body.openaiCompatibleVisionModel ?? 'gpt-4o-mini',
+      effectiveTextModel: (body.activeTextProvider ?? 'OPENROUTER') === 'OPENAI_COMPATIBLE'
+        ? (body.openaiCompatibleTextModel ?? 'gpt-4o-mini')
         : (body.openrouterTextModel ?? demo.textModel),
-      effectiveVisionModel: (body.activeVisionProvider ?? 'OPENROUTER') === 'OPENAI'
-        ? (body.openaiVisionModel ?? 'gpt-4o-mini')
+      effectiveVisionModel: (body.activeVisionProvider ?? 'OPENROUTER') === 'OPENAI_COMPATIBLE'
+        ? (body.openaiCompatibleVisionModel ?? 'gpt-4o-mini')
         : (body.openrouterVisionModel ?? demo.photoModel),
       openrouterHasApiKey: false,
-      openaiHasApiKey: Boolean(body.openaiApiKey),
+      openaiCompatibleHasApiKey: Boolean(body.openaiCompatibleApiKey),
       openrouterApiKeyMasked: '',
-      openaiApiKeyMasked: body.openaiApiKey ? '••••demo' : '',
+      openaiCompatibleApiKeyMasked: body.openaiCompatibleApiKey ? '••••demo' : '',
+      openaiCompatibleRequestTimeoutMs: body.openaiCompatibleRequestTimeoutMs ?? 15000,
+      openaiCompatibleMaxTokens: body.openaiCompatibleMaxTokens ?? 256,
       healthChecksEnabled: body.healthChecksEnabled ?? true,
       retryCount: body.retryCount ?? 2,
       requestTimeoutMs: body.requestTimeoutMs ?? 15000,
@@ -454,6 +461,17 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       updatedAt: new Date().toISOString(),
       textModelAvailabilityStatus: 'UNKNOWN',
       photoModelAvailabilityStatus: 'UNKNOWN'
+    } as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/ai/openai-compatible/test') {
+    const body = init.body ? JSON.parse(String(init.body)) : {};
+    return {
+      ok: Boolean(body?.baseUrl || true),
+      message: 'Demo: OpenAI-compatible test successful',
+      model: body?.openaiCompatibleTextModel ?? 'gpt-4o-mini',
+      latencyMs: 120,
+      baseUrl: body?.openaiCompatibleBaseUrl ?? 'https://api.openai.com/v1/chat/completions'
     } as T;
   }
 
@@ -1526,13 +1544,16 @@ export async function getAdminAiSettings(): Promise<AdminAiSettingsDto> {
 }
 
 export async function saveAdminAiSettings(payload: {
-  activeTextProvider?: 'OPENROUTER' | 'OPENAI' | null;
-  activeVisionProvider?: 'OPENROUTER' | 'OPENAI' | null;
+  activeTextProvider?: 'OPENROUTER' | 'OPENAI_COMPATIBLE' | null;
+  activeVisionProvider?: 'OPENROUTER' | 'OPENAI_COMPATIBLE' | null;
   openrouterTextModel?: string | null;
   openrouterVisionModel?: string | null;
-  openaiTextModel?: string | null;
-  openaiVisionModel?: string | null;
-  openaiApiKey?: string | null;
+  openaiCompatibleBaseUrl?: string | null;
+  openaiCompatibleTextModel?: string | null;
+  openaiCompatibleVisionModel?: string | null;
+  openaiCompatibleApiKey?: string | null;
+  openaiCompatibleRequestTimeoutMs?: number | null;
+  openaiCompatibleMaxTokens?: number | null;
   textModelCheckIntervalMinutes?: number | null;
   photoModelCheckIntervalMinutes?: number | null;
   healthChecksEnabled?: boolean | null;
@@ -1555,6 +1576,12 @@ export async function saveAdminAiSettings(payload: {
 
 export async function getAdminAiAnalytics(period: 'HOUR' | 'DAY' | 'WEEK' | 'MONTH'): Promise<AdminAiAnalyticsDto> {
   return apiFetch<AdminAiAnalyticsDto>(`/api/admin/ai/analytics?period=${encodeURIComponent(period)}`, { method: 'GET' });
+}
+
+export async function testAdminOpenAiCompatibleConnection(): Promise<AdminOpenAiCompatibleTestDto> {
+  return apiFetch<AdminOpenAiCompatibleTestDto>('/api/admin/ai/openai-compatible/test', {
+    method: 'POST'
+  });
 }
 
 export async function checkAdminOpenRouterAvailability(type: 'text' | 'photo'): Promise<AdminOpenRouterAvailabilityCheckDto> {

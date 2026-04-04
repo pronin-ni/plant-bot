@@ -30,6 +30,12 @@ public class GlobalSettings {
   @Column(name = "openai_api_key")
   private String openaiApiKey;
 
+  @Column(name = "openai_compatible_base_url")
+  private String openaiCompatibleBaseUrl;
+
+  @Column(name = "openai_compatible_api_key")
+  private String openaiCompatibleApiKey;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "active_text_provider", length = 32)
   private AiProviderType activeTextProvider = AiProviderType.OPENROUTER;
@@ -55,8 +61,20 @@ public class GlobalSettings {
   @Column(name = "openai_text_model")
   private String openaiTextModel;
 
+  @Column(name = "openai_compatible_text_model")
+  private String openaiCompatibleTextModel;
+
   @Column(name = "openai_vision_model")
   private String openaiVisionModel;
+
+  @Column(name = "openai_compatible_vision_model")
+  private String openaiCompatibleVisionModel;
+
+  @Column(name = "openai_compatible_request_timeout_ms")
+  private Integer openaiCompatibleRequestTimeoutMs;
+
+  @Column(name = "openai_compatible_max_tokens")
+  private Integer openaiCompatibleMaxTokens;
 
   @Column(name = "photo_diagnosis_model")
   private String photoDiagnosisModel;

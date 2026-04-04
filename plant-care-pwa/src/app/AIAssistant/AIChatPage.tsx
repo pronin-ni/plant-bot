@@ -354,7 +354,7 @@ export function AIChatPage() {
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+    <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-[calc(env(safe-area-inset-bottom)+1rem)]">
       <header className="flex items-center justify-end gap-3 px-1">
         <button
           type="button"

@@ -31,6 +31,9 @@ public class AiProviderSettingsService {
   @Value("${openai.api-key:}")
   private String fallbackOpenAiApiKey;
 
+  @Value("${openai.base-url:https://api.openai.com/v1/chat/completions}")
+  private String fallbackOpenAiBaseUrl;
+
   @Value("${openai.model-text:gpt-4o-mini}")
   private String fallbackOpenAiTextModel;
 
@@ -50,7 +53,11 @@ public class AiProviderSettingsService {
     if (settings.getActiveVisionProvider() == null) {
       settings.setActiveVisionProvider(AiProviderType.OPENROUTER);
     }
+    boolean changed = migrateLegacyProviderSettings(settings);
     if (migrateLegacyPlainApiKey(settings)) {
+      changed = true;
+    }
+    if (changed) {
       settings = globalSettingsRepository.save(settings);
     }
     return settings;
@@ -76,13 +83,19 @@ public class AiProviderSettingsService {
         capability,
         normalizeModel(model),
         apiKey == null ? null : apiKey.trim(),
+        normalizeBaseUrl(resolveBaseUrl(settings, provider)),
+        resolveRequestTimeoutMs(settings, provider),
+        resolveMaxTokens(settings, provider),
         apiKey != null && !apiKey.isBlank()
     );
   }
 
   public String resolveApiKey(GlobalSettings settings, AiProviderType provider) {
-    if (provider == AiProviderType.OPENAI) {
-      String global = decryptStoredApiKey(settings == null ? null : settings.getOpenaiApiKey());
+    if (provider == AiProviderType.OPENAI_COMPATIBLE || provider == AiProviderType.OPENAI) {
+      String global = decryptStoredApiKey(firstNonBlank(
+          settings == null ? null : settings.getOpenaiCompatibleApiKey(),
+          settings == null ? null : settings.getOpenaiApiKey()
+      ));
       if (global != null && !global.isBlank()) {
         return global;
       }
@@ -105,12 +118,13 @@ public class AiProviderSettingsService {
         defaultProvider(effectiveSettings.getActiveVisionProvider()),
         normalizeModel(effectiveSettings.getOpenrouterTextModel()),
         normalizeModel(effectiveSettings.getOpenrouterPhotoModel()),
-        normalizeModel(effectiveSettings.getOpenaiTextModel()),
-        normalizeModel(effectiveSettings.getOpenaiVisionModel()),
+        normalizeModel(firstNonBlank(effectiveSettings.getOpenaiCompatibleTextModel(), effectiveSettings.getOpenaiTextModel())),
+        normalizeModel(firstNonBlank(effectiveSettings.getOpenaiCompatibleVisionModel(), effectiveSettings.getOpenaiVisionModel())),
+        normalizeBaseUrl(firstNonBlank(effectiveSettings.getOpenaiCompatibleBaseUrl(), fallbackOpenAiBaseUrl)),
         textRuntime.model(),
         visionRuntime.model(),
         hasApiKey(effectiveSettings, AiProviderType.OPENROUTER),
-        hasApiKey(effectiveSettings, AiProviderType.OPENAI)
+        hasApiKey(effectiveSettings, AiProviderType.OPENAI_COMPATIBLE)
     );
   }
 
@@ -154,28 +168,55 @@ public class AiProviderSettingsService {
       }
     }
 
-    if (request != null && request.openaiTextModel() != null) {
-      String normalized = normalizeModel(request.openaiTextModel());
-      if (!Objects.equals(settings.getOpenaiTextModel(), normalized)) {
+    if (request != null && request.openaiCompatibleTextModel() != null) {
+      String normalized = normalizeModel(request.openaiCompatibleTextModel());
+      if (!Objects.equals(settings.getOpenaiCompatibleTextModel(), normalized)) {
+        settings.setOpenaiCompatibleTextModel(normalized);
         settings.setOpenaiTextModel(normalized);
-        changedFields.add("openaiTextModel");
+        changedFields.add("openaiCompatibleTextModel");
       }
     }
 
-    if (request != null && request.openaiVisionModel() != null) {
-      String normalized = normalizeModel(request.openaiVisionModel());
-      if (!Objects.equals(settings.getOpenaiVisionModel(), normalized)) {
+    if (request != null && request.openaiCompatibleVisionModel() != null) {
+      String normalized = normalizeModel(request.openaiCompatibleVisionModel());
+      if (!Objects.equals(settings.getOpenaiCompatibleVisionModel(), normalized)) {
+        settings.setOpenaiCompatibleVisionModel(normalized);
         settings.setOpenaiVisionModel(normalized);
-        changedFields.add("openaiVisionModel");
+        changedFields.add("openaiCompatibleVisionModel");
       }
     }
 
-    if (request != null && request.openaiApiKey() != null) {
-      String normalized = normalizeSecret(request.openaiApiKey());
+    if (request != null && request.openaiCompatibleApiKey() != null) {
+      String normalized = normalizeSecret(request.openaiCompatibleApiKey());
       String encrypted = normalized == null ? null : encryptApiKey(normalized);
-      if (!Objects.equals(settings.getOpenaiApiKey(), encrypted)) {
+      if (!Objects.equals(settings.getOpenaiCompatibleApiKey(), encrypted)) {
+        settings.setOpenaiCompatibleApiKey(encrypted);
         settings.setOpenaiApiKey(encrypted);
-        changedFields.add("openaiApiKey");
+        changedFields.add("openaiCompatibleApiKey");
+      }
+    }
+
+    if (request != null && request.openaiCompatibleBaseUrl() != null) {
+      String normalized = normalizeBaseUrl(request.openaiCompatibleBaseUrl());
+      if (!Objects.equals(settings.getOpenaiCompatibleBaseUrl(), normalized)) {
+        settings.setOpenaiCompatibleBaseUrl(normalized);
+        changedFields.add("openaiCompatibleBaseUrl");
+      }
+    }
+
+    if (request != null && request.openaiCompatibleRequestTimeoutMs() != null) {
+      Integer normalized = normalizeRequestTimeoutMs(request.openaiCompatibleRequestTimeoutMs());
+      if (!Objects.equals(settings.getOpenaiCompatibleRequestTimeoutMs(), normalized)) {
+        settings.setOpenaiCompatibleRequestTimeoutMs(normalized);
+        changedFields.add("openaiCompatibleRequestTimeoutMs");
+      }
+    }
+
+    if (request != null && request.openaiCompatibleMaxTokens() != null) {
+      Integer normalized = normalizeMaxTokens(request.openaiCompatibleMaxTokens());
+      if (!Objects.equals(settings.getOpenaiCompatibleMaxTokens(), normalized)) {
+        settings.setOpenaiCompatibleMaxTokens(normalized);
+        changedFields.add("openaiCompatibleMaxTokens");
       }
     }
 
@@ -195,11 +236,11 @@ public class AiProviderSettingsService {
 
   public String resolveConfiguredModel(GlobalSettings settings, User user, AiProviderType provider, AiCapability capability) {
     GlobalSettings effectiveSettings = settings == null ? getOrCreate() : settings;
-    if (provider == AiProviderType.OPENAI) {
+    if (provider == AiProviderType.OPENAI_COMPATIBLE || provider == AiProviderType.OPENAI) {
       if (capability == AiCapability.VISION) {
-        return firstNonBlank(effectiveSettings.getOpenaiVisionModel(), fallbackOpenAiVisionModel);
+        return firstNonBlank(effectiveSettings.getOpenaiCompatibleVisionModel(), effectiveSettings.getOpenaiVisionModel(), fallbackOpenAiVisionModel);
       }
-      return firstNonBlank(effectiveSettings.getOpenaiTextModel(), fallbackOpenAiTextModel);
+      return firstNonBlank(effectiveSettings.getOpenaiCompatibleTextModel(), effectiveSettings.getOpenaiTextModel(), fallbackOpenAiTextModel);
     }
     OpenRouterGlobalSettingsService.ResolvedModels openRouterModels = openRouterGlobalSettingsService.resolveModels(effectiveSettings);
     if (capability == AiCapability.VISION) {
@@ -219,7 +260,34 @@ public class AiProviderSettingsService {
   }
 
   private AiProviderType defaultProvider(AiProviderType provider) {
-    return provider == null ? AiProviderType.OPENROUTER : provider;
+    if (provider == null) {
+      return AiProviderType.OPENROUTER;
+    }
+    return provider == AiProviderType.OPENAI ? AiProviderType.OPENAI_COMPATIBLE : provider;
+  }
+
+  public String resolveBaseUrl(GlobalSettings settings, AiProviderType provider) {
+    if (provider != AiProviderType.OPENAI_COMPATIBLE && provider != AiProviderType.OPENAI) {
+      return null;
+    }
+    return normalizeBaseUrl(firstNonBlank(
+        settings == null ? null : settings.getOpenaiCompatibleBaseUrl(),
+        fallbackOpenAiBaseUrl
+    ));
+  }
+
+  public Integer resolveRequestTimeoutMs(GlobalSettings settings, AiProviderType provider) {
+    if (provider != AiProviderType.OPENAI_COMPATIBLE && provider != AiProviderType.OPENAI) {
+      return null;
+    }
+    return normalizeRequestTimeoutMs(settings == null ? null : settings.getOpenaiCompatibleRequestTimeoutMs());
+  }
+
+  public Integer resolveMaxTokens(GlobalSettings settings, AiProviderType provider) {
+    if (provider != AiProviderType.OPENAI_COMPATIBLE && provider != AiProviderType.OPENAI) {
+      return null;
+    }
+    return normalizeMaxTokens(settings == null ? null : settings.getOpenaiCompatibleMaxTokens());
   }
 
   private String firstNonBlank(String... values) {
@@ -261,6 +329,28 @@ public class AiProviderSettingsService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
+  private String normalizeBaseUrl(String value) {
+    String normalized = normalizeSecret(value);
+    if (normalized == null) {
+      return null;
+    }
+    return normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
+  }
+
+  private Integer normalizeRequestTimeoutMs(Integer value) {
+    if (value == null) {
+      return null;
+    }
+    return Math.max(1_000, Math.min(120_000, value));
+  }
+
+  private Integer normalizeMaxTokens(Integer value) {
+    if (value == null) {
+      return null;
+    }
+    return Math.max(1, Math.min(32_000, value));
+  }
+
   private String encryptApiKey(String rawApiKey) {
     return ENC_PREFIX + cryptoService.encrypt(rawApiKey);
   }
@@ -275,6 +365,38 @@ public class AiProviderSettingsService {
     }
     settings.setOpenaiApiKey(encryptApiKey(stored.trim()));
     return true;
+  }
+
+  private boolean migrateLegacyProviderSettings(GlobalSettings settings) {
+    if (settings == null) {
+      return false;
+    }
+    boolean changed = false;
+    if (settings.getActiveTextProvider() == AiProviderType.OPENAI) {
+      settings.setActiveTextProvider(AiProviderType.OPENAI_COMPATIBLE);
+      changed = true;
+    }
+    if (settings.getActiveVisionProvider() == AiProviderType.OPENAI) {
+      settings.setActiveVisionProvider(AiProviderType.OPENAI_COMPATIBLE);
+      changed = true;
+    }
+    if (settings.getOpenaiCompatibleApiKey() == null && settings.getOpenaiApiKey() != null) {
+      settings.setOpenaiCompatibleApiKey(settings.getOpenaiApiKey());
+      changed = true;
+    }
+    if (settings.getOpenaiCompatibleTextModel() == null && settings.getOpenaiTextModel() != null) {
+      settings.setOpenaiCompatibleTextModel(settings.getOpenaiTextModel());
+      changed = true;
+    }
+    if (settings.getOpenaiCompatibleVisionModel() == null && settings.getOpenaiVisionModel() != null) {
+      settings.setOpenaiCompatibleVisionModel(settings.getOpenaiVisionModel());
+      changed = true;
+    }
+    if (settings.getOpenaiCompatibleBaseUrl() == null && fallbackOpenAiBaseUrl != null && !fallbackOpenAiBaseUrl.isBlank()) {
+      settings.setOpenaiCompatibleBaseUrl(normalizeBaseUrl(fallbackOpenAiBaseUrl));
+      changed = true;
+    }
+    return changed;
   }
 
   private String decryptStoredApiKey(String storedApiKey) {
@@ -302,14 +424,24 @@ public class AiProviderSettingsService {
       AiCapability capability,
       String model,
       String apiKey,
+      String baseUrl,
+      Integer requestTimeoutMs,
+      Integer maxTokens,
       boolean hasApiKey
   ) {
     public String analyticsModelKey() {
-      return provider.name() + ":" + (model == null ? "unknown" : model);
+      return backendKey() + ":" + (model == null ? "unknown" : model);
     }
 
     public String sourceLabel() {
-      return provider.name() + ":" + (model == null ? "unknown" : model);
+      return backendKey() + ":" + (model == null ? "unknown" : model);
+    }
+
+    public String backendKey() {
+      if (provider == AiProviderType.OPENAI_COMPATIBLE || provider == AiProviderType.OPENAI) {
+        return provider.name() + ":" + (baseUrl == null ? "default" : baseUrl);
+      }
+      return provider.name();
     }
   }
 
@@ -318,12 +450,13 @@ public class AiProviderSettingsService {
       AiProviderType activeVisionProvider,
       String openrouterTextModel,
       String openrouterVisionModel,
-      String openaiTextModel,
-      String openaiVisionModel,
+      String openaiCompatibleTextModel,
+      String openaiCompatibleVisionModel,
+      String openaiCompatibleBaseUrl,
       String effectiveTextModel,
       String effectiveVisionModel,
       boolean openrouterHasApiKey,
-      boolean openaiHasApiKey
+      boolean openaiCompatibleHasApiKey
   ) {
   }
 

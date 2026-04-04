@@ -220,8 +220,8 @@ function formatAiAdviceSource(source: string | null): string {
   if (source.toLowerCase().startsWith('openrouter:')) {
     return 'AI через OpenRouter';
   }
-  if (source.toLowerCase().startsWith('openai:')) {
-    return 'AI через ChatGPT / OpenAI';
+  if (source.toLowerCase().startsWith('openai_compatible:') || source.toLowerCase().startsWith('openai:')) {
+    return 'AI через OpenAI-compatible';
   }
   return source;
 }

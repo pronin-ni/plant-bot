@@ -28,6 +28,7 @@ import com.example.plantbot.controller.dto.admin.AdminOpenRouterModelsUpdateRequ
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterAvailabilityCheckResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiAnalyticsResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiSettingsResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiSettingsUpdateRequest;
@@ -37,6 +38,7 @@ import com.example.plantbot.domain.UserRole;
 import com.example.plantbot.repository.UserRepository;
 import com.example.plantbot.security.PwaPrincipal;
 import com.example.plantbot.service.AdminService;
+import com.example.plantbot.service.AiExecutionService;
 import com.example.plantbot.service.AiProviderSettingsService;
 import com.example.plantbot.service.AiRequestAnalyticsService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
@@ -91,6 +93,7 @@ public class AdminController {
   private final DatabaseBackupScheduler databaseBackupScheduler;
   private final WebPushNotificationService webPushNotificationService;
   private final AiProviderSettingsService aiProviderSettingsService;
+  private final AiExecutionService aiExecutionService;
   private final AiRequestAnalyticsService aiRequestAnalyticsService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
   private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
@@ -391,14 +394,17 @@ public class AdminController {
         summary.activeVisionProvider().name(),
         summary.openrouterTextModel(),
         summary.openrouterVisionModel(),
-        summary.openaiTextModel(),
-        summary.openaiVisionModel(),
+        summary.openaiCompatibleBaseUrl(),
+        summary.openaiCompatibleTextModel(),
+        summary.openaiCompatibleVisionModel(),
         summary.effectiveTextModel(),
         summary.effectiveVisionModel(),
         summary.openrouterHasApiKey(),
-        summary.openaiHasApiKey(),
+        summary.openaiCompatibleHasApiKey(),
         openRouterGlobalSettingsService.maskApiKey(openRouterGlobalSettingsService.resolveApiKey(settings)),
-        aiProviderSettingsService.maskApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI),
+        aiProviderSettingsService.maskApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
+        settings.getOpenaiCompatibleRequestTimeoutMs(),
+        settings.getOpenaiCompatibleMaxTokens(),
         Boolean.TRUE.equals(settings.getOpenrouterHealthChecksEnabled()),
         settings.getOpenrouterRetryCount(),
         settings.getOpenrouterRetryBaseDelayMs(),
@@ -426,6 +432,42 @@ public class AdminController {
         settings.getPhotoModelLastNotifiedUnavailableAt(),
         settings.getPhotoModelCheckIntervalMinutes()
     );
+  }
+
+  @PostMapping("/ai/openai-compatible/test")
+  public AdminOpenAiCompatibleTestResponse testOpenAiCompatible(Authentication authentication) {
+    User admin = requireAdmin(authentication);
+    var settings = aiProviderSettingsService.getOrCreate();
+    var runtime = new AiProviderSettingsService.RuntimeResolution(
+        com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE,
+        com.example.plantbot.domain.AiCapability.TEXT,
+        aiProviderSettingsService.resolveConfiguredModel(settings, admin, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE, com.example.plantbot.domain.AiCapability.TEXT),
+        aiProviderSettingsService.resolveApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
+        aiProviderSettingsService.resolveBaseUrl(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
+        aiProviderSettingsService.resolveRequestTimeoutMs(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
+        aiProviderSettingsService.resolveMaxTokens(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE),
+        aiProviderSettingsService.hasApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI_COMPATIBLE)
+    );
+    long startedAt = System.nanoTime();
+    if (!runtime.hasApiKey() || runtime.model() == null || runtime.model().isBlank()) {
+      aiExecutionService.recordConfigurationFailure(runtime, com.example.plantbot.domain.AiRequestKind.OTHER_AI_REQUEST, "AI runtime is not configured");
+      return new AdminOpenAiCompatibleTestResponse(false, "AI runtime is not configured", runtime.model(), 0L, runtime.baseUrl());
+    }
+    try {
+      aiExecutionService.execute(
+          runtime,
+          com.example.plantbot.domain.AiRequestKind.ASSISTANT_CHAT,
+          java.util.List.of(
+              java.util.Map.of("role", "system", "content", "Answer with one word: ok."),
+              java.util.Map.of("role", "user", "content", "ok?")
+          )
+      );
+      long latencyMs = Math.max(1L, System.nanoTime() - startedAt) / 1_000_000L;
+      return new AdminOpenAiCompatibleTestResponse(true, "Тест успешен", runtime.model(), latencyMs, runtime.baseUrl());
+    } catch (Exception ex) {
+      long latencyMs = Math.max(1L, System.nanoTime() - startedAt) / 1_000_000L;
+      return new AdminOpenAiCompatibleTestResponse(false, ex.getMessage(), runtime.model(), latencyMs, runtime.baseUrl());
+    }
   }
 
   @PostMapping("/openrouter/test")

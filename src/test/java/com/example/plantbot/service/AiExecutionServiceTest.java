@@ -50,14 +50,17 @@ class AiExecutionServiceTest {
     );
     JsonNode payload = objectMapper.readTree("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
     AiProviderSettingsService.RuntimeResolution runtime = new AiProviderSettingsService.RuntimeResolution(
-        AiProviderType.OPENAI,
+        AiProviderType.OPENAI_COMPATIBLE,
         AiCapability.TEXT,
         "gpt-4o-mini",
         "key",
+        "https://api.openai.com/v1/chat/completions",
+        15000,
+        256,
         true
     );
 
-    when(openAiExecutionService.executeChatCompletion(eq("key"), eq("gpt-4o-mini"), any())).thenReturn(payload);
+    when(openAiExecutionService.executeChatCompletion(eq("key"), eq("https://api.openai.com/v1/chat/completions"), eq("gpt-4o-mini"), eq(15000), eq(256), any())).thenReturn(payload);
 
     AiExecutionService.AiExecutionResult result = service.execute(
         runtime,
@@ -65,15 +68,15 @@ class AiExecutionServiceTest {
         List.of(Map.of("role", "user", "content", "hi"))
     );
 
-    assertEquals(AiProviderType.OPENAI, result.provider());
+    assertEquals(AiProviderType.OPENAI_COMPATIBLE, result.provider());
     assertEquals("gpt-4o-mini", result.model());
-    verify(openAiExecutionService).executeChatCompletion(eq("key"), eq("gpt-4o-mini"), any());
+    verify(openAiExecutionService).executeChatCompletion(eq("key"), eq("https://api.openai.com/v1/chat/completions"), eq("gpt-4o-mini"), eq(15000), eq(256), any());
     verify(openRouterExecutionService, never()).executeChatCompletion(anyString(), anyString(), any(), anyString(), anyString(), anyString(), any());
     verify(aiRequestAnalyticsService).record(
         eq(AiRequestKind.ASSISTANT_CHAT),
-        eq(AiProviderType.OPENAI),
+        eq(AiProviderType.OPENAI_COMPATIBLE),
         eq(AiCapability.TEXT),
-        eq("gpt-4o-mini"),
+        eq("OPENAI_COMPATIBLE:https://api.openai.com/v1/chat/completions:gpt-4o-mini"),
         eq(true),
         eq(null),
         anyLong()
@@ -93,6 +96,9 @@ class AiExecutionServiceTest {
         AiCapability.VISION,
         "google/gemma-3-12b-it:free",
         "key",
+        null,
+        null,
+        null,
         true
     );
 
@@ -109,7 +115,7 @@ class AiExecutionServiceTest {
         eq(AiRequestKind.PHOTO_IDENTIFY),
         eq(AiProviderType.OPENROUTER),
         eq(AiCapability.VISION),
-        eq("google/gemma-3-12b-it:free"),
+        eq("OPENROUTER:google/gemma-3-12b-it:free"),
         eq(false),
         eq("timeout"),
         anyLong()

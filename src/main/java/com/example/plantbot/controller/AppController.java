@@ -693,7 +693,7 @@ public class AppController {
         summary.effectiveTextModel(),
         summary.effectiveVisionModel(),
         summary.openrouterHasApiKey(),
-        summary.openaiHasApiKey()
+        summary.openaiCompatibleHasApiKey()
     );
   }
 
@@ -711,7 +711,7 @@ public class AppController {
     return new OpenRouterRuntimeSettingsResponse(
         summary.effectiveTextModel(),
         summary.effectiveVisionModel(),
-        summary.openrouterHasApiKey() || summary.openaiHasApiKey()
+        summary.openrouterHasApiKey() || summary.openaiCompatibleHasApiKey()
     );
   }
 

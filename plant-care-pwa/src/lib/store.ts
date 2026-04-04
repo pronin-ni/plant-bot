@@ -133,7 +133,7 @@ interface OpenRouterModelsState {
   photoModel: string;
   hasApiKey: boolean;
   openrouterHasApiKey: boolean;
-  openaiHasApiKey: boolean;
+  openaiCompatibleHasApiKey: boolean;
   isLoaded: boolean;
   source: 'default' | 'server';
   updatedAt?: string;
@@ -144,7 +144,7 @@ interface OpenRouterModelsState {
     photoModel?: string;
     hasApiKey?: boolean;
     openrouterHasApiKey?: boolean;
-    openaiHasApiKey?: boolean;
+    openaiCompatibleHasApiKey?: boolean;
     source: 'default' | 'server';
     updatedAt?: string;
   }) => void;
@@ -158,11 +158,11 @@ export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => (
   photoModel: '',
   hasApiKey: false,
   openrouterHasApiKey: false,
-  openaiHasApiKey: false,
+  openaiCompatibleHasApiKey: false,
   isLoaded: false,
   source: 'default',
   updatedAt: undefined,
-  setModels: ({ activeTextProvider, activeVisionProvider, textModel, photoModel, hasApiKey, openrouterHasApiKey, openaiHasApiKey, source, updatedAt }) =>
+  setModels: ({ activeTextProvider, activeVisionProvider, textModel, photoModel, hasApiKey, openrouterHasApiKey, openaiCompatibleHasApiKey, source, updatedAt }) =>
     set({
       activeTextProvider: activeTextProvider?.trim() || 'OPENROUTER',
       activeVisionProvider: activeVisionProvider?.trim() || 'OPENROUTER',
@@ -170,7 +170,7 @@ export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => (
       photoModel: photoModel?.trim() || '',
       hasApiKey: Boolean(hasApiKey),
       openrouterHasApiKey: Boolean(openrouterHasApiKey),
-      openaiHasApiKey: Boolean(openaiHasApiKey),
+      openaiCompatibleHasApiKey: Boolean(openaiCompatibleHasApiKey),
       isLoaded: true,
       source,
       updatedAt
@@ -183,7 +183,7 @@ export const useOpenRouterModelsStore = create<OpenRouterModelsState>((set) => (
       photoModel: '',
       hasApiKey: false,
       openrouterHasApiKey: false,
-      openaiHasApiKey: false,
+      openaiCompatibleHasApiKey: false,
       isLoaded: true,
       source: 'default',
       updatedAt: undefined

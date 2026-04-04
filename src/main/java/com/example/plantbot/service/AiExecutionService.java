@@ -35,7 +35,8 @@ public class AiExecutionService {
     long startedAt = System.nanoTime();
     try {
       JsonNode payload = runtime.provider() == AiProviderType.OPENAI
-          ? openAiExecutionService.executeChatCompletion(runtime.apiKey(), runtime.model(), messages)
+          || runtime.provider() == AiProviderType.OPENAI_COMPATIBLE
+          ? openAiExecutionService.executeChatCompletion(runtime.apiKey(), runtime.baseUrl(), runtime.model(), runtime.requestTimeoutMs(), runtime.maxTokens(), messages)
           : openRouterExecutionService.executeChatCompletion(
               runtime.apiKey(),
               runtime.model(),
@@ -49,7 +50,7 @@ public class AiExecutionService {
           requestKind,
           runtime.provider(),
           runtime.capability(),
-          runtime.model(),
+          runtime.analyticsModelKey(),
           true,
           null,
           elapsedMs(startedAt)
@@ -60,7 +61,7 @@ public class AiExecutionService {
           requestKind,
           runtime.provider(),
           runtime.capability(),
-          runtime.model(),
+          runtime.analyticsModelKey(),
           false,
           ex.getMessage(),
           elapsedMs(startedAt)
@@ -79,7 +80,7 @@ public class AiExecutionService {
         requestKind,
         runtime.provider(),
         runtime.capability(),
-        runtime.model(),
+        runtime.analyticsModelKey(),
         false,
         reason == null || reason.isBlank() ? "AI runtime is not configured" : reason.trim(),
         0L

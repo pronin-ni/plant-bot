@@ -54,9 +54,9 @@ export function useOpenRouterModels() {
       activeVisionProvider: modelsQuery.data.activeVisionProvider,
       textModel: normalizeModelId(modelsQuery.data.textModel),
       photoModel: normalizeModelId(modelsQuery.data.visionModel),
-      hasApiKey: modelsQuery.data.openrouterHasApiKey || modelsQuery.data.openaiHasApiKey,
+      hasApiKey: modelsQuery.data.openrouterHasApiKey || modelsQuery.data.openaiCompatibleHasApiKey,
       openrouterHasApiKey: modelsQuery.data.openrouterHasApiKey,
-      openaiHasApiKey: modelsQuery.data.openaiHasApiKey,
+      openaiCompatibleHasApiKey: modelsQuery.data.openaiCompatibleHasApiKey,
       source: 'server',
       updatedAt: undefined
     });
