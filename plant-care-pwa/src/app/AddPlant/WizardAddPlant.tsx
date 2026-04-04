@@ -2181,7 +2181,9 @@ export function WizardAddPlant() {
               ) : (
                 <>
                   <div className="theme-surface-2 rounded-ios-button border p-3">
-                    <p className="text-sm font-medium text-ios-text">Outdoor summary</p>
+                    <p className="text-sm font-medium text-ios-text">
+                      {environmentType === 'INDOOR' ? 'Сводка условий' : 'Сводка уличных условий'}
+                    </p>
                     <p className="mt-1 text-xs text-ios-subtext">
                       {outdoorReviewLead(environmentType, weatherContextPreview)}
                     </p>
@@ -2233,9 +2235,11 @@ export function WizardAddPlant() {
                   <div className="theme-surface-2 rounded-ios-button border p-3">
                     <p className="text-sm font-medium">{aiRecommendation?.summary ?? 'Используется базовый расчёт.'}</p>
                     <p className="mt-1 text-xs text-ios-subtext">
-                      {environmentType === 'OUTDOOR_ORNAMENTAL'
-                        ? 'Фокус на формате выращивания, солнце, почве и погоде.'
-                        : 'Фокус на стадии роста, площади ухода, укрытии и погоде.'}
+                        {environmentType === 'INDOOR'
+                          ? 'Фокус на объёме горшка, типе растения и погодном контексте.'
+                          : environmentType === 'OUTDOOR_ORNAMENTAL'
+                          ? 'Фокус на формате выращивания, солнце, почве и погоде.'
+                          : 'Фокус на стадии роста, площади ухода, укрытии и погоде.'}
                     </p>
                     {aiRecommendation?.warnings?.length ? (
                       <ul className="theme-banner-warning mt-2 space-y-1 rounded-ios-button border p-2 text-xs">

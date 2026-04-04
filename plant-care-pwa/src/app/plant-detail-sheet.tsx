@@ -1038,7 +1038,7 @@ export function PlantDetailSheet() {
                   <div className="flex items-center justify-between rounded-2xl bg-ios-bg/50 px-4 py-3">
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-ios-accent" />
-                      <span className="text-xs font-semibold uppercase tracking-[0.15em] text-ios-subtext">Журнал</span>
+                      <span className="text-xs font-semibold uppercase tracking-[0.15em] text-ios-subtext">Заметки</span>
                     </div>
                     <button
                       type="button"
@@ -1051,7 +1051,7 @@ export function PlantDetailSheet() {
                   </div>
 
                   <CollapsibleSection
-                    title="Журнал"
+                    title="Записи"
                     icon={<FileText className="h-3.5 w-3.5 text-ios-accent" />}
                     defaultCollapsed={true}
                   >
@@ -1183,22 +1183,26 @@ export function PlantDetailSheet() {
         onClose={() => setManualEditOpen(false)}
         plant={plant ?? plantQuery.data!}
         isApplying={applyManualRecommendationMutation.isPending || updatePlantMutation.isPending}
-        onApply={(intervalDays, waterMl, potVolumeLiters) => {
+        onApply={async (intervalDays, waterMl, potVolumeLiters) => {
           if (!selectedPlantId) {
             return;
           }
-          updatePlantMutation.mutate({
-            plantId: selectedPlantId,
-            baseIntervalDays: intervalDays,
-            preferredWaterMl: waterMl,
-            potVolumeLiters: potVolumeLiters
-          });
-          applyManualRecommendationMutation.mutate({
-            plantId: selectedPlantId,
-            intervalDays,
-            waterMl
-          });
-          setManualEditOpen(false);
+          try {
+            await updatePlantMutation.mutateAsync({
+              plantId: selectedPlantId,
+              baseIntervalDays: intervalDays,
+              preferredWaterMl: waterMl,
+              potVolumeLiters: potVolumeLiters
+            });
+            await applyManualRecommendationMutation.mutateAsync({
+              plantId: selectedPlantId,
+              intervalDays,
+              waterMl
+            });
+            setManualEditOpen(false);
+          } catch {
+            // Keep the sheet open so the user can retry after an error.
+          }
         }}
       />
     </BottomSheet>

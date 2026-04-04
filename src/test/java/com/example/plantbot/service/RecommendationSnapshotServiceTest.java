@@ -2,6 +2,7 @@ package com.example.plantbot.service;
 
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.RecommendationSnapshot;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.repository.RecommendationSnapshotRepository;
 import com.example.plantbot.service.recommendation.persistence.RecommendationSnapshotPayload;
@@ -56,6 +57,7 @@ class RecommendationSnapshotServiceTest {
     ArgumentCaptor<RecommendationSnapshot> captor = ArgumentCaptor.forClass(RecommendationSnapshot.class);
     verify(snapshotRepository).save(captor.capture());
     RecommendationSnapshot saved = captor.getValue();
+    assertEquals(RecommendationSnapshotFlow.CREATE, saved.getFlow());
     assertEquals("[\"reason-1\"]", saved.getReasoningJson());
     assertEquals("[\"warning-1\"]", saved.getWarningsJson());
     assertEquals("Initial summary", saved.getSummary());
@@ -70,6 +72,7 @@ class RecommendationSnapshotServiceTest {
     RecommendationSnapshot snapshot = service.saveFromPayload(
         plant,
         new RecommendationSnapshotPayload(
+            RecommendationSnapshotFlow.APPLY,
             RecommendationSource.MANUAL,
             3,
             500,
@@ -86,6 +89,7 @@ class RecommendationSnapshotServiceTest {
     ArgumentCaptor<RecommendationSnapshot> captor = ArgumentCaptor.forClass(RecommendationSnapshot.class);
     verify(snapshotRepository).save(captor.capture());
     RecommendationSnapshot saved = captor.getValue();
+    assertEquals(RecommendationSnapshotFlow.APPLY, saved.getFlow());
     assertEquals("[\"reason-a\"]", saved.getReasoningJson());
     assertEquals("[\"warning-a\"]", saved.getWarningsJson());
     assertEquals("{\"provider\":\"OPEN_METEO\"}", saved.getWeatherContextSnapshotJson());

@@ -69,6 +69,23 @@ public class AiExecutionService {
     }
   }
 
+  public void recordConfigurationFailure(AiProviderSettingsService.RuntimeResolution runtime,
+                                         AiRequestKind requestKind,
+                                         String reason) {
+    if (runtime == null) {
+      return;
+    }
+    aiRequestAnalyticsService.record(
+        requestKind,
+        runtime.provider(),
+        runtime.capability(),
+        runtime.model(),
+        false,
+        reason == null || reason.isBlank() ? "AI runtime is not configured" : reason.trim(),
+        0L
+    );
+  }
+
   private long elapsedMs(long startedAt) {
     return Math.max(1L, System.nanoTime() - startedAt) / 1_000_000L;
   }

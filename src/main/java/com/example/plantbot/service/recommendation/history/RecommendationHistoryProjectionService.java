@@ -3,6 +3,7 @@ package com.example.plantbot.service.recommendation.history;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.RecommendationSnapshot;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.service.RecommendationSnapshotService;
@@ -93,6 +94,11 @@ public class RecommendationHistoryProjectionService {
         || combined.contains("переведено из режима проращивания")) {
       return RecommendationHistoryEventType.MIGRATED_FROM_SEED;
     }
+    if (current.getFlow() == RecommendationSnapshotFlow.SCHEDULED
+        || combined.contains("scheduled heuristic recalculation")
+        || combined.contains("scheduler legacy heuristic path")) {
+      return RecommendationHistoryEventType.SCHEDULED_RECALCULATION_CHANGED;
+    }
     if (combined.contains("режим обновлён вручную")
         || combined.contains("режим зафиксирован вручную")
         || combined.contains("manual override")
@@ -120,7 +126,8 @@ public class RecommendationHistoryProjectionService {
     return switch (eventType) {
       case INITIAL_RECOMMENDATION_APPLIED -> RecommendationHistorySource.CREATE_FLOW;
       case MANUAL_RECOMMENDATION_APPLIED, MANUAL_OVERRIDE_APPLIED, MANUAL_OVERRIDE_REMOVED -> RecommendationHistorySource.APPLY_FLOW;
-      case SCHEDULED_RECALCULATION_CHANGED, WEATHER_DRIVEN_CHANGE, SEASONAL_CHANGE -> RecommendationHistorySource.SCHEDULED_FLOW;
+      case SCHEDULED_RECALCULATION_CHANGED -> RecommendationHistorySource.SCHEDULED_FLOW;
+      case WEATHER_DRIVEN_CHANGE, SEASONAL_CHANGE -> RecommendationHistorySource.REFRESH_FLOW;
       case SEED_STAGE_CHANGE -> RecommendationHistorySource.SEED_FLOW;
       case MIGRATED_FROM_SEED -> RecommendationHistorySource.SEED_MIGRATION_FLOW;
       case PLANT_PROFILE_CHANGE -> RecommendationHistorySource.PROFILE_EDIT_FLOW;

@@ -2,6 +2,7 @@ package com.example.plantbot.service.recommendation.persistence;
 
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -44,7 +45,8 @@ public class DefaultRecommendationPersistencePolicy implements RecommendationPer
         : null;
 
     RecommendationSnapshotPayload snapshotPayload = command.writeSnapshot()
-        ? new RecommendationSnapshotPayload(
+      ? new RecommendationSnapshotPayload(
+            toSnapshotFlow(flow),
             appliedSource,
             appliedInterval,
             appliedWater,
@@ -86,6 +88,19 @@ public class DefaultRecommendationPersistencePolicy implements RecommendationPer
       case APPLY, SEED_MIGRATION -> RecommendationSource.MANUAL;
       case REFRESH -> RecommendationSource.HYBRID;
       case SCHEDULED -> RecommendationSource.HEURISTIC;
+    };
+  }
+
+  private RecommendationSnapshotFlow toSnapshotFlow(RecommendationPersistenceFlow flow) {
+    if (flow == null) {
+      return RecommendationSnapshotFlow.UNKNOWN;
+    }
+    return switch (flow) {
+      case CREATE -> RecommendationSnapshotFlow.CREATE;
+      case APPLY -> RecommendationSnapshotFlow.APPLY;
+      case REFRESH -> RecommendationSnapshotFlow.REFRESH;
+      case SCHEDULED -> RecommendationSnapshotFlow.SCHEDULED;
+      case SEED_MIGRATION -> RecommendationSnapshotFlow.SEED_MIGRATION;
     };
   }
 

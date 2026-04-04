@@ -38,6 +38,37 @@ public class PreviewRecommendationResponseAdapter {
   }
 
   public WateringRecommendationResponse adaptForRefresh(RecommendationResult result, RecommendationRequestContext context) {
+    if (context != null && context.manualOverrideActive()) {
+      WateringRecommendationResponse adapted = adapt(result, context);
+      Integer exactInterval = context.baseIntervalDays() == null ? adapted.recommendedIntervalDays() : context.baseIntervalDays();
+      Integer exactWaterMl = context.preferredWaterMl() == null ? adapted.recommendedWaterMl() : context.preferredWaterMl();
+      Integer exactWaterVolumeMl = context.preferredWaterMl() == null
+          ? adapted.recommendedWaterVolumeMl()
+          : context.preferredWaterMl();
+      return new WateringRecommendationResponse(
+          RecommendationSource.MANUAL,
+          adapted.environmentType(),
+          exactWaterVolumeMl,
+          exactInterval,
+          exactWaterMl,
+          adapted.wateringMode(),
+          adapted.confidence(),
+          adapted.summary(),
+          adapted.reasoning(),
+          adapted.warnings(),
+          adapted.weatherUsed(),
+          adapted.weatherContextPreview(),
+          exactInterval == null || exactInterval <= 0 ? null : new WateringCyclePreviewDto(
+              java.util.stream.Stream.iterate(
+                      LocalDate.now().plusDays(exactInterval),
+                      date -> date.plusDays(exactInterval)
+                  )
+                  .limit(6)
+                  .toList()
+          ),
+          adapted.sensorContext()
+      );
+    }
     return adapt(result, context);
   }
 

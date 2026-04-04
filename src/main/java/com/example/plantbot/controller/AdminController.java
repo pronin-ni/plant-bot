@@ -397,7 +397,7 @@ public class AdminController {
         summary.effectiveVisionModel(),
         summary.openrouterHasApiKey(),
         summary.openaiHasApiKey(),
-        openRouterGlobalSettingsService.maskStoredApiKey(settings.getOpenrouterApiKey()),
+        openRouterGlobalSettingsService.maskApiKey(openRouterGlobalSettingsService.resolveApiKey(settings)),
         aiProviderSettingsService.maskApiKey(settings, com.example.plantbot.domain.AiProviderType.OPENAI),
         Boolean.TRUE.equals(settings.getOpenrouterHealthChecksEnabled()),
         settings.getOpenrouterRetryCount(),

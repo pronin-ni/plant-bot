@@ -262,6 +262,7 @@ public class OpenRouterPlantAdvisorService {
                                                                             WizardRecommendInput input) {
     AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
     if (!runtime.hasApiKey()) {
+      aiExecutionService.recordConfigurationFailure(runtime, AiRequestKind.WIZARD_RECOMMENDATION, "AI runtime is not configured");
       return Optional.empty();
     }
     if (input == null || input.plantName() == null || input.plantName().isBlank()) {
@@ -344,7 +345,11 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<SeedCareRecommendation> suggestSeedRecommendation(User user, SeedRecommendInput input) {
     AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
-    if (!runtime.hasApiKey() || input == null || input.plantName() == null || input.plantName().isBlank()) {
+    if (!runtime.hasApiKey()) {
+      aiExecutionService.recordConfigurationFailure(runtime, AiRequestKind.SEED_RECOMMENDATION, "AI runtime is not configured");
+      return Optional.empty();
+    }
+    if (input == null || input.plantName() == null || input.plantName().isBlank()) {
       return Optional.empty();
     }
 
@@ -417,7 +422,11 @@ public class OpenRouterPlantAdvisorService {
 
   public Optional<PlantSearchSuggestions> suggestPlantSearch(User user, String query, PlantCategory category) {
     AiProviderSettingsService.RuntimeResolution runtime = resolveTextRuntime(user);
-    if (!runtime.hasApiKey() || query == null || query.isBlank()) {
+    if (!runtime.hasApiKey()) {
+      aiExecutionService.recordConfigurationFailure(runtime, AiRequestKind.PLANT_SEARCH, "AI runtime is not configured");
+      return Optional.empty();
+    }
+    if (query == null || query.isBlank()) {
       return Optional.empty();
     }
 
@@ -501,6 +510,7 @@ public class OpenRouterPlantAdvisorService {
     boolean hasPhoto = normalizedPhoto != null;
     AiProviderSettingsService.RuntimeResolution runtime = resolveChatRuntime(user, hasPhoto);
     if (!runtime.hasApiKey()) {
+      aiExecutionService.recordConfigurationFailure(runtime, AiRequestKind.ASSISTANT_CHAT, "AI runtime is not configured");
       return Optional.empty();
     }
 

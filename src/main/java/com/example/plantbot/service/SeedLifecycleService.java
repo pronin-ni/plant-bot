@@ -8,6 +8,7 @@ import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.SeedCareActionType;
 import com.example.plantbot.domain.SeedStage;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -165,7 +166,7 @@ public class SeedLifecycleService {
     plant.setLastRecommendationUpdatedAt(Instant.now());
     plant.setSeedStage(SeedStage.READY_TO_TRANSPLANT);
     Plant saved = plantService.save(plant);
-    recommendationSnapshotService.saveManualSnapshot(saved, RecommendationSource.MANUAL, saved.getBaseIntervalDays(), saved.getPreferredWaterMl(), "Migration from seed mode.");
+    recommendationSnapshotService.saveManualSnapshot(saved, RecommendationSnapshotFlow.SEED_MIGRATION, RecommendationSource.MANUAL, saved.getBaseIntervalDays(), saved.getPreferredWaterMl(), "Migration from seed mode.");
     aiTextCacheInvalidationService.invalidateForPlantMutation(saved.getUser(), saved, "seed_migration_apply");
     aiTextCacheInvalidationService.invalidateUserDraftFeatures(saved.getUser(), "seed_migration_apply");
     return saved;

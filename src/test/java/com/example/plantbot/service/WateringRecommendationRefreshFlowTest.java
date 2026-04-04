@@ -13,6 +13,7 @@ import com.example.plantbot.domain.PlantGrowthStage;
 import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.SensorConfidence;
 import com.example.plantbot.domain.SunExposure;
 import com.example.plantbot.domain.User;
@@ -210,19 +211,35 @@ class WateringRecommendationRefreshFlowTest {
 
     service.refreshForExistingPlant(user, plant);
 
-    assertEquals(3, plant.getRecommendedIntervalDays());
-    assertEquals(430, plant.getRecommendedWaterVolumeMl());
+    assertEquals(4, plant.getRecommendedIntervalDays());
+    assertEquals(360, plant.getRecommendedWaterVolumeMl());
     assertEquals(RecommendationSource.MANUAL, plant.getRecommendationSource());
     assertEquals("Рекомендация рассчитана с учётом ручной настройки полива.", plant.getRecommendationSummary());
     assertNotNull(plant.getRecommendationReasoningJson());
     assertNotNull(plant.getRecommendationWarningsJson());
     assertEquals(null, plant.getConfidenceScore());
     assertTrue(Boolean.TRUE.equals(plant.getManualOverrideActive()));
-    assertEquals(430, plant.getManualWaterVolumeMl());
+    assertEquals(360, plant.getManualWaterVolumeMl());
     assertEquals(originalBaseInterval, plant.getBaseIntervalDays());
     assertEquals(originalPreferredWater, plant.getPreferredWaterMl());
     verify(plantService).save(eq(plant));
-    verify(recommendationSnapshotService).saveFromResponse(eq(plant), any(WateringRecommendationResponse.class));
+    verify(recommendationSnapshotService).saveFromResponse(eq(plant), any(WateringRecommendationResponse.class), eq(RecommendationSnapshotFlow.REFRESH));
+  }
+
+  @Test
+  void refreshForExistingPlantKeepsExactManualValuesInResponse() {
+    User user = user();
+    Plant plant = plant();
+    when(optionalSensorContextService.resolveForPlant(user, plant)).thenReturn(sensorContext());
+    when(legacyRuntimeRecommendationDelegate.recommendProfile(any(Plant.class), any(User.class), eq(true), eq(true), eq(true)))
+        .thenReturn(new WateringRecommendation(3.0, 0.43));
+
+    WateringRecommendationResponse response = service.refreshForExistingPlant(user, plant);
+
+    assertEquals(RecommendationSource.MANUAL, response.source());
+    assertEquals(4, response.recommendedIntervalDays());
+    assertEquals(360, response.recommendedWaterMl());
+    assertEquals(360, response.recommendedWaterVolumeMl());
   }
 
   private User user() {

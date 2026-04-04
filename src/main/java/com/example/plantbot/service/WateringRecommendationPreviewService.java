@@ -6,6 +6,7 @@ import com.example.plantbot.controller.dto.WateringRecommendationPreviewRequest;
 import com.example.plantbot.controller.dto.WateringRecommendationResponse;
 import com.example.plantbot.controller.dto.WeatherContextPreviewResponse;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.context.OptionalSensorContextService;
@@ -67,7 +68,7 @@ public class WateringRecommendationPreviewService {
     );
     applyRecommendationToPlant(plant, response, explainabilityPersistenceMapper.fromExplainability(result.explainability()));
     plantService.save(plant);
-    recommendationSnapshotService.saveFromResponse(plant, response);
+    recommendationSnapshotService.saveFromResponse(plant, response, RecommendationSnapshotFlow.REFRESH);
     aiTextCacheInvalidationService.invalidateForPlantMutation(user, plant, "watering_recommendation_refresh");
     return response;
   }

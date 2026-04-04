@@ -64,6 +64,9 @@ public class OpenRouterGlobalSettingsService {
   @Value("${openrouter.resilience.health-checks-enabled:true}")
   private boolean defaultHealthChecksEnabled;
 
+  @Value("${openrouter.api-key:}")
+  private String fallbackOpenRouterApiKey;
+
   @Transactional
   public GlobalSettings getOrCreate() {
     GlobalSettings settings = globalSettingsRepository.findById(SINGLETON_ID).orElseGet(() -> {
@@ -169,10 +172,15 @@ public class OpenRouterGlobalSettingsService {
   }
 
   public String resolveApiKey(GlobalSettings settings) {
-    if (settings == null) {
-      return null;
+    if (settings != null) {
+      String stored = decryptStoredApiKey(settings.getOpenrouterApiKey());
+      if (stored != null && !stored.isBlank()) {
+        return stored;
+      }
     }
-    return decryptStoredApiKey(settings.getOpenrouterApiKey());
+    return fallbackOpenRouterApiKey == null || fallbackOpenRouterApiKey.isBlank()
+        ? null
+        : fallbackOpenRouterApiKey.trim();
   }
 
   public boolean hasApiKey(GlobalSettings settings) {

@@ -8,10 +8,12 @@ import com.example.plantbot.domain.PlantPlacement;
 import com.example.plantbot.domain.PlantType;
 import com.example.plantbot.domain.RecommendationSnapshot;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.SeedStage;
 import com.example.plantbot.service.RecommendationSnapshotService;
 import com.example.plantbot.service.recommendation.history.model.RecommendationHistoryEntry;
 import com.example.plantbot.service.recommendation.history.model.RecommendationHistoryEventType;
+import com.example.plantbot.service.recommendation.history.model.RecommendationHistorySource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +48,7 @@ class RecommendationHistoryProjectionServiceTest {
 
     assertEquals(3, entries.size());
     assertEquals(RecommendationHistoryEventType.WEATHER_DRIVEN_CHANGE, entries.get(0).eventType());
+    assertEquals(RecommendationHistorySource.REFRESH_FLOW, entries.get(0).source());
     assertEquals(RecommendationHistoryEventType.MANUAL_RECOMMENDATION_APPLIED, entries.get(1).eventType());
     assertEquals(RecommendationHistoryEventType.INITIAL_RECOMMENDATION_APPLIED, entries.get(2).eventType());
     assertTrue(entries.get(0).meaningfulChange());
@@ -114,6 +117,28 @@ class RecommendationHistoryProjectionServiceTest {
   }
 
   @Test
+  void projectionUsesSnapshotFlowToSeparateScheduledFromRefresh() {
+    RecommendationSnapshotService snapshotService = mock(RecommendationSnapshotService.class);
+    RecommendationHistoryDiffEngine diffEngine = new RecommendationHistoryDiffEngine(new ObjectMapper());
+    RecommendationHistoryProjectionService service = new RecommendationHistoryProjectionService(snapshotService, diffEngine);
+
+    Plant plant = indoorPlant(47L);
+    RecommendationSnapshot latest = snapshot(2L, plant, RecommendationSource.HYBRID, 6, 320,
+        "Рекомендация рассчитана с учётом погоды и истории полива.", "[\"Учтён текущий погодный контекст.\"]", null, "{\"available\":true}");
+    latest.setFlow(RecommendationSnapshotFlow.SCHEDULED);
+    RecommendationSnapshot first = snapshot(1L, plant, RecommendationSource.BASE_PROFILE, 7, 300,
+        "Initial baseline", null, null, null);
+
+    when(snapshotService.listForPlant(plant, 6)).thenReturn(List.of(latest, first));
+
+    List<RecommendationHistoryEntry> entries = service.buildHistoryForPlant(plant, 5);
+
+    assertEquals(2, entries.size());
+    assertEquals(RecommendationHistoryEventType.SCHEDULED_RECALCULATION_CHANGED, entries.get(0).eventType());
+    assertEquals(RecommendationHistorySource.SCHEDULED_FLOW, entries.get(0).source());
+  }
+
+  @Test
   void projectionSuppressesNoChangeRefreshWithOnlyWindWarning() {
     RecommendationSnapshotService snapshotService = mock(RecommendationSnapshotService.class);
     RecommendationHistoryDiffEngine diffEngine = new RecommendationHistoryDiffEngine(new ObjectMapper());
@@ -172,6 +197,7 @@ class RecommendationHistoryProjectionServiceTest {
     snapshot.setId(id);
     snapshot.setPlant(plant);
     snapshot.setSource(source);
+    snapshot.setFlow(RecommendationSnapshotFlow.UNKNOWN);
     snapshot.setRecommendedIntervalDays(intervalDays);
     snapshot.setRecommendedWaterVolumeMl(waterMl);
     snapshot.setSummary(summary);

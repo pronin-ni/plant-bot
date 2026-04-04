@@ -4,6 +4,7 @@ import com.example.plantbot.controller.dto.WateringRecommendationResponse;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.RecommendationSnapshot;
 import com.example.plantbot.domain.RecommendationSource;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.repository.RecommendationSnapshotRepository;
 import com.example.plantbot.service.recommendation.persistence.RecommendationSnapshotPayload;
 import com.example.plantbot.util.WateringRecommendation;
@@ -22,11 +23,18 @@ public class RecommendationSnapshotService {
   private final ObjectMapper objectMapper;
 
   public RecommendationSnapshot saveFromResponse(Plant plant, WateringRecommendationResponse response) {
+    return saveFromResponse(plant, response, RecommendationSnapshotFlow.UNKNOWN);
+  }
+
+  public RecommendationSnapshot saveFromResponse(Plant plant,
+                                                 WateringRecommendationResponse response,
+                                                 RecommendationSnapshotFlow flow) {
     if (plant == null || response == null) {
       return null;
     }
     return saveSnapshot(
         plant,
+        flow,
         response.source() == null ? RecommendationSource.FALLBACK : response.source(),
         response.recommendedIntervalDays(),
         response.recommendedWaterVolumeMl() == null ? response.recommendedWaterMl() : response.recommendedWaterVolumeMl(),
@@ -54,6 +62,7 @@ public class RecommendationSnapshotService {
         : plant.getRecommendationSource();
     return saveSnapshotRawJson(
         plant,
+        RecommendationSnapshotFlow.CREATE,
         source,
         interval,
         water,
@@ -76,6 +85,7 @@ public class RecommendationSnapshotService {
     int waterMl = Math.max(50, (int) Math.round(recommendation.waterLiters() * 1000.0));
     return saveSnapshot(
         plant,
+        RecommendationSnapshotFlow.SCHEDULED,
         RecommendationSource.HEURISTIC,
         interval,
         waterMl,
@@ -89,12 +99,14 @@ public class RecommendationSnapshotService {
   }
 
   public RecommendationSnapshot saveManualSnapshot(Plant plant,
+                                                   RecommendationSnapshotFlow flow,
                                                    RecommendationSource source,
                                                    Integer intervalDays,
                                                    Integer waterMl,
                                                    String summary) {
     return saveSnapshot(
         plant,
+        flow == null ? RecommendationSnapshotFlow.APPLY : flow,
         source == null ? RecommendationSource.MANUAL : source,
         intervalDays == null ? Math.max(1, plant.getBaseIntervalDays()) : intervalDays,
         waterMl == null ? defaultWaterMl(plant) : waterMl,
@@ -113,6 +125,7 @@ public class RecommendationSnapshotService {
     }
     return saveSnapshotRawJson(
         plant,
+        payload.flow(),
         payload.source(),
         payload.recommendedIntervalDays(),
         payload.recommendedWaterVolumeMl(),
@@ -147,6 +160,7 @@ public class RecommendationSnapshotService {
   }
 
   private RecommendationSnapshot saveSnapshot(Plant plant,
+                                              RecommendationSnapshotFlow flow,
                                               RecommendationSource source,
                                               Integer intervalDays,
                                               Integer waterMl,
@@ -158,6 +172,7 @@ public class RecommendationSnapshotService {
                                               Instant generatedAt) {
     return saveSnapshotRawJson(
         plant,
+        flow,
         source,
         intervalDays,
         waterMl,
@@ -171,6 +186,7 @@ public class RecommendationSnapshotService {
   }
 
   private RecommendationSnapshot saveSnapshotRawJson(Plant plant,
+                                                     RecommendationSnapshotFlow flow,
                                                      RecommendationSource source,
                                                      Integer intervalDays,
                                                      Integer waterMl,
@@ -185,6 +201,7 @@ public class RecommendationSnapshotService {
     }
     RecommendationSnapshot snapshot = new RecommendationSnapshot();
     snapshot.setPlant(plant);
+    snapshot.setFlow(flow == null ? RecommendationSnapshotFlow.UNKNOWN : flow);
     snapshot.setSource(source == null ? RecommendationSource.FALLBACK : source);
     snapshot.setRecommendedIntervalDays(Math.max(1, intervalDays == null ? 7 : intervalDays));
     snapshot.setRecommendedWaterVolumeMl(Math.max(50, waterMl == null ? 300 : waterMl));

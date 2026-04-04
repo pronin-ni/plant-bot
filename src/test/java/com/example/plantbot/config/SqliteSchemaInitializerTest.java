@@ -99,6 +99,14 @@ class SqliteSchemaInitializerTest {
         assertHasGlobalSettingsColumn(statement, "photo_model_last_notified_unavailable_at");
         assertHasGlobalSettingsColumn(statement, "text_model_check_interval_minutes");
         assertHasGlobalSettingsColumn(statement, "photo_model_check_interval_minutes");
+        assertHasRecommendationSnapshotColumn(statement, "flow");
+
+        String globalSettingsSql;
+        try (ResultSet rs = statement.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='global_settings'")) {
+          assertTrue(rs.next());
+          globalSettingsSql = rs.getString(1);
+        }
+        assertTrue(globalSettingsSql.toUpperCase(Locale.ROOT).contains("DEGRADED"));
 
         assertHasIndex(statement, "idx_plants_user_id", "plants");
         assertHasIndex(statement, "idx_plants_user_category", "plants");
@@ -172,7 +180,9 @@ class SqliteSchemaInitializerTest {
             id INTEGER PRIMARY KEY,
             openrouter_api_key VARCHAR(4096),
             openrouter_text_model VARCHAR(255),
-            openrouter_photo_model VARCHAR(255)
+            openrouter_photo_model VARCHAR(255),
+            text_model_availability_status TEXT CHECK (text_model_availability_status IN ('UNKNOWN','AVAILABLE','UNAVAILABLE','ERROR')),
+            photo_model_availability_status TEXT CHECK (photo_model_availability_status IN ('UNKNOWN','AVAILABLE','UNAVAILABLE','ERROR'))
           )
           """);
       statement.executeUpdate("""
@@ -180,12 +190,16 @@ class SqliteSchemaInitializerTest {
             id,
             openrouter_api_key,
             openrouter_text_model,
-            openrouter_photo_model
+            openrouter_photo_model,
+            text_model_availability_status,
+            photo_model_availability_status
           ) VALUES (
             1,
             'encrypted',
             'openai/gpt-4o-mini',
-            'openai/gpt-4o-mini'
+            'openai/gpt-4o-mini',
+            'UNKNOWN',
+            'UNKNOWN'
           )
           """);
     }
@@ -242,6 +256,18 @@ class SqliteSchemaInitializerTest {
       }
     }
     fail("Expected global_settings column " + expectedColumn + " to exist after migration");
+  }
+
+  private void assertHasRecommendationSnapshotColumn(Statement statement, String expectedColumn) throws Exception {
+    try (ResultSet rs = statement.executeQuery("PRAGMA table_info(recommendation_snapshots)")) {
+      while (rs.next()) {
+        String name = rs.getString("name");
+        if (expectedColumn.equalsIgnoreCase(name)) {
+          return;
+        }
+      }
+    }
+    fail("Expected recommendation_snapshots column " + expectedColumn + " to exist after migration");
   }
 
   private void assertHasIndex(Statement statement, String expectedIndex, String expectedTable) throws Exception {

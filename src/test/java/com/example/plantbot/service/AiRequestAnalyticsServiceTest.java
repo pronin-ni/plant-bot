@@ -34,7 +34,7 @@ class AiRequestAnalyticsServiceTest {
     when(aiRequestEventRepository.countSuccessSince(any())).thenReturn(9L);
     when(aiRequestEventRepository.countFailureSince(any())).thenReturn(3L);
     when(aiRequestEventRepository.aggregateSince(any())).thenReturn(List.of(
-        new AiRequestAnalyticsService.AnalyticsRow(
+        new AiAnalyticsAggregationRow(
             AiRequestKind.ASSISTANT_CHAT,
             AiProviderType.OPENAI,
             "gpt-4o-mini",

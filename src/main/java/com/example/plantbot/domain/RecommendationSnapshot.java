@@ -43,6 +43,10 @@ public class RecommendationSnapshot {
   @Column(nullable = false)
   private RecommendationSource source;
 
+  @Enumerated(EnumType.STRING)
+  @Column(length = 32)
+  private RecommendationSnapshotFlow flow = RecommendationSnapshotFlow.UNKNOWN;
+
   @Column(nullable = false)
   private Integer recommendedIntervalDays;
 

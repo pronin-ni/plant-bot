@@ -1,7 +1,7 @@
 package com.example.plantbot.repository;
 
 import com.example.plantbot.domain.AiRequestEvent;
-import com.example.plantbot.service.AiRequestAnalyticsService;
+import com.example.plantbot.service.AiAnalyticsAggregationRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -13,7 +13,7 @@ import java.util.List;
 
 public interface AiRequestEventRepository extends JpaRepository<AiRequestEvent, Long> {
   @Query("""
-      select new com.example.plantbot.service.AiRequestAnalyticsService.AnalyticsRow(
+      select new com.example.plantbot.service.AiAnalyticsAggregationRow(
           e.requestKind,
           e.provider,
           e.model,
@@ -28,7 +28,7 @@ public interface AiRequestEventRepository extends JpaRepository<AiRequestEvent, 
       group by e.requestKind, e.provider, e.model
       order by count(e) desc, e.requestKind asc, e.provider asc, e.model asc
       """)
-  List<AiRequestAnalyticsService.AnalyticsRow> aggregateSince(@Param("from") Instant from);
+  List<AiAnalyticsAggregationRow> aggregateSince(@Param("from") Instant from);
 
   @Query("""
       select count(e)

@@ -22,7 +22,16 @@ public class PlantNoteService {
     private final PlantNoteRepository noteRepository;
     private final PlantService plantService;
 
-    public List<PlantNoteResponse> getNotes(Long plantId) {
+    public List<PlantNoteResponse> getNotes(User user, Long plantId) {
+        Plant plant = plantService.getById(plantId);
+        if (plant == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "Растение не найдено");
+        }
+        if (user == null || plant.getUser() == null || !plant.getUser().getId().equals(user.getId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Нет доступа к растению");
+        }
         return noteRepository.findByPlantIdOrderByCreatedAtDesc(plantId).stream()
                 .map(this::toResponse)
                 .toList();

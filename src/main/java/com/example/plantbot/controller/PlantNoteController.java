@@ -31,7 +31,7 @@ public class PlantNoteController {
             @PathVariable Long plantId
     ) {
         User user = currentUserService.resolve(authentication, initData);
-        return noteService.getNotes(plantId);
+        return noteService.getNotes(user, plantId);
     }
 
     @PostMapping("/plants/{plantId}/notes")

@@ -90,15 +90,4 @@ public class AiRequestAnalyticsService {
     return trimmed.length() > 255 ? trimmed.substring(0, 255) : trimmed;
   }
 
-  public record AnalyticsRow(
-      AiRequestKind requestKind,
-      AiProviderType provider,
-      String model,
-      long total,
-      long success,
-      long failed,
-      Instant lastSuccessAt,
-      Instant lastFailureAt
-  ) {
-  }
 }

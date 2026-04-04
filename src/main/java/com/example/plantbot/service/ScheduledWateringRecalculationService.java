@@ -4,6 +4,7 @@ import com.example.plantbot.controller.dto.WateringRecommendationResponse;
 import com.example.plantbot.domain.Plant;
 import com.example.plantbot.domain.PlantEnvironmentType;
 import com.example.plantbot.domain.RecommendationSnapshot;
+import com.example.plantbot.domain.RecommendationSnapshotFlow;
 import com.example.plantbot.domain.RecommendationSource;
 import com.example.plantbot.domain.User;
 import com.example.plantbot.service.context.OptionalSensorContextService;
@@ -82,7 +83,7 @@ public class ScheduledWateringRecalculationService {
         if (plan != null && plan.snapshotPayload() != null) {
           recommendationSnapshotService.saveFromPayload(plant, plan.snapshotPayload());
         } else {
-          recommendationSnapshotService.saveFromResponse(plant, response);
+          recommendationSnapshotService.saveFromResponse(plant, response, RecommendationSnapshotFlow.SCHEDULED);
         }
         updated++;
       } catch (Exception ex) {

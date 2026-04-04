@@ -22,10 +22,13 @@ import java.util.Set;
 @Slf4j
 public class SqliteSchemaInitializer {
   private static final Map<String, String> PLANTS_COLUMNS = buildPlantsColumns();
+  private static final Map<String, String> GLOBAL_SETTINGS_COLUMNS = buildGlobalSettingsColumns();
   private static final String WATERING_PROFILE_CHECK =
       "CHECK (watering_profile IN ('INDOOR','OUTDOOR_ORNAMENTAL','OUTDOOR_GARDEN','SEED_START'))";
   private static final String WATERING_PROFILE_TYPE_CHECK =
       "CHECK (watering_profile_type IN ('INDOOR','OUTDOOR_ORNAMENTAL','OUTDOOR_GARDEN','SEED_START'))";
+  private static final String OPENROUTER_AVAILABILITY_CHECK =
+      "CHECK (text_model_availability_status IN ('UNKNOWN','AVAILABLE','DEGRADED','UNAVAILABLE','ERROR'))";
 
   private final DataSource dataSource;
 
@@ -63,7 +66,8 @@ public class SqliteSchemaInitializer {
         }
       }
 
-      ensureGlobalSettingsColumns(statement);
+      ensureGlobalSettingsColumns(connection, statement);
+      ensureRecommendationSnapshotColumns(statement);
       ensurePerformanceIndexes(statement);
     } catch (Exception ex) {
       log.warn("SQLite schema init failed: {}", ex.getMessage());
@@ -152,7 +156,7 @@ public class SqliteSchemaInitializer {
     createIndexIfTableExists(statement, "idx_watering_log_created", "watering_log", "created_at");
   }
 
-  private void ensureGlobalSettingsColumns(Statement statement) throws Exception {
+  private void ensureGlobalSettingsColumns(Connection connection, Statement statement) throws Exception {
     Set<String> columns = new HashSet<>();
     try (ResultSet rs = statement.executeQuery("PRAGMA table_info(global_settings)")) {
       while (rs.next()) {
@@ -189,6 +193,45 @@ public class SqliteSchemaInitializer {
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_enabled", "ai_text_cache_enabled BOOLEAN DEFAULT 1");
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_ttl_days", "ai_text_cache_ttl_days INTEGER DEFAULT 7");
     addGlobalSettingsColumnIfMissing(statement, columns, "ai_text_cache_last_cleanup_at", "ai_text_cache_last_cleanup_at TIMESTAMP");
+    if (requiresGlobalSettingsRebuild(statement)) {
+      rebuildTable(connection, statement, "global_settings", GLOBAL_SETTINGS_COLUMNS, columns);
+      log.info("SQLite schema init: rebuilt global_settings table to refresh model availability constraints");
+    }
+  }
+
+  private boolean requiresGlobalSettingsRebuild(Statement statement) throws Exception {
+    try (ResultSet rs = statement.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='global_settings'")) {
+      if (!rs.next()) {
+        return false;
+      }
+      String createSql = rs.getString(1);
+      if (createSql == null) {
+        return false;
+      }
+      String normalized = createSql.toUpperCase(Locale.ROOT);
+      return normalized.contains("TEXT_MODEL_AVAILABILITY_STATUS")
+          && !normalized.contains("DEGRADED");
+    }
+  }
+
+  private void ensureRecommendationSnapshotColumns(Statement statement) throws Exception {
+    Set<String> columns = new HashSet<>();
+    try (ResultSet rs = statement.executeQuery("PRAGMA table_info(recommendation_snapshots)")) {
+      while (rs.next()) {
+        String name = rs.getString("name");
+        if (name != null) {
+          columns.add(name.toLowerCase(Locale.ROOT));
+        }
+      }
+    }
+    if (columns.isEmpty()) {
+      return;
+    }
+    if (!columns.contains("flow")) {
+      statement.execute("ALTER TABLE recommendation_snapshots ADD COLUMN flow VARCHAR(32) DEFAULT 'UNKNOWN'");
+      log.info("SQLite schema init: added recommendation_snapshots.flow");
+    }
+    statement.executeUpdate("UPDATE recommendation_snapshots SET flow = 'UNKNOWN' WHERE flow IS NULL OR TRIM(flow) = ''");
   }
 
   private void addGlobalSettingsColumnIfMissing(Statement statement, Set<String> columns, String columnName, String ddl) throws Exception {
@@ -210,6 +253,46 @@ public class SqliteSchemaInitializer {
     try (ResultSet rs = statement.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='" + tableName + "'")) {
       return rs.next();
     }
+  }
+
+  private void rebuildTable(Connection connection,
+                            Statement statement,
+                            String tableName,
+                            Map<String, String> definitions,
+                            Set<String> existingColumns) throws Exception {
+    boolean autoCommit = connection.getAutoCommit();
+    connection.setAutoCommit(false);
+    String legacyTable = tableName + "_legacy";
+    try {
+      statement.execute("ALTER TABLE " + tableName + " RENAME TO " + legacyTable);
+      statement.execute(buildCreateTableSql(tableName, definitions));
+      List<String> copyColumns = definitions.keySet().stream()
+          .filter(existingColumns::contains)
+          .toList();
+      String joinedColumns = String.join(", ", copyColumns);
+      statement.execute("INSERT INTO " + tableName + " (" + joinedColumns + ") SELECT " + joinedColumns + " FROM " + legacyTable);
+      statement.execute("DROP TABLE " + legacyTable);
+      connection.commit();
+    } catch (Exception ex) {
+      connection.rollback();
+      throw ex;
+    } finally {
+      connection.setAutoCommit(autoCommit);
+    }
+  }
+
+  private String buildCreateTableSql(String tableName, Map<String, String> definitions) {
+    StringBuilder sql = new StringBuilder("CREATE TABLE ").append(tableName).append(" (");
+    boolean first = true;
+    for (String definition : definitions.values()) {
+      if (!first) {
+        sql.append(", ");
+      }
+      sql.append(definition);
+      first = false;
+    }
+    sql.append(")");
+    return sql.toString();
   }
 
   private static Map<String, String> buildPlantsColumns() {
@@ -283,6 +366,49 @@ public class SqliteSchemaInitializer {
     columns.put("watering_profile", "watering_profile VARCHAR(255) " + WATERING_PROFILE_CHECK);
     columns.put("watering_profile_type", "watering_profile_type VARCHAR(255) " + WATERING_PROFILE_TYPE_CHECK);
     columns.put("weather_adjustment_enabled", "weather_adjustment_enabled BOOLEAN");
+    return columns;
+  }
+
+  private static Map<String, String> buildGlobalSettingsColumns() {
+    Map<String, String> columns = new LinkedHashMap<>();
+    columns.put("id", "id INTEGER PRIMARY KEY");
+    columns.put("openrouter_api_key", "openrouter_api_key VARCHAR(4096)");
+    columns.put("openai_api_key", "openai_api_key VARCHAR(4096)");
+    columns.put("active_text_provider", "active_text_provider VARCHAR(32)");
+    columns.put("active_vision_provider", "active_vision_provider VARCHAR(32)");
+    columns.put("chat_model", "chat_model VARCHAR(255)");
+    columns.put("openrouter_text_model", "openrouter_text_model VARCHAR(255)");
+    columns.put("photo_recognition_model", "photo_recognition_model VARCHAR(255)");
+    columns.put("openrouter_photo_model", "openrouter_photo_model VARCHAR(255)");
+    columns.put("openai_text_model", "openai_text_model VARCHAR(255)");
+    columns.put("openai_vision_model", "openai_vision_model VARCHAR(255)");
+    columns.put("photo_diagnosis_model", "photo_diagnosis_model VARCHAR(255)");
+    columns.put("text_model_availability_status", "text_model_availability_status TEXT " + OPENROUTER_AVAILABILITY_CHECK);
+    columns.put("text_model_last_checked_at", "text_model_last_checked_at TIMESTAMP");
+    columns.put("text_model_last_successful_at", "text_model_last_successful_at TIMESTAMP");
+    columns.put("text_model_last_error_message", "text_model_last_error_message VARCHAR(1024)");
+    columns.put("text_model_last_notified_unavailable_at", "text_model_last_notified_unavailable_at TIMESTAMP");
+    columns.put("photo_model_availability_status", "photo_model_availability_status TEXT CHECK (photo_model_availability_status IN ('UNKNOWN','AVAILABLE','DEGRADED','UNAVAILABLE','ERROR'))");
+    columns.put("photo_model_last_checked_at", "photo_model_last_checked_at TIMESTAMP");
+    columns.put("photo_model_last_successful_at", "photo_model_last_successful_at TIMESTAMP");
+    columns.put("photo_model_last_error_message", "photo_model_last_error_message VARCHAR(1024)");
+    columns.put("photo_model_last_notified_unavailable_at", "photo_model_last_notified_unavailable_at TIMESTAMP");
+    columns.put("text_model_check_interval_minutes", "text_model_check_interval_minutes INTEGER");
+    columns.put("photo_model_check_interval_minutes", "photo_model_check_interval_minutes INTEGER");
+    columns.put("openrouter_health_checks_enabled", "openrouter_health_checks_enabled BOOLEAN DEFAULT 1");
+    columns.put("openrouter_retry_count", "openrouter_retry_count INTEGER");
+    columns.put("openrouter_retry_base_delay_ms", "openrouter_retry_base_delay_ms INTEGER");
+    columns.put("openrouter_retry_max_delay_ms", "openrouter_retry_max_delay_ms INTEGER");
+    columns.put("openrouter_request_timeout_ms", "openrouter_request_timeout_ms INTEGER");
+    columns.put("openrouter_degraded_failure_threshold", "openrouter_degraded_failure_threshold INTEGER");
+    columns.put("openrouter_unavailable_failure_threshold", "openrouter_unavailable_failure_threshold INTEGER");
+    columns.put("openrouter_unavailable_cooldown_minutes", "openrouter_unavailable_cooldown_minutes INTEGER");
+    columns.put("openrouter_recovery_recheck_interval_minutes", "openrouter_recovery_recheck_interval_minutes INTEGER");
+    columns.put("ai_text_cache_enabled", "ai_text_cache_enabled BOOLEAN DEFAULT 1");
+    columns.put("ai_text_cache_ttl_days", "ai_text_cache_ttl_days INTEGER");
+    columns.put("ai_text_cache_last_cleanup_at", "ai_text_cache_last_cleanup_at TIMESTAMP");
+    columns.put("created_at", "created_at TIMESTAMP NOT NULL");
+    columns.put("updated_at", "updated_at TIMESTAMP NOT NULL");
     return columns;
   }
 }
