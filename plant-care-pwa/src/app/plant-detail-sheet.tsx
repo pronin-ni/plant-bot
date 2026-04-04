@@ -1277,18 +1277,18 @@ function WaterStatusBlock({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <div className="theme-surface-subtle rounded-xl border p-2.5">
+      <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="theme-surface-subtle min-w-0 rounded-xl border p-2.5">
           <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Интервал</p>
-          <p className="mt-0.5 text-sm font-semibold text-ios-text">{intervalDays} дн.</p>
+          <p className="mt-0.5 break-words text-sm font-semibold text-ios-text">{intervalDays} дн.</p>
         </div>
-        <div className="theme-surface-subtle rounded-xl border p-2.5">
+        <div className="theme-surface-subtle min-w-0 rounded-xl border p-2.5">
           <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Объём</p>
-          <p className="mt-0.5 text-sm font-semibold text-ios-text">{waterMl} мл</p>
+          <p className="mt-0.5 break-words text-sm font-semibold text-ios-text">{waterMl} мл</p>
         </div>
-        <div className="theme-surface-subtle rounded-xl border p-2.5">
+        <div className="theme-surface-subtle min-w-0 rounded-xl border p-2.5">
           <p className="text-[10px] uppercase tracking-[0.1em] text-ios-subtext">Режим</p>
-          <p className="mt-0.5 text-sm font-semibold text-ios-text">{humanizeWateringMode(wateringMode)}</p>
+          <p className="mt-0.5 break-words text-sm font-semibold leading-5 text-ios-text">{humanizeWateringMode(wateringMode)}</p>
         </div>
       </div>
 

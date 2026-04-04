@@ -2295,12 +2295,12 @@ export function WizardAddPlant() {
 
       <div
         className={cn(
-          'sticky bottom-0 z-10 -mx-1 rounded-t-xl border-t border-ios-border/50 bg-[color:var(--background)]/90 px-1 pt-2 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--background)]/75',
+          'sticky bottom-0 z-10 rounded-t-xl border-t border-ios-border/50 bg-[color:var(--background)]/90 px-0 pt-2 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--background)]/75',
           keyboardVisible && 'shadow-[0_-8px_28px_rgba(0,0,0,0.08)]'
         )}
         style={footerStyle}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-1">
         <motion.div whileTap={{ scale: 0.985 }} className="flex-1">
         <Button variant="secondary" className="h-12 w-full text-base" disabled={stepIndex === 0 || isWizardActionBusy} onClick={goBack}>
           <ChevronLeft className="mr-1 h-4 w-4" />

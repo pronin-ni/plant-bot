@@ -101,10 +101,10 @@ export function PlantCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="line-clamp-1 text-sm font-semibold text-ios-text">{plant.name}</p>
+            <p className="line-clamp-2 break-words text-sm font-semibold text-ios-text">{plant.name}</p>
             <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ios-subtext">
               <CategoryIcon plant={plant} className="h-3 w-3" />
-              <span className="truncate">{getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}</span>
+              <span className="line-clamp-2 break-words">{getPlantCategoryLabel(plant)} · {getPlantEnvironmentLabel(plant)}</span>
             </p>
           </div>
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pill.containerClassName}`}>
@@ -118,13 +118,13 @@ export function PlantCard({
             <SourceIcon className="h-3 w-3" />
             {seedPlant ? seedStageLabel(plant.seedStage) : source.shortLabel}
           </span>
-          <span className="truncate text-[11px] text-ios-subtext">
+          <span className="line-clamp-2 break-words text-[11px] text-ios-subtext">
             {seedPlant ? '' : nextWateringLabel(daysLeft, nextWateringText)}
           </span>
         </div>
 
         <div className={`mt-1.5 flex items-center gap-2 rounded-md px-2 py-1 ${hintTone}`}>
-          <p className="min-w-0 flex-1 truncate text-[11px] leading-3 text-ios-text">
+          <p className="min-w-0 flex-1 break-words text-[11px] leading-4 text-ios-text">
             {seedPlant ? (plant.seedSummary?.trim() || hint) : hint}
           </p>
           <div className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[hsl(var(--secondary)/0.96)]">

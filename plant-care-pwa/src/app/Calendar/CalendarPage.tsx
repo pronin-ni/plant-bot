@@ -435,14 +435,14 @@ export function CalendarPage() {
         </section>
 
         <div className="ios-blur-card p-1.5">
-          <div className="no-scrollbar flex gap-1 overflow-x-auto">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
             {tabs.map((tab) => {
               const active = tab.key === filter;
               return (
                 <button
                   key={tab.key}
                   type="button"
-                  className={`touch-target android-ripple relative shrink-0 rounded-2xl border px-3.5 text-xs font-semibold transition ${
+                    className={`touch-target android-ripple relative min-w-0 rounded-2xl border px-3.5 text-xs font-semibold transition ${
                     active
                       ? 'border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-[0_8px_20px_hsl(var(--primary)/0.25)]'
                       : 'theme-surface-subtle text-ios-subtext hover:text-ios-text'

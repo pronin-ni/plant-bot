@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { impactLight, selection } from '@/lib/haptics';
+import { selection } from '@/lib/haptics';
 import { useMotionGuard } from '@/lib/motion';
 import { startOfLocalDay, toLocalDateKey } from '@/lib/date';
 
@@ -106,18 +106,7 @@ export function CalendarStrip({
       <AnimatePresence mode="wait">
         <motion.div
           key={toLocalDateKey(anchorDate)}
-          className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1.5"
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          onDragEnd={(_, info) => {
-            if (info.offset.x <= -64) {
-              impactLight();
-              onShiftWindow(7);
-            } else if (info.offset.x >= 64) {
-              impactLight();
-              onShiftWindow(-7);
-            }
-          }}
+          className="grid grid-cols-4 gap-2 pb-1.5 min-[420px]:grid-cols-7"
           initial={{ opacity: 0, x: 18 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -18 }}
@@ -135,7 +124,7 @@ export function CalendarStrip({
                   selection();
                   onSelectDate(day.dayKey);
                 }}
-                className={`relative min-w-[78px] shrink-0 overflow-hidden rounded-2xl border p-2.5 text-left transition ${
+                className={`relative min-w-0 overflow-hidden rounded-2xl border p-2.5 text-left transition ${
                   day.isSelected
                     ? 'theme-pill-active shadow-[0_8px_22px_rgba(52,199,89,0.18)]'
                     : day.overdue

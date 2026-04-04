@@ -444,6 +444,7 @@ export function OpenRouterSettings() {
                   disabled={loading || saving}
                   placeholder="https://api.openai.com/v1/chat/completions"
                   mono
+                  multiline
                 />
               </div>
               <InputField
@@ -601,13 +602,13 @@ export function OpenRouterSettings() {
           <MetricCard label="Failed" value={String(analytics?.failed ?? 0)} />
         </div>
 
-        <div className="mt-4 space-y-3 md:hidden">
+        <div className="mt-4 space-y-3 lg:hidden">
           {analyticsLoading ? <AnalyticsPlaceholder /> : null}
           {!analyticsLoading && analyticsRows.length === 0 ? <EmptyAnalyticsState /> : null}
           {!analyticsLoading ? analyticsRows.map((row) => <AnalyticsRowCard key={`${row.requestKind}-${row.provider}-${row.model ?? 'default'}`} row={row} />) : null}
         </div>
 
-        <div className="mt-4 hidden overflow-x-auto md:block">
+        <div className="mt-4 hidden overflow-x-auto lg:block">
           <table className="min-w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-ios-border/60 text-left text-ios-subtext">
@@ -649,13 +650,13 @@ export function OpenRouterSettings() {
         </div>
       </SectionCard>
 
-      <div className="sticky bottom-0 z-20 -mx-4 border-t border-ios-border/60 bg-[linear-gradient(180deg,rgba(245,246,248,0.72),rgba(245,246,248,0.96))] px-4 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 backdrop-blur-[18px] dark:bg-[linear-gradient(180deg,rgba(9,9,11,0.7),rgba(9,9,11,0.96))] sm:rounded-t-[28px]">
+      <div className="sticky bottom-0 z-20 rounded-t-[28px] border-t border-ios-border/60 bg-[linear-gradient(180deg,rgba(245,246,248,0.72),rgba(245,246,248,0.96))] px-4 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 backdrop-blur-[18px] dark:bg-[linear-gradient(180deg,rgba(9,9,11,0.7),rgba(9,9,11,0.96))]">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ios-text">Save AI settings</p>
             <p className="text-xs leading-5 text-ios-subtext">Изменения применятся к runtime и обновят аналитическую сводку после сохранения.</p>
           </div>
-          <Button className="min-w-[190px] rounded-2xl" disabled={loading || saving} onClick={() => void handleSave()}>
+          <Button className="min-w-0 rounded-2xl whitespace-normal text-center leading-5 sm:min-w-[190px]" disabled={loading || saving} onClick={() => void handleSave()}>
             {saving ? 'Сохраняем...' : 'Сохранить AI настройки'}
           </Button>
         </div>
@@ -779,7 +780,8 @@ function InputField({
   placeholder,
   type = 'text',
   disabled = false,
-  mono = false
+  mono = false,
+  multiline = false
 }: {
   label: string;
   value: string;
@@ -788,18 +790,30 @@ function InputField({
   type?: string;
   disabled?: boolean;
   mono?: boolean;
+  multiline?: boolean;
 }) {
   return (
     <label className="block min-w-0 text-sm text-ios-text">
       <span className="mb-1.5 block text-ios-subtext">{label}</span>
-      <input
-        type={type}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className={`h-11 w-full min-w-0 rounded-2xl border border-ios-border/60 bg-white/75 px-3 outline-none transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900/70 ${mono ? 'font-mono text-[13px]' : ''}`}
-      />
+      {multiline ? (
+        <textarea
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          rows={2}
+          className={`min-h-[72px] w-full min-w-0 resize-y rounded-2xl border border-ios-border/60 bg-white/75 px-3 py-2.5 outline-none transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900/70 ${mono ? 'font-mono text-[13px] leading-5 break-all' : ''}`}
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={`h-11 w-full min-w-0 rounded-2xl border border-ios-border/60 bg-white/75 px-3 outline-none transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900/70 ${mono ? 'font-mono text-[13px]' : ''}`}
+        />
+      )}
     </label>
   );
 }

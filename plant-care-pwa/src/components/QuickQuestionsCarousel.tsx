@@ -45,13 +45,13 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
     <section className="relative space-y-2">
       <h3 className="text-sm font-medium text-ios-text">Быстрые вопросы</h3>
 
-      <div className="no-scrollbar flex w-full min-w-0 gap-2 overflow-x-auto pb-1">
+      <div className="flex w-full min-w-0 flex-wrap gap-2 pb-1">
         {items.map((item) => (
           <motion.button
             key={item}
             type="button"
             whileTap={{ scale: 0.97 }}
-            className="theme-surface-subtle touch-target android-ripple h-11 max-w-[82vw] shrink-0 truncate rounded-full border px-3.5 text-left text-xs text-ios-text shadow-sm"
+            className="theme-surface-subtle touch-target android-ripple min-h-11 max-w-full rounded-full border px-3.5 py-2 text-left text-xs leading-5 text-ios-text shadow-sm sm:max-w-[calc(50%-0.25rem)]"
             title={item}
             onPointerDown={() => startLongPress(item)}
             onPointerUp={clearLongPressTimer}
@@ -72,7 +72,7 @@ export function QuickQuestionsCarousel({ items, onPick }: QuickQuestionsCarousel
               onPick(item);
             }}
           >
-            {item}
+            <span className="line-clamp-2 break-words">{item}</span>
           </motion.button>
         ))}
       </div>

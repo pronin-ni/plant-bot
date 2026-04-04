@@ -600,8 +600,8 @@ export function AdminPlantTable({ search, category, status, sort, wateringFrom }
           })}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
-          <div className="max-h-[58vh] overflow-auto">
+        <div className="max-w-full overflow-hidden rounded-2xl border border-ios-border/60 bg-white/65 dark:bg-zinc-900/60">
+          <div className="max-h-[58vh] max-w-full overflow-auto touch-pan-x overscroll-x-contain">
             <table className="w-full min-w-[940px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-white/85 backdrop-blur dark:bg-zinc-950/80">
                 {table.getHeaderGroups().map((headerGroup) => (

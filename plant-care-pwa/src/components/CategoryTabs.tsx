@@ -34,10 +34,7 @@ export function CategoryTabs({
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 340, damping: 28 }}
     >
-      <div className="relative">
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-6 bg-gradient-to-r from-ios-bg to-transparent" />
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-6 bg-gradient-to-l from-ios-bg to-transparent" />
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
         {TABS.map((tab) => {
           const active = tab.key === value;
           const Icon = tab.icon;
@@ -48,7 +45,7 @@ export function CategoryTabs({
               onClick={() => onChange(tab.key)}
               whileTap={{ scale: 0.97 }}
               className={cn(
-                'touch-target relative min-h-11 shrink-0 rounded-ios-button px-3 py-2.5 text-[13px] font-medium transition-colors',
+                'touch-target relative min-h-11 min-w-0 rounded-ios-button px-3 py-2.5 text-[13px] font-medium transition-colors',
                 active ? 'text-ios-text' : 'text-ios-subtext'
               )}
             >
@@ -66,7 +63,6 @@ export function CategoryTabs({
             </motion.button>
           );
         })}
-        </div>
       </div>
     </motion.div>
   );

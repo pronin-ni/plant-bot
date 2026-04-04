@@ -106,7 +106,7 @@ export function GrowthCarousel({ plantId, currentPhotoUrl }: GrowthCarouselProps
         {slides.length ? (
           <motion.div
             key="carousel"
-            className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2"
+            className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 touch-pan-x overscroll-x-contain"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}

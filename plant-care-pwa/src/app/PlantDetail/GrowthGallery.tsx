@@ -83,7 +83,7 @@ export function GrowthGallery({ plantId, photoUrl }: { plantId: number; photoUrl
         </label>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 md:grid-cols-2 xl:grid-cols-3">
         {photoUrl ? (
           <img src={photoUrl} alt="Текущее фото" className="h-20 w-full rounded-ios-button object-cover" />
         ) : null}
