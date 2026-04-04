@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2, Sprout } from 'lucide-react';
 import type { PropsWithChildren, TouchEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 interface PlatformPullToRefreshProps extends PropsWithChildren {
   onRefresh: () => Promise<unknown> | unknown;
@@ -11,9 +11,12 @@ interface PlatformPullToRefreshProps extends PropsWithChildren {
 const TRIGGER_PX = 74;
 
 export function PlatformPullToRefresh({ onRefresh, disabled = false, children }: PlatformPullToRefreshProps) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const scrollRootRef = useRef<HTMLElement | null>(null);
   const [pullY, setPullY] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [startY, setStartY] = useState<number | null>(null);
+  const [startX, setStartX] = useState<number | null>(null);
   const isAndroid = useMemo(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('android'),
     []
@@ -34,27 +37,65 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
     }
   }
 
+  function resolveScrollRoot(): HTMLElement | null {
+    let current = hostRef.current?.parentElement ?? null;
+    while (current) {
+      const style = window.getComputedStyle(current);
+      if (/(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight + 1) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement;
+  }
+
+  function clearGesture() {
+    setStartY(null);
+    setStartX(null);
+    scrollRootRef.current = null;
+    setPullY(0);
+  }
+
   function onTouchStart(event: TouchEvent<HTMLDivElement>) {
     if (disabled || isRefreshing) {
       return;
     }
-    if (window.scrollY > 0) {
-      setStartY(null);
+    const scrollRoot = resolveScrollRoot();
+    if (!scrollRoot || scrollRoot.scrollTop > 0) {
+      clearGesture();
       return;
     }
+    scrollRootRef.current = scrollRoot;
     setStartY(event.touches[0]?.clientY ?? null);
+    setStartX(event.touches[0]?.clientX ?? null);
   }
 
   function onTouchMove(event: TouchEvent<HTMLDivElement>) {
-    if (startY == null || disabled || isRefreshing) {
+    if (startY == null || startX == null || disabled || isRefreshing) {
       return;
     }
+    const scrollRoot = scrollRootRef.current;
+    if (!scrollRoot || scrollRoot.scrollTop > 0) {
+      clearGesture();
+      return;
+    }
+
     const currentY = event.touches[0]?.clientY ?? startY;
+    const currentX = event.touches[0]?.clientX ?? startX;
     const delta = Math.max(0, currentY - startY);
+    const deltaX = Math.abs(currentX - startX);
+
+    if (deltaX > delta) {
+      clearGesture();
+      return;
+    }
+
     if (delta <= 0) {
       setPullY(0);
       return;
     }
+
+    event.preventDefault();
 
     // iOS rubber-band с более пружинистым демпфированием.
     const damped = isAndroid
@@ -68,6 +109,8 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
       return;
     }
     setStartY(null);
+    setStartX(null);
+    scrollRootRef.current = null;
     if (pullY >= TRIGGER_PX) {
       await triggerRefresh();
       return;
@@ -76,7 +119,7 @@ export function PlatformPullToRefresh({ onRefresh, disabled = false, children }:
   }
 
   return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+    <div ref={hostRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
       <AnimatePresence>
         {(pullY > 0 || isRefreshing) ? (
           <motion.div

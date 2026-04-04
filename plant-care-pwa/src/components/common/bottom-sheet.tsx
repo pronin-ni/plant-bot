@@ -68,7 +68,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div ref={contentRef} className="overflow-y-auto pr-1 max-h-[70vh]">
+            <div ref={contentRef} className="max-h-[70vh] overflow-y-auto overflow-x-hidden pr-1 overscroll-y-contain">
               {children}
             </div>
           </motion.div>

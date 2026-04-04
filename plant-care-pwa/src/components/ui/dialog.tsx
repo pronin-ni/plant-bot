@@ -48,7 +48,7 @@ export function Dialog({ open, onOpenChange, title, description, className, chil
             aria-modal="true"
             className={cn(
               // Mobile: full-screen modal with safe-areas.
-              'fixed inset-0 z-50 h-[100dvh] w-screen overflow-y-auto border border-[hsl(var(--border)/0.45)] bg-[hsl(var(--card)/0.95)] p-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+16px)] text-[hsl(var(--card-foreground))] shadow-[0_16px_50px_rgb(0_0_0/0.28)]',
+              'fixed inset-0 z-50 h-[100dvh] w-full max-w-full overflow-y-auto overflow-x-hidden border border-[hsl(var(--border)/0.45)] bg-[hsl(var(--card)/0.95)] p-4 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+16px)] text-[hsl(var(--card-foreground))] shadow-[0_16px_50px_rgb(0_0_0/0.28)]',
               'md:left-1/2 md:top-1/2 md:h-auto md:w-[min(92vw,720px)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[26px] md:bg-[hsl(var(--card)/0.84)] md:p-5 md:pb-6 md:pt-5 md:shadow-[0_14px_44px_rgb(0_0_0/0.18)] md:backdrop-blur-[30px]',
               'android:rounded-[24px] android:backdrop-blur-0',
               className

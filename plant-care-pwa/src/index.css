@@ -56,28 +56,45 @@ html {
 @layer base {
   * {
     @apply border-ios-border/50;
+    box-sizing: border-box;
   }
 
   html,
   body,
   #root {
-    touch-action: pan-x pan-y;
+    width: 100%;
+    max-width: 100%;
+    min-height: 100%;
+    overflow-x: clip;
+    touch-action: pan-y;
+  }
+
+  html {
+    overscroll-behavior-y: none;
   }
 
   body {
     @apply bg-ios-bg text-ios-text font-sans antialiased;
-    overscroll-behavior-y: contain;
-    overflow-x: hidden;
+    overscroll-behavior-y: none;
+    overflow: hidden;
   }
 
   #root {
     @apply min-h-dvh;
+    isolation: isolate;
   }
 
   input,
   textarea,
   select {
     touch-action: manipulation;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
   }
 }
 
@@ -248,6 +265,19 @@ html {
     color: white;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
+  }
+
+  .overflow-x-auto,
+  .overflow-auto {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .overflow-y-auto,
+  .overflow-auto {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

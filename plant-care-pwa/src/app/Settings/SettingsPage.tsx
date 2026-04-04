@@ -390,7 +390,7 @@ export function SettingsPage() {
   };
 
   return (
-    <PlatformPullToRefresh onRefresh={handleRefresh}>
+    <PlatformPullToRefresh onRefresh={handleRefresh} disabled={Boolean(activeDetail)}>
       <section className="settings-premium-shell space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))]">
         {visibleGroups.map((group) => (
           <SettingsGroupCard key={group.id} title={group.title}>
@@ -530,7 +530,7 @@ function SettingsDetailDialog({
     <motion.div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex min-h-[100dvh] w-screen overflow-hidden bg-[rgb(10_15_20/0.32)] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] w-full max-w-full overflow-hidden bg-[rgb(10_15_20/0.32)] backdrop-blur-sm"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -538,7 +538,7 @@ function SettingsDetailDialog({
       onClick={() => onClose()}
     >
       <motion.div
-        className="relative ml-auto flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-[hsl(var(--background))] text-[hsl(var(--foreground))]"
+        className="relative ml-auto flex h-[100dvh] w-full min-w-0 max-w-none flex-col overflow-hidden bg-[hsl(var(--background))] text-[hsl(var(--foreground))] md:w-[min(92vw,760px)] md:max-w-[760px] md:border-l md:border-[hsl(var(--border)/0.45)] md:shadow-[-18px_0_40px_rgb(0_0_0/0.12)]"
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
@@ -564,7 +564,7 @@ function SettingsDetailDialog({
           <p className="px-4 pt-3 text-sm text-ios-subtext">{meta.description}</p>
         ) : null}
 
-        <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+22px)]">
+        <div className="mt-3 flex-1 space-y-4 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-[calc(env(safe-area-inset-bottom)+22px)]">
           {detailId === 'theme' ? <ThemeSelector /> : null}
           {detailId === 'notifications' ? <NotificationsPanel /> : null}
           {detailId === 'haptics' ? <HapticsPanel /> : null}
