@@ -7,13 +7,14 @@ import { BottomSheet } from '@/components/common/bottom-sheet';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { Dialog } from '@/components/ui/dialog';
 import { PlantDetailPage } from '@/app/PlantDetail/PlantDetailPage';
+import { SeedDetailPage } from '@/app/PlantDetail/SeedDetailPage';
 import { GrowthCarousel } from '@/components/GrowthCarousel';
 import { GrowthTimeline } from '@/app/PlantDetail/GrowthTimeline';
 import { LeafDiagnosis } from '@/components/LeafDiagnosis';
 import { NotesList } from '@/components/NotesList';
 import { AddNoteSheet } from '@/components/AddNoteSheet';
 import { SeedStageActionsCard } from '@/components/seed/SeedStageActionsCard';
-import { seedActionLabel } from '@/components/seed/seedStageUi';
+import { createSeedActionEntry, formatSeedActionEntry } from '@/components/seed/seedStageUi';
 import { getPlantSourceTone, getPlantStatusTone } from '@/components/plants/plantRecommendationUi';
 import { QuickWaterButton } from '@/components/QuickWaterButton';
 import { Button } from '@/components/ui/button';
@@ -154,13 +155,7 @@ function updateCalendarAfterWatering(
 }
 
 function appendSeedActionEntry(plant: PlantDto, action: 'MOISTEN' | 'VENT' | 'REMOVE_COVER' | 'MOVE_TO_LIGHT' | 'PRICK_OUT') {
-  const timestamp = new Date().toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-  const nextActions = [`${timestamp} | ${seedActionLabel(action)}`, ...(plant.seedActions ?? [])].slice(0, 20);
+  const nextActions = [createSeedActionEntry(action), ...(plant.seedActions ?? [])].slice(0, 20);
   return {
     ...plant,
     seedActions: nextActions,
@@ -308,7 +303,7 @@ function historyReasonLine(item?: RecommendationHistoryItemDto | null): string {
     return 'Теперь снова работает автоматический режим.';
   }
   if (item.eventType === 'SEED_STAGE_CHANGE' && item.seedStage) {
-    return `Режим обновлён после перехода на стадию «${item.seedStage.toLowerCase()}».`;
+    return `Режим обновлён после перехода на стадию «${seedStageLabel(item.seedStage as PlantDto['seedStage'])}».`;
   }
   const firstFactor = item.factors?.[0];
   if (firstFactor?.type === 'WEATHER') {
@@ -346,7 +341,7 @@ function historyTitle(item?: RecommendationHistoryItemDto | null): string {
     return 'Растение переведено из режима проращивания';
   }
   if (item.eventType === 'SEED_STAGE_CHANGE' && item.seedStage) {
-    return `Стадия изменилась: ${item.seedStage.toLowerCase()}`;
+    return `Стадия изменилась: ${seedStageLabel(item.seedStage as PlantDto['seedStage'])}`;
   }
   if (item.eventType === 'MANUAL_RECOMMENDATION_APPLIED' || item.eventType === 'MANUAL_OVERRIDE_APPLIED') {
     if (item.previousIntervalDays != null && item.newIntervalDays != null && item.previousIntervalDays !== item.newIntervalDays) {
@@ -798,6 +793,10 @@ export function PlantDetailSheet() {
     };
   }, [selectedPlantId]);
 
+  const notes = notesQuery.data ?? [];
+  const formattedSeedActions = (plant?.seedActions ?? []).map(formatSeedActionEntry);
+  const latestSeedHistory = dedupeHistoryItems(historyQuery.data?.items).slice(0, 4);
+
   return (
     <BottomSheet open={selectedPlantId !== null} onClose={closePlantDetail}>
       {plantQuery.isLoading ? (
@@ -806,47 +805,188 @@ export function PlantDetailSheet() {
 
       {plant ? (
         <>
-          <PlantDetailPage
-            plant={plant}
-            previewDataUrl={previewDataUrl}
-            photoUploading={photoMutation.isPending}
-            wateringPulse={wateringPulse}
-            mainSection={isSeedPlant ? {
-              eyebrow: 'Сейчас',
-              title: 'Стадия и действия',
-              subtitle: 'Сначала самый понятный следующий шаг на текущем этапе.'
-            } : undefined}
-            explainabilitySection={isSeedPlant ? {
-              eyebrow: 'Контекст',
-              title: 'Что происходит сейчас',
-              subtitle: 'Коротко о текущем режиме проращивания и рекомендациях.'
-            } : undefined}
-            secondarySection={isSeedPlant ? {
-              eyebrow: 'Дополнительно',
-              title: 'Рост, фото и переход',
-              subtitle: 'История, камера роста и переход в обычное растение.'
-            } : undefined}
-            mainWatering={
-              isSeedPlant ? (
-                <SeedStageActionsCard
-                  plant={plant}
-                  loading={seedStageMutation.isPending || seedActionMutation.isPending}
-                  migrationAllowed={Boolean(migrationPreviewQuery.data?.allowed && plant.targetEnvironmentType && plant.targetEnvironmentType !== 'SEED_START')}
-                  recentActions={plant.seedActions ?? []}
-                  onStageChange={(nextStage) => {
-                    if (!selectedPlantId) return;
-                    seedStageMutation.mutate({ plantId: selectedPlantId, seedStage: nextStage });
-                  }}
-                  onMigrate={() => {
+          {isSeedPlant ? (
+            <>
+              <SeedDetailPage
+                plant={plant}
+                previewDataUrl={previewDataUrl}
+                photoUploading={photoMutation.isPending}
+                onPickPhoto={async (file) => {
+                  if (!selectedPlantId) {
+                    return;
+                  }
+                  impactMedium();
+                  const dataUrl = await toDataUrl(file);
+                  setPreviewDataUrl(dataUrl);
+                  photoMutation.mutate({ id: selectedPlantId, dataUrl });
+                }}
+                main={
+                  <SeedStageActionsCard
+                    plant={plant}
+                    loading={seedStageMutation.isPending || seedActionMutation.isPending}
+                    migrationAllowed={Boolean(migrationPreviewQuery.data?.allowed && plant.targetEnvironmentType && plant.targetEnvironmentType !== 'SEED_START')}
+                    onStageChange={(nextStage) => {
+                      if (!selectedPlantId) return;
+                      seedStageMutation.mutate({ plantId: selectedPlantId, seedStage: nextStage });
+                    }}
+                    onMigrate={() => {
+                      setMigrationWizardStep(0);
+                      setMigrationWizardOpen(true);
+                    }}
+                    onAction={(action) => {
+                      if (!selectedPlantId) return;
+                      seedActionMutation.mutate({ plantId: selectedPlantId, action });
+                    }}
+                  />
+                }
+                context={<SeedContextBlock plant={plant} />}
+                secondary={(
+                  <div className="space-y-4">
+                    <SeedJournalBlock
+                      notes={notes}
+                      onAdd={() => setAddNoteOpen(true)}
+                      onDelete={(noteId) => {
+                        deleteNoteMutation.mutate(noteId);
+                      }}
+                    />
+
+                    <SeedTrackingBlock
+                      actionEvents={formattedSeedActions}
+                      historyEvents={latestSeedHistory}
+                      historyLoading={historyQuery.isLoading && !historyQuery.data}
+                      historyError={historyQuery.isError && !historyQuery.data}
+                    />
+
+                    <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
+
+                    <div className="space-y-4 rounded-[30px] border border-ios-border/60 bg-ios-card/50 p-3 backdrop-blur-ios">
+                      {plant.seedStage !== 'READY_TO_TRANSPLANT' ? (
+                        <SeedMigrationSection
+                          plant={plant}
+                          preview={migrationPreviewQuery.data ?? null}
+                          loading={seedMigrationMutation.isPending}
+                          onOpenWizard={() => {
+                            setMigrationWizardStep(0);
+                            setMigrationWizardOpen(true);
+                          }}
+                        />
+                      ) : null}
+
+                      <RecommendationHistorySection
+                        plant={plant}
+                        recommendation={null}
+                        history={historyQuery.data ?? null}
+                        loading={historyQuery.isLoading && !historyQuery.data}
+                        error={historyQuery.isError && !historyQuery.data}
+                      />
+                    </div>
+
+                    <DangerZoneSection
+                      onDeleteClick={() => {
+                        impactMedium();
+                        setDeleteConfirmOpen(true);
+                      }}
+                    />
+                  </div>
+                )}
+              />
+
+              <SeedMigrationWizard
+                open={migrationWizardOpen}
+                onOpenChange={(open) => {
+                  if (seedMigrationMutation.isPending) {
+                    return;
+                  }
+                  setMigrationWizardOpen(open);
+                  if (!open) {
                     setMigrationWizardStep(0);
-                    setMigrationWizardOpen(true);
-                  }}
-                  onAction={(action) => {
-                    if (!selectedPlantId) return;
-                    seedActionMutation.mutate({ plantId: selectedPlantId, action });
-                  }}
-                />
-              ) : (
+                  }
+                }}
+                step={migrationWizardStep}
+                onStepChange={setMigrationWizardStep}
+                plant={plant}
+                preview={migrationPreviewQuery.data ?? null}
+                loading={seedMigrationMutation.isPending}
+                form={{
+                  migrationName,
+                  migrationInterval,
+                  migrationWater,
+                  migrationPotVolume,
+                  migrationContainerType,
+                  migrationGrowthStage,
+                  migrationGreenhouse,
+                  migrationMulched,
+                  migrationDrip,
+                  migrationSoilType,
+                  migrationSunExposure,
+                  migrationAreaM2
+                }}
+                onChange={{
+                  setMigrationName,
+                  setMigrationInterval,
+                  setMigrationWater,
+                  setMigrationPotVolume,
+                  setMigrationContainerType,
+                  setMigrationGrowthStage,
+                  setMigrationGreenhouse,
+                  setMigrationMulched,
+                  setMigrationDrip,
+                  setMigrationSoilType,
+                  setMigrationSunExposure,
+                  setMigrationAreaM2
+                }}
+                onApply={() => {
+                  if (!selectedPlantId) {
+                    return;
+                  }
+                  const target = plant.targetEnvironmentType;
+                  if (!target || target === 'SEED_START') {
+                    hapticError();
+                    return;
+                  }
+                  seedMigrationMutation.mutate({
+                    plantId: selectedPlantId,
+                    payload: {
+                      targetEnvironmentType: target,
+                      name: migrationName.trim() || plant.name,
+                      baseIntervalDays: Math.max(1, Number(migrationInterval) || 4),
+                      preferredWaterMl: Math.max(50, Number(migrationWater) || 220),
+                      potVolumeLiters: target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL'
+                        ? Math.max(0.3, Number(migrationPotVolume) || 2)
+                        : 1,
+                      placement: target === 'INDOOR' ? 'INDOOR' : 'OUTDOOR',
+                      containerType: target === 'INDOOR'
+                        ? 'POT'
+                        : target === 'OUTDOOR_ORNAMENTAL'
+                          ? migrationContainerType
+                          : 'OPEN_GROUND',
+                      containerVolumeLiters: target === 'OUTDOOR_ORNAMENTAL' && migrationContainerType !== 'OPEN_GROUND'
+                        ? Math.max(0.3, Number(migrationPotVolume) || 2)
+                        : null,
+                      cropType: target === 'OUTDOOR_GARDEN' ? (migrationName.trim() || plant.name) : null,
+                      growthStage: target === 'OUTDOOR_GARDEN' ? migrationGrowthStage : null,
+                      greenhouse: target === 'OUTDOOR_GARDEN' ? migrationGreenhouse : null,
+                      dripIrrigation: target === 'OUTDOOR_GARDEN' ? migrationDrip : null,
+                      outdoorAreaM2: target === 'OUTDOOR_GARDEN' ? Math.max(0.05, Number(migrationAreaM2) || 0.25) : null,
+                      outdoorSoilType: target !== 'INDOOR' ? migrationSoilType : null,
+                      sunExposure: target !== 'INDOOR' ? migrationSunExposure : null,
+                      mulched: target === 'OUTDOOR_GARDEN' ? migrationMulched : target === 'OUTDOOR_ORNAMENTAL' ? false : null,
+                      perennial: target === 'OUTDOOR_ORNAMENTAL',
+                      winterDormancyEnabled: target === 'OUTDOOR_ORNAMENTAL',
+                      region: plant.region ?? null,
+                      type: 'DEFAULT'
+                    }
+                  });
+                }}
+              />
+            </>
+          ) : (
+            <PlantDetailPage
+              plant={plant}
+              previewDataUrl={previewDataUrl}
+              photoUploading={photoMutation.isPending}
+              wateringPulse={wateringPulse}
+              mainWatering={
                 <WaterStatusBlock
                   plant={plant}
                   progress={getProgress(plant)}
@@ -867,15 +1007,8 @@ export function PlantDetailSheet() {
                   }}
                   isAiLoading={recommendationQuery.isFetching}
                 />
-              )
-            }
-            explainability={
-              isSeedPlant ? (
-                <div className="space-y-4">
-                  <SeedStatusBlock plant={plant} />
-                  <SeedRecommendationSection plant={plant} />
-                </div>
-              ) : (
+              }
+              explainability={
                 <WateringRecommendationCard
                   plant={plant}
                   state={recommendationState}
@@ -889,128 +1022,8 @@ export function PlantDetailSheet() {
                     void recommendationQuery.refetch();
                   }}
                 />
-              )
-            }
-            secondary={
-              isSeedPlant ? (
-                <div className="space-y-4">
-                  {plant.seedStage !== 'READY_TO_TRANSPLANT' ? (
-                    <SeedMigrationSection
-                      plant={plant}
-                      preview={migrationPreviewQuery.data ?? null}
-                      loading={seedMigrationMutation.isPending}
-                      onOpenWizard={() => {
-                        setMigrationWizardStep(0);
-                        setMigrationWizardOpen(true);
-                      }}
-                    />
-                  ) : null}
-
-                  <SeedMigrationWizard
-                    open={migrationWizardOpen}
-                    onOpenChange={(open) => {
-                      if (seedMigrationMutation.isPending) {
-                        return;
-                      }
-                      setMigrationWizardOpen(open);
-                      if (!open) {
-                        setMigrationWizardStep(0);
-                      }
-                    }}
-                    step={migrationWizardStep}
-                    onStepChange={setMigrationWizardStep}
-                    plant={plant}
-                    preview={migrationPreviewQuery.data ?? null}
-                    loading={seedMigrationMutation.isPending}
-                    form={{
-                      migrationName,
-                      migrationInterval,
-                      migrationWater,
-                      migrationPotVolume,
-                      migrationContainerType,
-                      migrationGrowthStage,
-                      migrationGreenhouse,
-                      migrationMulched,
-                      migrationDrip,
-                      migrationSoilType,
-                      migrationSunExposure,
-                      migrationAreaM2
-                    }}
-                    onChange={{
-                      setMigrationName,
-                      setMigrationInterval,
-                      setMigrationWater,
-                      setMigrationPotVolume,
-                      setMigrationContainerType,
-                      setMigrationGrowthStage,
-                      setMigrationGreenhouse,
-                      setMigrationMulched,
-                      setMigrationDrip,
-                      setMigrationSoilType,
-                      setMigrationSunExposure,
-                      setMigrationAreaM2
-                    }}
-                    onApply={() => {
-                      if (!selectedPlantId) {
-                        return;
-                      }
-                      const target = plant.targetEnvironmentType;
-                      if (!target || target === 'SEED_START') {
-                        hapticError();
-                        return;
-                      }
-                      seedMigrationMutation.mutate({
-                        plantId: selectedPlantId,
-                        payload: {
-                          targetEnvironmentType: target,
-                          name: migrationName.trim() || plant.name,
-                          baseIntervalDays: Math.max(1, Number(migrationInterval) || 4),
-                          preferredWaterMl: Math.max(50, Number(migrationWater) || 220),
-                          potVolumeLiters: target === 'INDOOR' || target === 'OUTDOOR_ORNAMENTAL'
-                            ? Math.max(0.3, Number(migrationPotVolume) || 2)
-                            : 1,
-                          placement: target === 'INDOOR' ? 'INDOOR' : 'OUTDOOR',
-                          containerType: target === 'INDOOR'
-                            ? 'POT'
-                            : target === 'OUTDOOR_ORNAMENTAL'
-                              ? migrationContainerType
-                              : 'OPEN_GROUND',
-                          containerVolumeLiters: target === 'OUTDOOR_ORNAMENTAL' && migrationContainerType !== 'OPEN_GROUND'
-                            ? Math.max(0.3, Number(migrationPotVolume) || 2)
-                            : null,
-                          cropType: target === 'OUTDOOR_GARDEN' ? (migrationName.trim() || plant.name) : null,
-                          growthStage: target === 'OUTDOOR_GARDEN' ? migrationGrowthStage : null,
-                          greenhouse: target === 'OUTDOOR_GARDEN' ? migrationGreenhouse : null,
-                          dripIrrigation: target === 'OUTDOOR_GARDEN' ? migrationDrip : null,
-                          outdoorAreaM2: target === 'OUTDOOR_GARDEN' ? Math.max(0.05, Number(migrationAreaM2) || 0.25) : null,
-                          outdoorSoilType: target !== 'INDOOR' ? migrationSoilType : null,
-                          sunExposure: target !== 'INDOOR' ? migrationSunExposure : null,
-                          mulched: target === 'OUTDOOR_GARDEN' ? migrationMulched : target === 'OUTDOOR_ORNAMENTAL' ? false : null,
-                          perennial: target === 'OUTDOOR_ORNAMENTAL',
-                          winterDormancyEnabled: target === 'OUTDOOR_ORNAMENTAL',
-                          region: plant.region ?? null,
-                          type: 'DEFAULT'
-                        }
-                      });
-                    }}
-                  />
-                  <RecommendationHistorySection
-                    plant={plant}
-                    recommendation={null}
-                    history={historyQuery.data ?? null}
-                    loading={historyQuery.isLoading && !historyQuery.data}
-                    error={historyQuery.isError && !historyQuery.data}
-                  />
-                  <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
-
-                  <DangerZoneSection
-                    onDeleteClick={() => {
-                      impactMedium();
-                      setDeleteConfirmOpen(true);
-                    }}
-                  />
-                </div>
-              ) : (
+              }
+              secondary={
                 <div className="space-y-4">
                   <AIAdviceCard
                     loading={careAdviceQuery.isLoading && !careAdviceQuery.data}
@@ -1056,7 +1069,6 @@ export function PlantDetailSheet() {
                     defaultCollapsed={true}
                   >
                     {(() => {
-                      const notes = notesQuery.data ?? [];
                       const lastFeeding = notes.find((n) => n.type === 'FEEDING');
                       const daysSinceFeeding = lastFeeding
                         ? Math.floor((Date.now() - new Date(lastFeeding.createdAt).getTime()) / 86_400_000)
@@ -1088,19 +1100,17 @@ export function PlantDetailSheet() {
                     }}
                   />
                 </div>
-              )
-            }
-            onPickPhoto={async (file) => {
-              if (!selectedPlantId) {
-                return;
               }
-              impactMedium();
-              const dataUrl = await toDataUrl(file);
-              setPreviewDataUrl(dataUrl);
-              photoMutation.mutate({ id: selectedPlantId, dataUrl });
-            }}
-          >
-            {isSeedPlant ? null : (
+              onPickPhoto={async (file) => {
+                if (!selectedPlantId) {
+                  return;
+                }
+                impactMedium();
+                const dataUrl = await toDataUrl(file);
+                setPreviewDataUrl(dataUrl);
+                photoMutation.mutate({ id: selectedPlantId, dataUrl });
+              }}
+            >
               <>
                 <GrowthTimeline plantId={plant.id} currentPhotoUrl={plant.photoUrl} />
                 <RecommendationHistorySection
@@ -1111,8 +1121,8 @@ export function PlantDetailSheet() {
                   error={historyQuery.isError && !historyQuery.data}
                 />
               </>
-            )}
-          </PlantDetailPage>
+            </PlantDetailPage>
+          )}
 
           <Dialog
             open={deleteConfirmOpen}
@@ -1173,6 +1183,17 @@ export function PlantDetailSheet() {
         open={addNoteOpen}
         onOpenChange={setAddNoteOpen}
         saving={createNoteMutation.isPending}
+        sheetTitle={isSeedPlant ? 'Добавить запись в журнал ухода' : 'Добавить заметку'}
+        submitLabel={isSeedPlant ? 'Сохранить запись' : 'Сохранить'}
+        noteTypeLabels={isSeedPlant ? {
+          GENERAL: 'Наблюдение',
+          FEEDING: 'Подкормка',
+          ISSUE: 'Сигнал'
+        } : undefined}
+        placeholders={isSeedPlant ? {
+          text: 'Например: появились первые всходы, снял крышку, перенёс под лампу...',
+          issueText: 'Например: заметил плесень, грунт подсох, росток вытянулся...'
+        } : undefined}
         onSave={(payload) => {
           createNoteMutation.mutate(payload);
         }}
@@ -1524,105 +1545,200 @@ function seedDaysSinceSowing(plant: PlantDto): number | null {
   return Math.max(0, Math.floor((today.getTime() - sowing.getTime()) / 86_400_000));
 }
 
-function SeedStatusBlock({ plant }: { plant: PlantDto }) {
+function humanizeSeedSentence(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const withSpaces = normalized
+    .replaceAll('MIST_AND_BOTTOM_WATER', 'мягкое увлажнение и нижний полив')
+    .replaceAll('KEEP_COVERED', 'режим под крышкой')
+    .replaceAll('VENT_AND_MIST', 'мягкое проветривание и лёгкое увлажнение')
+    .replaceAll('LIGHT_SURFACE_WATER', 'лёгкое увлажнение верхнего слоя')
+    .replaceAll('CHECK_ONLY', 'режим наблюдения без лишнего полива');
+
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
+}
+
+function SeedContextBlock({ plant }: { plant: PlantDto }) {
   const daysSinceSowing = seedDaysSinceSowing(plant);
   const windowLabel = plant.expectedGerminationDaysMin != null && plant.expectedGerminationDaysMax != null
-    ? `${plant.expectedGerminationDaysMin}-${plant.expectedGerminationDaysMax} дн.`
-    : 'ещё не рассчитано';
+    ? `${plant.expectedGerminationDaysMin}-${plant.expectedGerminationDaysMax} дней`
+    : 'окно всходов ещё не рассчитано';
+  const reasoning = (plant.seedReasoning ?? []).slice(0, 3);
+  const warnings = (plant.seedWarnings ?? []).slice(0, 2);
+  const conditions = [
+    plant.underCover ? 'Под крышкой' : 'Без крышки',
+    plant.growLight ? 'Под дополнительным светом' : 'Без досветки',
+    plant.recommendedCheckIntervalHours ? `Проверка каждые ${plant.recommendedCheckIntervalHours} ч` : 'Проверка по состоянию'
+  ];
 
   return (
-    <section className="theme-surface-1 space-y-4 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
+    <section className="theme-surface-1 space-y-4 rounded-[30px] border p-4 shadow-sm backdrop-blur-ios">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Режим проращивания</p>
-          <p className="mt-1 text-lg font-semibold text-ios-text">{seedStageLabel(plant.seedStage)}</p>
-          <p className="text-sm text-ios-subtext">Цель: {targetEnvironmentLabel(plant.targetEnvironmentType)}</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Текущий режим</p>
+          <p className="mt-1 text-lg font-semibold text-ios-text">{seedWateringModeLabel(plant.recommendedWateringMode)}</p>
+          <p className="text-sm text-ios-subtext">{plant.seedCareMode ?? 'Спокойный контроль влажности и стадии роста'}</p>
         </div>
         <span className="theme-badge-info rounded-full px-3 py-1 text-xs font-semibold">
           {seedSourceLabel(plant.seedCareSource)}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">После посева</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{daysSinceSowing != null ? `${daysSinceSowing} дн.` : '—'}</p>
-        </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Проверка</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">
-            {plant.recommendedCheckIntervalHours ? `каждые ${plant.recommendedCheckIntervalHours} ч` : 'по ситуации'}
-          </p>
-        </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Всходы</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{windowLabel}</p>
-        </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Увлажнение</p>
-          <p className="mt-1 text-base font-semibold text-ios-text">{seedWateringModeLabel(plant.recommendedWateringMode)}</p>
-        </div>
-      </div>
-
-      <div className="theme-surface-subtle rounded-2xl border p-3">
-        <p className="text-sm leading-5 text-ios-text">
-          {plant.seedSummary?.trim() || 'Для семян важнее стабильная влажность, контроль стадии и постепенный переход к обычному растению.'}
+      <div className="theme-surface-subtle rounded-[24px] border p-4">
+        <p className="text-sm leading-6 text-ios-text">
+          {plant.seedSummary?.trim() || 'Сейчас важнее всего держать посев в стабильных условиях и делать только те шаги, которые помогают этой стадии.'}
         </p>
       </div>
-    </section>
-  );
-}
 
-function SeedRecommendationSection({ plant }: { plant: PlantDto }) {
-  const reasoning = plant.seedReasoning ?? [];
-  const warnings = plant.seedWarnings ?? [];
-
-  return (
-    <section className="theme-surface-1 space-y-3 rounded-3xl border p-4 shadow-sm backdrop-blur-ios">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-ios-text">Режим наблюдения и увлажнения</p>
-          <p className="text-xs text-ios-subtext">Рекомендации для семян не сводятся к «мл каждые N дней».</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="theme-surface-subtle rounded-[22px] border p-3">
+          <p className="text-xs text-ios-subtext">Стадия</p>
+          <p className="mt-1 text-sm font-semibold text-ios-text">{seedStageLabel(plant.seedStage)}</p>
         </div>
-        <span className="theme-badge-success rounded-full px-2.5 py-1 text-[11px]">
-          {seedWateringModeLabel(plant.recommendedWateringMode)}
-        </span>
+        <div className="theme-surface-subtle rounded-[22px] border p-3">
+          <p className="text-xs text-ios-subtext">После посева</p>
+          <p className="mt-1 text-sm font-semibold text-ios-text">{daysSinceSowing != null ? `${daysSinceSowing} дн.` : 'Дата не указана'}</p>
+        </div>
+        <div className="theme-surface-subtle rounded-[22px] border p-3">
+          <p className="text-xs text-ios-subtext">Окно всходов</p>
+          <p className="mt-1 text-sm font-semibold text-ios-text">{windowLabel}</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Режим ухода</p>
-          <p className="mt-1 text-sm font-medium text-ios-text">{plant.seedCareMode ?? 'Следить за влажностью и стадией роста'}</p>
-        </div>
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs text-ios-subtext">Условия</p>
-          <p className="mt-1 text-sm font-medium text-ios-text">
-            {plant.underCover ? 'Под укрытием' : 'Без укрытия'} · {plant.growLight ? 'есть досветка' : 'без досветки'}
-          </p>
+      <div className="theme-surface-subtle rounded-[24px] border p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ios-subtext">Что важно сейчас</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {conditions.map((item) => (
+            <span key={item} className="inline-flex rounded-full bg-ios-card px-3 py-1.5 text-xs text-ios-text">
+              {item}
+            </span>
+          ))}
         </div>
       </div>
 
       {reasoning.length ? (
-        <div className="theme-surface-subtle rounded-2xl border p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Почему такой режим</p>
-          <ul className="mt-2 space-y-1 text-sm text-ios-text">
+        <div className="theme-surface-subtle rounded-[24px] border p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Почему это имеет смысл</p>
+          <ul className="mt-2 space-y-2 text-sm text-ios-text">
             {reasoning.map((item, idx) => (
-              <li key={`${item}-${idx}`}>• {item}</li>
+              <li key={`${item}-${idx}`} className="leading-5">• {humanizeSeedSentence(item)}</li>
             ))}
           </ul>
         </div>
       ) : null}
 
       {warnings.length ? (
-        <div className="theme-surface-warning rounded-2xl border p-3">
+        <div className="theme-surface-warning rounded-[24px] border p-4">
           <p className="theme-text-warning text-xs font-semibold uppercase tracking-[0.14em]">Важные замечания</p>
-          <ul className="mt-2 space-y-1 text-sm text-ios-text">
+          <ul className="mt-2 space-y-2 text-sm text-ios-text">
             {warnings.map((item, idx) => (
-              <li key={`${item}-${idx}`}>• {item}</li>
+              <li key={`${item}-${idx}`} className="leading-5">• {humanizeSeedSentence(item)}</li>
             ))}
           </ul>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function SeedJournalBlock({
+  notes,
+  onAdd,
+  onDelete
+}: {
+  notes: PlantNoteDto[];
+  onAdd: () => void;
+  onDelete: (noteId: string) => void;
+}) {
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-[30px] border p-4 shadow-sm backdrop-blur-ios">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Журнал ухода</p>
+          <h3 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-ios-text">Наблюдения по seed-flow</h3>
+          <p className="mt-1 text-sm leading-5 text-ios-subtext">Сюда удобно записывать первые всходы, снятие крышки, перенос под свет и любые ранние сигналы.</p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ios-accent/10 px-3 py-1.5 text-xs font-medium text-ios-accent transition-colors active:bg-ios-accent/20"
+          onClick={onAdd}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Запись
+        </button>
+      </div>
+
+      {notes.length ? (
+        <NotesList notes={notes.slice(0, 5)} onDelete={onDelete} />
+      ) : (
+        <div className="theme-surface-subtle rounded-[24px] border px-4 py-4">
+          <p className="text-sm font-medium text-ios-text">Пока журнал пуст</p>
+          <p className="mt-1 text-sm leading-5 text-ios-subtext">Добавьте короткую запись, когда появятся первые ростки, подсохнет субстрат или вы измените условия.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SeedTrackingBlock({
+  actionEvents,
+  historyEvents,
+  historyLoading,
+  historyError
+}: {
+  actionEvents: Array<{ id: string; label: string; dateLabel: string; sortTime: number }>;
+  historyEvents: RecommendationHistoryItemDto[];
+  historyLoading: boolean;
+  historyError: boolean;
+}) {
+  const previewEvents = actionEvents.slice(0, 4);
+
+  return (
+    <section className="theme-surface-1 space-y-3 rounded-[30px] border p-4 shadow-sm backdrop-blur-ios">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] text-ios-subtext">Недавние события</p>
+        <h3 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-ios-text">Что уже изменилось</h3>
+        <p className="mt-1 text-sm leading-5 text-ios-subtext">Короткая лента по реальным действиям и важным обновлениям режима.</p>
+      </div>
+
+      {previewEvents.length ? (
+        <div className="space-y-2">
+          {previewEvents.map((event) => (
+            <div key={event.id} className="theme-surface-subtle flex items-center justify-between gap-3 rounded-[22px] border px-3.5 py-3">
+              <span className="text-sm font-medium text-ios-text">{event.label}</span>
+              <span className="shrink-0 text-xs text-ios-subtext">{event.dateLabel}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="theme-surface-subtle rounded-[24px] border px-4 py-4">
+          <p className="text-sm font-medium text-ios-text">Пока без событий</p>
+          <p className="mt-1 text-sm leading-5 text-ios-subtext">После первого действия здесь появятся спокойные human-readable записи вроде «29 марта · Перенесено под свет».</p>
+        </div>
+      )}
+
+      <div className="theme-surface-subtle rounded-[24px] border p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ios-subtext">Изменения режима</p>
+        {historyLoading ? (
+          <p className="mt-2 text-sm text-ios-subtext">Загружаем изменения режима...</p>
+        ) : historyError ? (
+          <p className="mt-2 text-sm text-ios-subtext">История режима пока недоступна, но новые изменения появятся здесь автоматически.</p>
+        ) : historyEvents.length ? (
+          <div className="mt-2 space-y-2">
+            {historyEvents.slice(0, 3).map((item) => (
+              <div key={item.id} className="rounded-[18px] bg-white/70 px-3 py-2.5 dark:bg-ios-card/70">
+                <p className="text-sm font-medium text-ios-text">{historyTitle(item)}</p>
+                <p className="mt-1 text-xs leading-5 text-ios-subtext">{humanizeSeedSentence(historyReasonLine(item))}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-ios-subtext">Когда режим скорректируется из-за стадии или после перевода в растение, это появится здесь.</p>
+        )}
+      </div>
     </section>
   );
 }
@@ -2385,7 +2501,8 @@ function RecommendationHistorySection({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const dedupedItems = dedupeHistoryItems(history?.items);
   const latest = history?.latestVisibleChange ?? dedupedItems[0] ?? null;
-  const fallbackSummary = recommendation?.summary?.trim() || plant.recommendationSummary?.trim();
+  const isSeedPlant = plant.wateringProfile === 'SEED_START' || plant.category === 'SEED_START';
+  const fallbackSummary = isSeedPlant ? null : (recommendation?.summary?.trim() || plant.recommendationSummary?.trim());
   const timelineQuery = useQuery({
     queryKey: ['plant-recommendation-history-full', plant.id, timelineOpen],
     queryFn: () => getRecommendationHistory(plant.id, { view: 'full', limit: 20 }),
@@ -2409,9 +2526,8 @@ function RecommendationHistorySection({
       {loading ? (
         <p className="text-xs text-ios-subtext">Загрузка...</p>
       ) : error ? (
-        <div className="flex items-center gap-1.5 rounded-lg border border-red-200/40 bg-red-50/50 px-2.5 py-2 dark:border-red-800/30 dark:bg-red-950/20">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-500" />
-          <p className="text-xs text-red-500">Не удалось загрузить</p>
+        <div className="rounded-xl border border-ios-border/50 bg-ios-surface-subtle/50 px-3 py-2.5">
+          <p className="text-xs leading-5 text-ios-subtext">История режима пока недоступна. Когда появятся новые изменения, они отобразятся здесь.</p>
         </div>
       ) : latest ? (
         <div className="flex items-center gap-2 rounded-lg bg-ios-surface-subtle/50 px-2.5 py-2">

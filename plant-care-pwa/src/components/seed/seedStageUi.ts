@@ -14,6 +14,7 @@ export interface SeedStagePresentation {
   title: string;
   summary: string;
   progressLabel: string;
+  statusLine: string;
   primaryAction: SeedActionDescriptor | null;
   secondaryActions: SeedActionDescriptor[];
 }
@@ -148,15 +149,16 @@ export function deriveSeedStagePresentation(plant: PlantDto, options?: { canMigr
 
   switch (stage) {
     case 'SOWN': {
-      return {
-        stage,
-        title: seedStageLabel(stage),
-        summary: 'Семена посеяны. Сейчас главное — стабильная влажность и спокойные условия.',
-        progressLabel: 'Самый ранний этап: следим за влажностью и не тревожим посев.',
-        primaryAction: { key: 'MOISTEN', label: 'Увлажнить', subtitle: 'Это помогает не пересушить верхний слой после посева.' } as SeedActionDescriptor,
-        secondaryActions: [
-          ...(canVent ? [{ key: 'VENT', label: 'Проветрить' } as SeedActionDescriptor] : []),
-          ...(canMoveToLight ? [{ key: 'MOVE_TO_LIGHT', label: 'Под свет' } as SeedActionDescriptor] : [])
+        return {
+          stage,
+          title: seedStageLabel(stage),
+          summary: 'Семена посеяны. Сейчас главное — стабильная влажность и спокойные условия.',
+          progressLabel: 'Самый ранний этап: следим за влажностью и не тревожим посев.',
+          statusLine: 'Посев ещё очень чувствителен: лучше один точный уход, чем много лишних действий.',
+          primaryAction: { key: 'MOISTEN', label: 'Увлажнить', subtitle: 'Это помогает не пересушить верхний слой после посева.' } as SeedActionDescriptor,
+          secondaryActions: [
+            ...(canVent ? [{ key: 'VENT', label: 'Проветрить' } as SeedActionDescriptor] : []),
+            ...(canMoveToLight ? [{ key: 'MOVE_TO_LIGHT', label: 'Под свет' } as SeedActionDescriptor] : [])
         ].slice(0, 3)
       };
     }
@@ -169,24 +171,26 @@ export function deriveSeedStagePresentation(plant: PlantDto, options?: { canMigr
         ...(canVent ? [{ key: 'VENT', label: 'Проветрить' } as SeedActionDescriptor] : []),
         ...(canRemoveCover ? [{ key: 'REMOVE_COVER', label: 'Снять крышку' } as SeedActionDescriptor] : [])
       ].filter((item) => item.key !== primaryAction.key);
-      return {
-        stage,
-        title: seedStageLabel(stage),
-        summary: 'Семена просыпаются. Сейчас важно не перегреть их и поддерживать мягкую влажность.',
-        progressLabel: 'Этап ожидания: видимых изменений может быть мало, но процесс уже идёт.',
-        primaryAction,
-        secondaryActions: secondary.slice(0, 3)
-      };
-    }
+        return {
+          stage,
+          title: seedStageLabel(stage),
+          summary: 'Семена просыпаются. Сейчас важно не перегреть их и поддерживать мягкую влажность.',
+          progressLabel: 'Этап ожидания: видимых изменений может быть мало, но процесс уже идёт.',
+          statusLine: 'Главная задача сейчас — держать контейнер ровным по влажности и не сбивать микроклимат.',
+          primaryAction,
+          secondaryActions: secondary.slice(0, 3)
+        };
+      }
     case 'SPROUTED': {
-      return {
-        stage,
-        title: seedStageLabel(stage),
-        summary: 'Первые ростки уже появились. Теперь особенно важны свет и аккуратная влажность.',
-        progressLabel: 'Хороший знак: помогаем всходам окрепнуть и не вытянуться.',
-        primaryAction: canMoveToLight
-          ? { key: 'MOVE_TO_LIGHT', label: 'Перенести под свет', subtitle: 'Это поможет росткам расти крепче и не вытягиваться.' } as SeedActionDescriptor
-          : { key: 'MOISTEN', label: 'Увлажнить', subtitle: 'Свет уже настроен — теперь особенно важно не переувлажнить ростки.' } as SeedActionDescriptor,
+        return {
+          stage,
+          title: seedStageLabel(stage),
+          summary: 'Первые ростки уже появились. Теперь особенно важны свет и аккуратная влажность.',
+          progressLabel: 'Хороший знак: помогаем всходам окрепнуть и не вытянуться.',
+          statusLine: 'Теперь росткам важнее свет и спокойный режим, чем частые вмешательства.',
+          primaryAction: canMoveToLight
+            ? { key: 'MOVE_TO_LIGHT', label: 'Перенести под свет', subtitle: 'Это поможет росткам расти крепче и не вытягиваться.' } as SeedActionDescriptor
+            : { key: 'MOISTEN', label: 'Увлажнить', subtitle: 'Свет уже настроен — теперь особенно важно не переувлажнить ростки.' } as SeedActionDescriptor,
         secondaryActions: [
           { key: 'MOISTEN', label: 'Увлажнить' } as SeedActionDescriptor,
           ...(canVent ? [{ key: 'VENT', label: 'Проветрить' } as SeedActionDescriptor] : []),
@@ -215,26 +219,28 @@ export function deriveSeedStagePresentation(plant: PlantDto, options?: { canMigr
         } as SeedActionDescriptor
       ].filter((item, index, arr) => arr.findIndex((candidate) => candidate.key === item.key) === index)
         .filter((item) => item.key !== primaryAction.key);
-      return {
-        stage,
-        title: seedStageLabel(stage),
-        summary: 'Сеянец укрепляется. Сейчас важны свет, аккуратный уход и подготовка к следующему этапу.',
-        progressLabel: 'Ранний рост: поддерживаем стабильный режим и не перегружаем действиями.',
-        primaryAction,
-        secondaryActions: secondary.slice(0, 3)
-      };
-    }
+        return {
+          stage,
+          title: seedStageLabel(stage),
+          summary: 'Сеянец укрепляется. Сейчас важны свет, аккуратный уход и подготовка к следующему этапу.',
+          progressLabel: 'Ранний рост: поддерживаем стабильный режим и не перегружаем действиями.',
+          statusLine: 'Сеянец уже крепче, но всё ещё любит предсказуемый уход без резких скачков.',
+          primaryAction,
+          secondaryActions: secondary.slice(0, 3)
+        };
+      }
     case 'READY_TO_TRANSPLANT':
     default: {
-      return {
-        stage,
-        title: seedStageLabel('READY_TO_TRANSPLANT'),
-        summary: 'Этап проращивания почти завершён. Можно перейти к обычному уходу за растением.',
-        progressLabel: 'Переходный этап: seed-режим заканчивается, дальше начнётся обычный сценарий выращивания.',
-        primaryAction: canMigrate
-          ? { key: 'MIGRATE', label: 'Перевести в растение', subtitle: 'После этого карточка перейдёт в обычный режим ухода.' }
-          : null,
-        secondaryActions: [
+        return {
+          stage,
+          title: seedStageLabel('READY_TO_TRANSPLANT'),
+          summary: 'Этап проращивания почти завершён. Можно перейти к обычному уходу за растением.',
+          progressLabel: 'Переходный этап: seed-режим заканчивается, дальше начнётся обычный сценарий выращивания.',
+          statusLine: 'Карточка уже готова к переходу: осталось спокойно закрепить следующий взрослый режим.',
+          primaryAction: canMigrate
+            ? { key: 'MIGRATE', label: 'Перевести в растение', subtitle: 'После этого карточка перейдёт в обычный режим ухода.' }
+            : null,
+          secondaryActions: [
           ...(canPrickOut(plant) ? [{ key: 'PRICK_OUT', label: 'Пикировать' } as SeedActionDescriptor] : []),
           { key: 'MOISTEN', label: 'Увлажнить' } as SeedActionDescriptor
         ].slice(0, 3)
@@ -289,6 +295,30 @@ export function getSeedStageCopy(stage?: PlantDto['seedStage'] | null): SeedStag
   }
 }
 
+export function createSeedActionEntry(action: Exclude<SeedActionKey, 'MIGRATE'>, date = new Date()): string {
+  return `${date.toISOString()}__${action}`;
+}
+
+export function formatSeedActionEntry(entry: string): { id: string; label: string; dateLabel: string; sortTime: number } {
+  const trimmed = entry.trim();
+  const structured = parseStructuredSeedAction(trimmed);
+  if (structured) {
+    return structured;
+  }
+
+  const legacy = parseLegacySeedAction(trimmed);
+  if (legacy) {
+    return legacy;
+  }
+
+  return {
+    id: trimmed,
+    label: trimmed,
+    dateLabel: 'Без даты',
+    sortTime: 0
+  };
+}
+
 function shortStageLabel(stage: SeedStage): string {
   switch (stage) {
     case 'SOWN':
@@ -306,4 +336,64 @@ function shortStageLabel(stage: SeedStage): string {
 
 function canPrickOut(plant: PlantDto): boolean {
   return plant.seedStage === 'SEEDLING' || plant.seedStage === 'READY_TO_TRANSPLANT';
+}
+
+function parseStructuredSeedAction(value: string): { id: string; label: string; dateLabel: string; sortTime: number } | null {
+  const [iso, action] = value.split('__');
+  if (!iso || !action) {
+    return null;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const normalized = action.trim().toUpperCase() as Exclude<SeedActionKey, 'MIGRATE'>;
+  return {
+    id: value,
+    label: seedActionLabel(normalized),
+    dateLabel: formatSeedEventDate(date),
+    sortTime: date.getTime()
+  };
+}
+
+function parseLegacySeedAction(value: string): { id: string; label: string; dateLabel: string; sortTime: number } | null {
+  const parts = value.split('|');
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const rawDate = parts[0]?.trim();
+  const label = parts[1]?.trim();
+  if (!rawDate || !label) {
+    return null;
+  }
+
+  const match = rawDate.match(/^(\d{2})\.(\d{2}),\s*(\d{2}):(\d{2})$/);
+  if (!match) {
+    return {
+      id: value,
+      label,
+      dateLabel: rawDate,
+      sortTime: 0
+    };
+  }
+
+  const [, day, month, hours, minutes] = match;
+  const year = new Date().getFullYear();
+  const parsed = new Date(year, Number(month) - 1, Number(day), Number(hours), Number(minutes));
+
+  return {
+    id: value,
+    label,
+    dateLabel: formatSeedEventDate(parsed),
+    sortTime: parsed.getTime()
+  };
+}
+
+function formatSeedEventDate(date: Date): string {
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long'
+  });
 }

@@ -10,6 +10,15 @@ interface AddNoteSheetProps {
   onOpenChange: (open: boolean) => void;
   onSave: (request: CreateNoteRequest) => void;
   saving?: boolean;
+  sheetTitle?: string;
+  submitLabel?: string;
+  noteTypeLabels?: Partial<Record<NoteType, string>>;
+  placeholders?: {
+    title?: string;
+    amount?: string;
+    text?: string;
+    issueText?: string;
+  };
 }
 
 const noteTypes: { value: NoteType; label: string }[] = [
@@ -18,7 +27,16 @@ const noteTypes: { value: NoteType; label: string }[] = [
   { value: 'ISSUE', label: 'Проблема' }
 ];
 
-export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: AddNoteSheetProps) {
+export function AddNoteSheet({
+  open,
+  onOpenChange,
+  onSave,
+  saving = false,
+  sheetTitle = 'Добавить заметку',
+  submitLabel = 'Сохранить',
+  noteTypeLabels,
+  placeholders
+}: AddNoteSheetProps) {
   const [type, setType] = useState<NoteType>('GENERAL');
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -26,6 +44,11 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
 
   const isFeeding = type === 'FEEDING';
   const canSave = text.trim().length > 0;
+  const labels = {
+    GENERAL: noteTypeLabels?.GENERAL ?? 'Заметка',
+    FEEDING: noteTypeLabels?.FEEDING ?? 'Подкормка',
+    ISSUE: noteTypeLabels?.ISSUE ?? 'Проблема'
+  } satisfies Record<NoteType, string>;
 
   function handleSave() {
     if (!canSave) return;
@@ -60,10 +83,10 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
             }`}
             onClick={() => setType(nt.value)}
           >
-            {nt.label}
-          </button>
-        ))}
-      </div>
+             {labels[nt.value]}
+           </button>
+         ))}
+       </div>
 
       {isFeeding ? (
         <>
@@ -72,7 +95,7 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
             <input
               type="text"
               className="w-full rounded-xl border border-ios-border/50 bg-white/80 px-3.5 py-2.5 text-sm text-ios-text placeholder:text-ios-subtext/50 focus:border-ios-accent/40 focus:outline-none focus:ring-2 focus:ring-ios-accent/20"
-              placeholder="Например, Фертика Люкс"
+             placeholder={placeholders?.title ?? 'Например, Фертика Люкс'}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -82,7 +105,7 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
             <input
               type="text"
               className="w-full rounded-xl border border-ios-border/50 bg-white/80 px-3.5 py-2.5 text-sm text-ios-text placeholder:text-ios-subtext/50 focus:border-ios-accent/40 focus:outline-none focus:ring-2 focus:ring-ios-accent/20"
-              placeholder="Например, 5 мл"
+             placeholder={placeholders?.amount ?? 'Например, 5 мл'}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -97,7 +120,9 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
         <textarea
           className="w-full resize-none rounded-xl border border-ios-border/50 bg-white/80 px-3.5 py-2.5 text-sm text-ios-text placeholder:text-ios-subtext/50 focus:border-ios-accent/40 focus:outline-none focus:ring-2 focus:ring-ios-accent/20"
           rows={isFeeding ? 2 : 3}
-          placeholder={type === 'ISSUE' ? 'Опишите проблему...' : 'Текст заметки...'}
+          placeholder={type === 'ISSUE'
+            ? (placeholders?.issueText ?? 'Опишите проблему...')
+            : (placeholders?.text ?? 'Текст заметки...')}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -110,7 +135,7 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
         disabled={!canSave || saving}
         onClick={handleSave}
       >
-        {saving ? 'Сохраняем...' : 'Сохранить'}
+        {saving ? 'Сохраняем...' : submitLabel}
       </Button>
     </div>
   );
@@ -119,7 +144,7 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
     <>
       <div className="md:hidden">
         <BottomSheet open={open} onClose={handleClose}>
-          <h3 className="mb-3 text-ios-title-2 font-semibold">Добавить заметку</h3>
+          <h3 className="mb-3 text-ios-title-2 font-semibold">{sheetTitle}</h3>
           {formContent}
         </BottomSheet>
       </div>
@@ -129,7 +154,7 @@ export function AddNoteSheet({ open, onOpenChange, onSave, saving = false }: Add
         onOpenChange={(next) => {
           if (!next) handleClose();
         }}
-        title="Добавить заметку"
+        title={sheetTitle}
         className="hidden md:block"
       >
         {formContent}
