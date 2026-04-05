@@ -330,6 +330,10 @@ export interface OpenRouterModelOption {
   outputPrice?: string | null;
   free: boolean;
   supportsImageToText: boolean;
+  available?: boolean;
+  enabled?: boolean;
+  providerId?: string | null;
+  transport?: string | null;
 }
 
 export interface OpenRouterModelsDto {
@@ -398,6 +402,7 @@ export interface AdminAiSettingsDto {
   openrouterTextModel?: string | null;
   openrouterVisionModel?: string | null;
   openaiCompatibleBaseUrl?: string | null;
+  openaiCompatibleModelsUrl?: string | null;
   openaiCompatibleTextModel?: string | null;
   openaiCompatibleVisionModel?: string | null;
   effectiveTextModel?: string | null;
@@ -434,6 +439,13 @@ export interface AdminAiSettingsDto {
   photoModelLastErrorMessage?: string | null;
   photoModelLastNotifiedUnavailableAt?: string | null;
   photoModelCheckIntervalMinutes?: number | null;
+}
+
+export interface AdminOpenAiCompatibleModelsDto {
+  baseUrl?: string | null;
+  modelsUrl?: string | null;
+  message?: string | null;
+  models: OpenRouterModelOption[];
 }
 
 export interface AdminAiAnalyticsRowDto {

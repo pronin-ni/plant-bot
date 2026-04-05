@@ -33,6 +33,9 @@ public class GlobalSettings {
   @Column(name = "openai_compatible_base_url")
   private String openaiCompatibleBaseUrl;
 
+  @Column(name = "openai_compatible_models_url")
+  private String openaiCompatibleModelsUrl;
+
   @Column(name = "openai_compatible_api_key")
   private String openaiCompatibleApiKey;
 

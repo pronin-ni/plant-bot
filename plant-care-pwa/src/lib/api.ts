@@ -52,6 +52,7 @@ import type {
   OpenRouterRuntimeSettingsDto,
   AiRuntimeSettingsDto,
   AdminAiSettingsDto,
+  AdminOpenAiCompatibleModelsDto,
   AdminAiAnalyticsDto,
   AdminOpenAiCompatibleCapabilityTestDto,
   OpenRouterTypedTestDto,
@@ -405,6 +406,7 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       openrouterTextModel: demo.textModel,
       openrouterVisionModel: demo.photoModel,
       openaiCompatibleBaseUrl: 'https://api.openai.com/v1/chat/completions',
+      openaiCompatibleModelsUrl: 'https://api.openai.com/v1/models',
       openaiCompatibleTextModel: 'gpt-4o-mini',
       openaiCompatibleVisionModel: 'gpt-4o-mini',
       effectiveTextModel: demo.textModel,
@@ -482,6 +484,29 @@ async function buildGuestResponse<T>(path: string, init: RequestInit): Promise<T
       jsonValid: capability === 'json' ? true : null,
       visionSupported: capability === 'vision' ? true : null,
       rawPreview: capability === 'json' ? '{"ok":true,"kind":"json-test","value":7}' : 'ok'
+    } as T;
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/ai/openai-compatible/models') {
+    return {
+      baseUrl: 'https://api.openai.com/v1/chat/completions',
+      modelsUrl: 'https://api.openai.com/v1/models',
+      message: null,
+      models: [
+        {
+          id: 'gpt-4o-mini',
+          name: 'gpt-4o-mini',
+          contextLength: 128000,
+          inputPrice: null,
+          outputPrice: null,
+          free: false,
+          supportsImageToText: true,
+          available: true,
+          enabled: true,
+          providerId: 'openai',
+          transport: 'api'
+        }
+      ]
     } as T;
   }
 
@@ -1559,6 +1584,7 @@ export async function saveAdminAiSettings(payload: {
   openrouterTextModel?: string | null;
   openrouterVisionModel?: string | null;
   openaiCompatibleBaseUrl?: string | null;
+  openaiCompatibleModelsUrl?: string | null;
   openaiCompatibleTextModel?: string | null;
   openaiCompatibleVisionModel?: string | null;
   openaiCompatibleApiKey?: string | null;
@@ -1597,6 +1623,12 @@ type OpenAiCompatibleTestPayload = {
   maxTokens?: number | null;
 };
 
+type OpenAiCompatibleModelsPayload = {
+  baseUrl?: string | null;
+  modelsUrl?: string | null;
+  apiKey?: string | null;
+};
+
 export async function testAdminOpenAiCompatibleConnection(payload: OpenAiCompatibleTestPayload): Promise<AdminOpenAiCompatibleCapabilityTestDto> {
   return apiFetch<AdminOpenAiCompatibleCapabilityTestDto>('/api/admin/ai/openai-compatible/test-connection', {
     method: 'POST',
@@ -1615,6 +1647,13 @@ export async function testAdminOpenAiCompatibleVision(payload: OpenAiCompatibleT
   return apiFetch<AdminOpenAiCompatibleCapabilityTestDto>('/api/admin/ai/openai-compatible/test-vision', {
     method: 'POST'
     ,body: JSON.stringify(payload)
+  });
+}
+
+export async function getAdminOpenAiCompatibleModels(payload: OpenAiCompatibleModelsPayload): Promise<AdminOpenAiCompatibleModelsDto> {
+  return apiFetch<AdminOpenAiCompatibleModelsDto>('/api/admin/ai/openai-compatible/models', {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 

@@ -309,7 +309,7 @@ public class OpenRouterVisionService {
   }
 
   private String extractMessageContent(JsonNode payload) {
-    String content = payload.path("choices").path(0).path("message").path("content").asText("").trim();
+    String content = AiResponseContentExtractor.extractTextContent(payload);
     if (content.isEmpty()) {
       throw new ResponseStatusException(BAD_GATEWAY, "AI provider вернул пустой контент");
     }
@@ -317,10 +317,7 @@ public class OpenRouterVisionService {
   }
 
   private boolean hasMessageContent(JsonNode payload) {
-    if (payload == null) {
-      return false;
-    }
-    return !payload.path("choices").path(0).path("message").path("content").asText("").trim().isEmpty();
+    return AiResponseContentExtractor.hasTextContent(payload);
   }
 
   private JsonNode parseJsonPayload(String content) {

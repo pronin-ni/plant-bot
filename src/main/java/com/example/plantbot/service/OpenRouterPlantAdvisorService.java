@@ -624,7 +624,7 @@ public class OpenRouterPlantAdvisorService {
   }
 
   private String extractContent(JsonNode body) {
-    return body.path("choices").path(0).path("message").path("content").asText("").trim();
+    return AiResponseContentExtractor.extractTextContent(body);
   }
 
   private String sanitizeJsonPayload(String content) {

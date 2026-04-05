@@ -29,6 +29,8 @@ import com.example.plantbot.controller.dto.admin.AdminOpenRouterAvailabilityChec
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminOpenRouterTestResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleCapabilityTestResponse;
+import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleModelsRequest;
+import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleModelsResponse;
 import com.example.plantbot.controller.dto.admin.AdminOpenAiCompatibleTestRequest;
 import com.example.plantbot.controller.dto.admin.AdminAiAnalyticsResponse;
 import com.example.plantbot.controller.dto.admin.AdminAiSettingsResponse;
@@ -43,6 +45,7 @@ import com.example.plantbot.service.AiExecutionService;
 import com.example.plantbot.service.AiProviderSettingsService;
 import com.example.plantbot.service.AiRequestAnalyticsService;
 import com.example.plantbot.service.OpenAiCompatibleAdminTestService;
+import com.example.plantbot.service.OpenAiCompatibleModelCatalogService;
 import com.example.plantbot.service.OpenRouterGlobalSettingsService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityCheckService;
 import com.example.plantbot.service.OpenRouterModelAvailabilityPersistenceService;
@@ -98,6 +101,7 @@ public class AdminController {
   private final AiExecutionService aiExecutionService;
   private final AiRequestAnalyticsService aiRequestAnalyticsService;
   private final OpenAiCompatibleAdminTestService openAiCompatibleAdminTestService;
+  private final OpenAiCompatibleModelCatalogService openAiCompatibleModelCatalogService;
   private final OpenRouterGlobalSettingsService openRouterGlobalSettingsService;
   private final OpenRouterModelAvailabilityCheckService openRouterModelAvailabilityCheckService;
   private final OpenRouterModelAvailabilityPersistenceService openRouterModelAvailabilityPersistenceService;
@@ -211,9 +215,9 @@ public class AdminController {
     User admin = requireAdmin(authentication);
     if (request != null) {
       openRouterGlobalSettingsService.updateModels(new AdminOpenRouterModelsUpdateRequest(
-          request.openrouterTextModel(),
-          request.openrouterVisionModel(),
-          request.textModelCheckIntervalMinutes(),
+        request.openrouterTextModel(),
+        request.openrouterVisionModel(),
+        request.textModelCheckIntervalMinutes(),
           request.photoModelCheckIntervalMinutes(),
           request.healthChecksEnabled(),
           request.retryCount(),
@@ -398,6 +402,7 @@ public class AdminController {
         summary.openrouterTextModel(),
         summary.openrouterVisionModel(),
         summary.openaiCompatibleBaseUrl(),
+        summary.openaiCompatibleModelsUrl(),
         summary.openaiCompatibleTextModel(),
         summary.openaiCompatibleVisionModel(),
         summary.effectiveTextModel(),
@@ -441,6 +446,18 @@ public class AdminController {
   public AdminOpenAiCompatibleCapabilityTestResponse testOpenAiCompatible(Authentication authentication,
                                                                           @RequestBody(required = false) AdminOpenAiCompatibleTestRequest request) {
     return testOpenAiCompatibleConnection(authentication, request);
+  }
+
+  @PostMapping("/ai/openai-compatible/models")
+  public AdminOpenAiCompatibleModelsResponse openAiCompatibleModels(Authentication authentication,
+                                                                    @RequestBody(required = false) AdminOpenAiCompatibleModelsRequest request) {
+    requireAdmin(authentication);
+    var result = openAiCompatibleModelCatalogService.fetchModels(
+        request == null ? null : request.baseUrl(),
+        request == null ? null : request.modelsUrl(),
+        request == null ? null : request.apiKey()
+    );
+    return new AdminOpenAiCompatibleModelsResponse(result.baseUrl(), result.modelsUrl(), result.message(), result.models());
   }
 
   @PostMapping("/ai/openai-compatible/test-connection")

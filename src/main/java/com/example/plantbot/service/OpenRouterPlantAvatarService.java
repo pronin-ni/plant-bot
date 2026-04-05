@@ -39,7 +39,7 @@ public class OpenRouterPlantAvatarService {
 
     try {
       JsonNode payload = callProvider(runtime, exactPlantName);
-      String content = payload.path("choices").path(0).path("message").path("content").asText("").trim();
+      String content = AiResponseContentExtractor.extractTextContent(payload);
       if (content.isEmpty()) {
         return AvatarGenerationResult.unavailable();
       }

@@ -116,6 +116,10 @@ public class OpenAiExecutionService {
       if (response.getBody() == null) {
         throw new OpenAiExecutionException(true, "OpenAI-compatible provider returned empty response");
       }
+      String providerError = extractProviderError(response.getBody());
+      if (providerError != null) {
+        throw new OpenAiExecutionException(false, providerError);
+      }
       return response.getBody();
     } catch (HttpStatusCodeException ex) {
       if (prefersJsonResponse && ex.getStatusCode().value() == 400) {
@@ -127,6 +131,10 @@ public class OpenAiExecutionService {
           );
           if (fallbackResponse.getBody() == null) {
             throw new OpenAiExecutionException(true, "OpenAI-compatible provider returned empty response");
+          }
+          String providerError = extractProviderError(fallbackResponse.getBody());
+          if (providerError != null) {
+            throw new OpenAiExecutionException(false, providerError);
           }
           return fallbackResponse.getBody();
         } catch (HttpStatusCodeException retryEx) {
@@ -186,6 +194,21 @@ public class OpenAiExecutionService {
 
   private String safeMessage(Exception ex) {
     return ex == null || ex.getMessage() == null ? "unknown" : ex.getMessage();
+  }
+
+  private String extractProviderError(JsonNode payload) {
+    if (payload == null || payload.isMissingNode()) {
+      return null;
+    }
+    JsonNode error = payload.path("error");
+    if (error.isMissingNode() || error.isNull()) {
+      return null;
+    }
+    String message = error.isTextual() ? error.asText("") : error.path("message").asText("");
+    if (message == null || message.isBlank()) {
+      return "OpenAI-compatible provider returned an error payload";
+    }
+    return "OpenAI-compatible provider error: " + message.trim();
   }
 
   private String resolveBaseUrl(String baseUrlOverride) {

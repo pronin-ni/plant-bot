@@ -6,6 +6,7 @@ import {
   clearAdminCacheScope,
   getAdminAiAnalytics,
   getAdminAiSettings,
+  getAdminOpenAiCompatibleModels,
   getOpenRouterModels,
   saveAdminAiSettings,
   testAdminOpenAiCompatibleConnection,
@@ -88,6 +89,7 @@ export function OpenRouterSettings() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [models, setModels] = useState<OpenRouterModelOption[]>([]);
+  const [openAiModels, setOpenAiModels] = useState<OpenRouterModelOption[]>([]);
   const [analyticsPeriod, setAnalyticsPeriod] = useState<PeriodId>('DAY');
   const [analytics, setAnalytics] = useState<AdminAiAnalyticsDto | null>(null);
   const [settings, setSettings] = useState<AdminAiSettingsDto | null>(null);
@@ -100,8 +102,11 @@ export function OpenRouterSettings() {
   const [openaiVisionModel, setOpenaiVisionModel] = useState('gpt-4o-mini');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('https://api.openai.com/v1/chat/completions');
+  const [openaiModelsUrl, setOpenaiModelsUrl] = useState('https://api.openai.com/v1/models');
   const [openaiRequestTimeoutMs, setOpenaiRequestTimeoutMs] = useState(15000);
   const [openaiMaxTokens, setOpenaiMaxTokens] = useState(256);
+  const [openAiModelsLoading, setOpenAiModelsLoading] = useState(false);
+  const [openAiModelsStatus, setOpenAiModelsStatus] = useState<string | null>(null);
   const [openAiConnectionResult, setOpenAiConnectionResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
   const [openAiJsonResult, setOpenAiJsonResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
   const [openAiVisionResult, setOpenAiVisionResult] = useState<AdminOpenAiCompatibleCapabilityTestDto | null>(null);
@@ -133,6 +138,18 @@ export function OpenRouterSettings() {
     () => models.filter((item) => item.supportsImageToText),
     [models]
   );
+  const availableOpenAiModels = useMemo(() => {
+    const enabled = openAiModels.filter((item) => item.available !== false && item.enabled !== false);
+    return enabled.length > 0 ? enabled : openAiModels;
+  }, [openAiModels]);
+  const openAiTextModelOptions = useMemo(
+    () => availableOpenAiModels,
+    [availableOpenAiModels]
+  );
+  const openAiVisionModelOptions = useMemo(() => {
+    const vision = availableOpenAiModels.filter((item) => item.supportsImageToText);
+    return vision.length > 0 ? vision : availableOpenAiModels;
+  }, [availableOpenAiModels]);
 
   const analyticsRows = analytics?.rows ?? [];
   const openAiTests: Array<{
@@ -175,6 +192,11 @@ export function OpenRouterSettings() {
       setSettings(nextSettings);
       setModels(catalog.models ?? []);
       hydrate(nextSettings);
+      await loadOpenAiCompatibleModels({
+        baseUrl: nextSettings.openaiCompatibleBaseUrl,
+        modelsUrl: nextSettings.openaiCompatibleModelsUrl,
+        silent: true
+      });
       setStatus(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Не удалось загрузить AI настройки');
@@ -201,6 +223,7 @@ export function OpenRouterSettings() {
     setOpenrouterTextModel(normalizeModelId(next.openrouterTextModel));
     setOpenrouterVisionModel(normalizeModelId(next.openrouterVisionModel));
     setOpenaiBaseUrl(next.openaiCompatibleBaseUrl?.trim() || 'https://api.openai.com/v1/chat/completions');
+    setOpenaiModelsUrl(next.openaiCompatibleModelsUrl?.trim() || 'https://api.openai.com/v1/models');
     setOpenaiTextModel(normalizeModelId(next.openaiCompatibleTextModel) || 'gpt-4o-mini');
     setOpenaiVisionModel(normalizeModelId(next.openaiCompatibleVisionModel) || 'gpt-4o-mini');
     setOpenaiApiKey('');
@@ -222,6 +245,7 @@ export function OpenRouterSettings() {
         openrouterTextModel: openrouterTextModel || null,
         openrouterVisionModel: openrouterVisionModel || null,
         openaiCompatibleBaseUrl: openaiBaseUrl || null,
+        openaiCompatibleModelsUrl: openaiModelsUrl || null,
         openaiCompatibleTextModel: openaiTextModel || null,
         openaiCompatibleVisionModel: openaiVisionModel || null,
         openaiCompatibleApiKey: openaiApiKey.trim() || null,
@@ -247,6 +271,7 @@ export function OpenRouterSettings() {
       });
       setStatus('AI настройки сохранены');
       hapticSuccess();
+      await loadOpenAiCompatibleModels({ silent: true });
       await loadAnalytics(analyticsPeriod);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Не удалось сохранить AI настройки');
@@ -277,6 +302,34 @@ export function OpenRouterSettings() {
       requestTimeoutMs: openaiRequestTimeoutMs,
       maxTokens: openaiMaxTokens
     };
+  }
+
+  async function loadOpenAiCompatibleModels(options?: { baseUrl?: string | null; modelsUrl?: string | null; silent?: boolean }) {
+    setOpenAiModelsLoading(true);
+    try {
+      const result = await getAdminOpenAiCompatibleModels({
+        baseUrl: options?.baseUrl ?? (openaiBaseUrl || null),
+        modelsUrl: options?.modelsUrl ?? (openaiModelsUrl || null),
+        apiKey: openaiApiKey.trim() || null
+      });
+      setOpenAiModels(result.models ?? []);
+      if (result.baseUrl) {
+        setOpenaiBaseUrl(result.baseUrl);
+      }
+      if (result.modelsUrl) {
+        setOpenaiModelsUrl(result.modelsUrl);
+      }
+      setOpenAiModelsStatus(result.message ?? ((result.models?.length ?? 0) > 0 ? `Загружено моделей: ${result.models.length}` : 'Список моделей пуст'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Не удалось загрузить OpenAI-compatible модели';
+      setOpenAiModelsStatus(message);
+      if (!options?.silent) {
+        setStatus(message);
+        hapticError();
+      }
+    } finally {
+      setOpenAiModelsLoading(false);
+    }
   }
 
   async function runOpenAiCompatibleTest(kind: OpenAiTestKind) {
@@ -446,9 +499,57 @@ export function OpenRouterSettings() {
                   mono
                   multiline
                 />
+                <p className="mt-1 text-xs leading-5 text-ios-subtext">Для `chat/completions` models URL вычисляется автоматически, но его можно переопределить ниже.</p>
+              </div>
+              <div className="md:col-span-2">
+                <InputField
+                  label="Models URL"
+                  value={openaiModelsUrl}
+                  onChange={setOpenaiModelsUrl}
+                  disabled={loading || saving}
+                  placeholder="https://api.openai.com/v1/models"
+                  mono
+                  multiline
+                />
+              </div>
+              <div className="md:col-span-2 rounded-2xl border border-ios-border/40 px-3 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ios-text">Каталог моделей OpenAI-compatible</p>
+                    <p className="text-xs leading-5 text-ios-subtext">Список загружается через `/v1/models`. Выбор из каталога заполняет поля моделей, ручной ввод остаётся доступен ниже.</p>
+                  </div>
+                  <Button variant="secondary" className="rounded-2xl" disabled={loading || saving || openAiModelsLoading} onClick={() => void loadOpenAiCompatibleModels()}>
+                    {openAiModelsLoading ? 'Загружаем...' : 'Загрузить модели'}
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <SelectField
+                    label="Text model from catalog"
+                    value={openAiTextModelOptions.some((model) => model.id === openaiTextModel) ? openaiTextModel : ''}
+                    disabled={loading || saving || openAiModelsLoading || openAiTextModelOptions.length === 0}
+                    onChange={(value) => value ? setOpenaiTextModel(value) : undefined}
+                  >
+                    <option value="">Не выбрана</option>
+                    {openAiTextModelOptions.map((model) => (
+                      <option key={model.id} value={model.id}>{model.id}</option>
+                    ))}
+                  </SelectField>
+                  <SelectField
+                    label="Vision model from catalog"
+                    value={openAiVisionModelOptions.some((model) => model.id === openaiVisionModel) ? openaiVisionModel : ''}
+                    disabled={loading || saving || openAiModelsLoading || openAiVisionModelOptions.length === 0}
+                    onChange={(value) => value ? setOpenaiVisionModel(value) : undefined}
+                  >
+                    <option value="">Не выбрана</option>
+                    {openAiVisionModelOptions.map((model) => (
+                      <option key={model.id} value={model.id}>{model.id}</option>
+                    ))}
+                  </SelectField>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-ios-subtext">{openAiModelsStatus || 'Каталог ещё не загружался.'}</p>
               </div>
               <InputField
-                label="Text model"
+                label="Text model / manual override"
                 value={openaiTextModel}
                 onChange={setOpenaiTextModel}
                 disabled={loading || saving}
@@ -456,7 +557,7 @@ export function OpenRouterSettings() {
                 mono
               />
               <InputField
-                label="Vision model"
+                label="Vision model / manual override"
                 value={openaiVisionModel}
                 onChange={setOpenaiVisionModel}
                 disabled={loading || saving}

@@ -220,6 +220,7 @@ class AppControllerLegacyAiRecommendTest {
             null,
             null,
             null,
+            null,
             "configured-text",
             "configured-photo",
             false,

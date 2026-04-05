@@ -215,7 +215,7 @@ public class OpenRouterModelAvailabilityCheckService {
     if (body == null) {
       return "";
     }
-    return body.path("choices").path(0).path("message").path("content").asText("").trim();
+    return AiResponseContentExtractor.extractTextContent(body);
   }
 
   private ModelCheckResult classifyHttpFailure(String model, Instant checkedAt, HttpStatusCodeException ex, boolean vision) {

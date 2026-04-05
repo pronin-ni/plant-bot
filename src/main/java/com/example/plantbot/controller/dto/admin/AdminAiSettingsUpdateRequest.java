@@ -8,6 +8,7 @@ public record AdminAiSettingsUpdateRequest(
     String openrouterTextModel,
     String openrouterVisionModel,
     String openaiCompatibleBaseUrl,
+    String openaiCompatibleModelsUrl,
     String openaiCompatibleTextModel,
     String openaiCompatibleVisionModel,
     String openaiCompatibleApiKey,
