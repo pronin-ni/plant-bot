@@ -57,16 +57,21 @@ public class OpenAiCompatibleModelCatalogService {
       List<OpenAiCompatibleModelOptionResponse> models = parseModels(body);
       return new CatalogResult(resolvedBaseUrl, resolvedModelsUrl, models, models.isEmpty() ? "Список моделей пуст" : null);
     } catch (HttpStatusCodeException ex) {
-      int code = ex.getStatusCode().value();
-      String message = code == 401 || code == 403
-          ? "OpenAI-compatible каталог отклонил API key"
-          : "OpenAI-compatible каталог вернул HTTP " + code;
-      throw new OpenAiExecutionException(code >= 500 || code == 429, message, ex);
-    } catch (OpenAiExecutionException ex) {
-      throw ex;
+      String message = classifyCatalogFailure(ex);
+      log.warn("OpenAI-compatible model catalog HTTP failure: baseUrl='{}' modelsUrl='{}' status={} reason={}",
+          resolvedBaseUrl,
+          resolvedModelsUrl,
+          ex.getStatusCode().value(),
+          message);
+      return new CatalogResult(resolvedBaseUrl, resolvedModelsUrl, List.of(), message);
     } catch (Exception ex) {
       log.warn("OpenAI-compatible model catalog request failed: baseUrl='{}' modelsUrl='{}' reason={}", resolvedBaseUrl, resolvedModelsUrl, ex.getMessage());
-      throw new OpenAiExecutionException(true, "Не удалось загрузить каталог OpenAI-compatible моделей: " + safeMessage(ex), ex);
+      return new CatalogResult(
+          resolvedBaseUrl,
+          resolvedModelsUrl,
+          List.of(),
+          "Не удалось загрузить каталог OpenAI-compatible моделей: " + safeMessage(ex)
+      );
     }
   }
 
@@ -208,6 +213,28 @@ public class OpenAiCompatibleModelCatalogService {
 
   private String safeMessage(Exception ex) {
     return ex == null || ex.getMessage() == null ? "unknown" : ex.getMessage();
+  }
+
+  private String classifyCatalogFailure(HttpStatusCodeException ex) {
+    int code = ex.getStatusCode().value();
+    String body = ex.getResponseBodyAsString();
+    String lowerBody = body == null ? "" : body.toLowerCase();
+    if (lowerBody.contains("unsupported_country_region_territory") || lowerBody.contains("country, region, or territory not supported")) {
+      return "Каталог моделей недоступен из региона сервера провайдера. Используйте ручной ввод модели или уже сохранённую модель.";
+    }
+    if (code == 401 || code == 403) {
+      return "OpenAI-compatible каталог отклонил доступ. Проверьте API key, региональные ограничения и права на /v1/models.";
+    }
+    if (code == 404) {
+      return "OpenAI-compatible каталог не найден по указанному models URL.";
+    }
+    if (code == 429) {
+      return "OpenAI-compatible каталог временно вернул rate limit.";
+    }
+    if (code >= 500) {
+      return "OpenAI-compatible каталог временно недоступен: HTTP " + code;
+    }
+    return "OpenAI-compatible каталог вернул HTTP " + code;
   }
 
   public record CatalogResult(

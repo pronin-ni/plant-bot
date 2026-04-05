@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
@@ -19,6 +20,7 @@ import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 @ExtendWith(MockitoExtension.class)
 class OpenAiCompatibleModelCatalogServiceTest {
@@ -86,5 +88,31 @@ class OpenAiCompatibleModelCatalogServiceTest {
     assertTrue(result.models().get(0).supportsImageToText());
     assertEquals("browser/yandex", result.models().get(1).id());
     assertFalse(result.models().get(1).supportsImageToText());
+  }
+
+  @Test
+  void shouldReturnGracefulMessageWhenCatalogIsRegionBlocked() {
+    server.expect(once(), requestTo("https://ai.okgk.ru/v1/models"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withStatus(HttpStatus.FORBIDDEN)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body("""
+                {
+                  "error": {
+                    "code": "unsupported_country_region_territory",
+                    "message": "Country, region, or territory not supported"
+                  }
+                }
+                """));
+
+    var result = service.fetchModels("https://ai.okgk.ru/v1/chat/completions", null, null);
+
+    server.verify();
+    assertEquals("https://ai.okgk.ru/v1/models", result.modelsUrl());
+    assertTrue(result.models().isEmpty());
+    assertEquals(
+        "Каталог моделей недоступен из региона сервера провайдера. Используйте ручной ввод модели или уже сохранённую модель.",
+        result.message()
+    );
   }
 }
