@@ -69,8 +69,14 @@ public class OpenRouterVisionService {
       return degradedIdentifyResponse(ex.getReason());
     }
 
-    String content = extractMessageContent(payload);
-    JsonNode json = parseJsonPayload(content);
+    JsonNode json;
+    try {
+      String content = extractMessageContent(payload);
+      json = parseJsonPayload(content);
+    } catch (ResponseStatusException ex) {
+      log.warn("AI identify degraded fallback used after response parse: {}", ex.getReason());
+      return degradedIdentifyResponse(ex.getReason());
+    }
 
     int confidence = normalizeConfidence(json.path("confidence").asInt(0));
     int interval = clamp(json.path("watering_interval_days").asInt(7), 1, 45);
@@ -152,8 +158,14 @@ public class OpenRouterVisionService {
       return degradedDiagnoseResponse(plantName, plantContext, ex.getReason());
     }
 
-    String content = extractMessageContent(payload);
-    JsonNode json = parseJsonPayload(content);
+    JsonNode json;
+    try {
+      String content = extractMessageContent(payload);
+      json = parseJsonPayload(content);
+    } catch (ResponseStatusException ex) {
+      log.warn("AI diagnose degraded fallback used after response parse: {}", ex.getReason());
+      return degradedDiagnoseResponse(plantName, plantContext, ex.getReason());
+    }
 
     int confidence = normalizeConfidence(json.path("confidence").asInt(0));
 
@@ -299,7 +311,7 @@ public class OpenRouterVisionService {
   private String extractMessageContent(JsonNode payload) {
     String content = payload.path("choices").path(0).path("message").path("content").asText("").trim();
     if (content.isEmpty()) {
-      throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter вернул пустой контент");
+      throw new ResponseStatusException(BAD_GATEWAY, "AI provider вернул пустой контент");
     }
     return content;
   }
@@ -317,7 +329,7 @@ public class OpenRouterVisionService {
       return objectMapper.readTree(normalized);
     } catch (Exception ex) {
       log.warn("OpenRouter invalid JSON payload: {}", preview(content));
-      throw new ResponseStatusException(BAD_GATEWAY, "OpenRouter вернул невалидный JSON");
+      throw new ResponseStatusException(BAD_GATEWAY, "AI provider вернул невалидный JSON");
     }
   }
 
@@ -418,7 +430,7 @@ public class OpenRouterVisionService {
 
   private OpenRouterIdentifyResponse degradedIdentifyResponse(String reason) {
     String message = reason == null || reason.isBlank()
-        ? "Vision-модель OpenRouter временно недоступна"
+        ? "Vision-модель AI provider временно недоступна"
         : reason.trim();
     return new OpenRouterIdentifyResponse(
         "Растение не определено",
@@ -429,7 +441,7 @@ public class OpenRouterVisionService {
         null,
         null,
         "Не удалось надёжно определить растение по фото. " + message + ". Попробуйте повторить снимок позже при хорошем освещении.",
-        List.of("Сделайте фото листьев крупным планом", "Повторите попытку позже, когда vision-модели OpenRouter будут доступны")
+        List.of("Сделайте фото листьев крупным планом", "Повторите попытку позже, когда vision-модель AI provider будет доступна")
     );
   }
 
@@ -457,13 +469,13 @@ public class OpenRouterVisionService {
   private OpenRouterDiagnoseResponse degradedDiagnoseResponse(String plantName, String plantContext, String reason) {
     String context = plantContext == null || plantContext.isBlank() ? "" : (" Контекст: " + plantContext.trim() + ".");
     String message = reason == null || reason.isBlank()
-        ? "Vision-модель OpenRouter временно недоступна."
+        ? "Vision-модель AI provider временно недоступна."
         : reason.trim();
     return new OpenRouterDiagnoseResponse(
         "Точный диагноз временно недоступен",
         15,
         "Не удалось надёжно проанализировать фото растения " + plantName + ". " + message + context,
-        List.of("Временная недоступность vision-модели OpenRouter", "Нужен повторный анализ при следующем доступном окне"),
+        List.of("Временная недоступность vision-модели AI provider", "Нужен повторный анализ при следующем доступном окне"),
         "Сделайте новое фото при хорошем освещении и повторите диагностику позже. Если состояние ухудшается, осмотрите листья вручную на пятна, вредителей и признаки перелива.",
         "Поддерживайте стабильный уход и делайте фото крупным планом при естественном свете.",
         "medium"

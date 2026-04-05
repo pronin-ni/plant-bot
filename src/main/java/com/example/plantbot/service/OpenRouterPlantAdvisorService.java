@@ -452,26 +452,7 @@ public class OpenRouterPlantAdvisorService {
           return Optional.empty();
         }
 
-        JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
-        JsonNode items = json.path("suggestions");
-        if (!items.isArray()) {
-          return Optional.empty();
-        }
-
-        List<PlantSearchSuggestion> suggestions = new ArrayList<>();
-        for (JsonNode item : items) {
-          String name = normalizeAdviceNote(item.path("name").asText(""));
-          if (name.isBlank()) {
-            continue;
-          }
-          PlantCategory parsedCategory = parsePlantCategory(item.path("category").asText(""), category);
-          PlantType parsedType = parsePlantType(item.path("type").asText(""));
-          String hint = normalizeAdviceNote(item.path("hint").asText(""));
-          suggestions.add(new PlantSearchSuggestion(name, parsedCategory, parsedType, hint));
-          if (suggestions.size() >= 10) {
-            break;
-          }
-        }
+        List<PlantSearchSuggestion> suggestions = parsePlantSearchSuggestions(content, category);
 
         if (!suggestions.isEmpty()) {
           PlantSearchSuggestions result = new PlantSearchSuggestions(runtime.provider().name(), suggestions);
@@ -663,6 +644,64 @@ public class OpenRouterPlantAdvisorService {
       return trimmed.substring(firstBrace, lastBrace + 1).trim();
     }
     return trimmed;
+  }
+
+  private List<PlantSearchSuggestion> parsePlantSearchSuggestions(String content, PlantCategory fallbackCategory) throws Exception {
+    try {
+      List<PlantSearchSuggestion> suggestions = parseJsonPlantSearchSuggestions(content, fallbackCategory);
+      if (!suggestions.isEmpty()) {
+        return suggestions;
+      }
+    } catch (Exception ignored) {
+      // Some OpenAI-compatible gateways return a plain newline-separated list instead of JSON.
+    }
+    return parsePlainPlantSearchSuggestions(content, fallbackCategory);
+  }
+
+  private List<PlantSearchSuggestion> parseJsonPlantSearchSuggestions(String content, PlantCategory fallbackCategory) throws Exception {
+    JsonNode json = objectMapper.readTree(sanitizeJsonPayload(content));
+    JsonNode items = json.path("suggestions");
+    if (!items.isArray()) {
+      return List.of();
+    }
+
+    List<PlantSearchSuggestion> suggestions = new ArrayList<>();
+    for (JsonNode item : items) {
+      String name = normalizeAdviceNote(item.path("name").asText(""));
+      if (name.isBlank()) {
+        continue;
+      }
+      PlantCategory parsedCategory = parsePlantCategory(item.path("category").asText(""), fallbackCategory);
+      PlantType parsedType = parsePlantType(item.path("type").asText(""));
+      String hint = normalizeAdviceNote(item.path("hint").asText(""));
+      suggestions.add(new PlantSearchSuggestion(name, parsedCategory, parsedType, hint));
+      if (suggestions.size() >= 10) {
+        break;
+      }
+    }
+    return suggestions;
+  }
+
+  private List<PlantSearchSuggestion> parsePlainPlantSearchSuggestions(String content, PlantCategory fallbackCategory) {
+    if (content == null || content.isBlank()) {
+      return List.of();
+    }
+    List<PlantSearchSuggestion> suggestions = new ArrayList<>();
+    for (String rawLine : content.split("\\R+")) {
+      String normalized = normalizeAdviceNote(rawLine);
+      if (normalized.isBlank()) {
+        continue;
+      }
+      String candidate = normalized.replaceFirst("\\s*\\(.*$", "").trim();
+      if (candidate.isBlank()) {
+        continue;
+      }
+      suggestions.add(new PlantSearchSuggestion(candidate, fallbackCategory == null ? PlantCategory.HOME : fallbackCategory, PlantType.DEFAULT, normalized));
+      if (suggestions.size() >= 10) {
+        break;
+      }
+    }
+    return suggestions;
   }
 
   private int clamp(int value, int min, int max) {

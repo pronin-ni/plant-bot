@@ -17,6 +17,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.net.URI;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -103,12 +104,8 @@ public class OpenAiExecutionService {
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(apiKey.trim());
 
-    Map<String, Object> request = Map.of(
-        "model", modelName,
-        "temperature", 0,
-        "max_tokens", normalizeMaxTokens(maxTokens),
-        "messages", messages
-    );
+    boolean prefersJsonResponse = shouldRequestJsonResponse(messages);
+    Map<String, Object> request = buildRequest(modelName, maxTokens, messages, prefersJsonResponse);
 
     try {
       ResponseEntity<JsonNode> response = restTemplate.postForEntity(
@@ -121,6 +118,21 @@ public class OpenAiExecutionService {
       }
       return response.getBody();
     } catch (HttpStatusCodeException ex) {
+      if (prefersJsonResponse && ex.getStatusCode().value() == 400) {
+        try {
+          ResponseEntity<JsonNode> fallbackResponse = restTemplate.postForEntity(
+              resolveBaseUrl(baseUrlOverride),
+              new HttpEntity<>(buildRequest(modelName, maxTokens, messages, false), headers),
+              JsonNode.class
+          );
+          if (fallbackResponse.getBody() == null) {
+            throw new OpenAiExecutionException(true, "OpenAI-compatible provider returned empty response");
+          }
+          return fallbackResponse.getBody();
+        } catch (HttpStatusCodeException retryEx) {
+          throw classifyHttpFailure(retryEx);
+        }
+      }
       throw classifyHttpFailure(ex);
     } catch (ResourceAccessException ex) {
       throw classifyResourceFailure(ex);
@@ -221,6 +233,59 @@ public class OpenAiExecutionService {
     } catch (Exception ex) {
       return normalized;
     }
+  }
+
+  private Map<String, Object> buildRequest(String modelName,
+                                           Integer maxTokens,
+                                           List<Map<String, Object>> messages,
+                                           boolean prefersJsonResponse) {
+    Map<String, Object> request = new LinkedHashMap<>();
+    request.put("model", modelName);
+    request.put("temperature", 0);
+    request.put("max_tokens", normalizeMaxTokens(maxTokens));
+    request.put("messages", messages);
+    if (prefersJsonResponse) {
+      request.put("response_format", Map.of("type", "json_object"));
+    }
+    return request;
+  }
+
+  private boolean shouldRequestJsonResponse(List<Map<String, Object>> messages) {
+    if (messages == null || messages.isEmpty()) {
+      return false;
+    }
+    String prompt = messages.stream()
+        .map(message -> stringifyContent(message == null ? null : message.get("content")))
+        .filter(value -> value != null && !value.isBlank())
+        .reduce("", (left, right) -> left + "\n" + right)
+        .toLowerCase();
+    if (prompt.isBlank()) {
+      return false;
+    }
+    return prompt.contains("json")
+        && (prompt.contains("valid") || prompt.contains("strict") || prompt.contains("валид") || prompt.contains("только"));
+  }
+
+  @SuppressWarnings("unchecked")
+  private String stringifyContent(Object content) {
+    if (content == null) {
+      return "";
+    }
+    if (content instanceof String text) {
+      return text;
+    }
+    if (content instanceof List<?> list) {
+      return list.stream()
+          .map(item -> {
+            if (item instanceof Map<?, ?> map) {
+              Object text = map.get("text");
+              return text == null ? "" : String.valueOf(text);
+            }
+            return String.valueOf(item);
+          })
+          .reduce("", (left, right) -> left + "\n" + right);
+    }
+    return String.valueOf(content);
   }
 
   private int normalizeMaxTokens(Integer value) {
